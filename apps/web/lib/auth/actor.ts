@@ -42,10 +42,12 @@ function knownPermissions(stored: string[]): Permission[] {
 ///
 /// The org (R-285b, PRD 10 §1.3): the actor acts in exactly one organisation
 /// and only that org's grants are loaded. With no live membership there is no
-/// org and no grant, so the actor can do nothing. The session does not carry
-/// an org until R-288 resolves it from the host; until then it is the
-/// earliest live membership, which for every user today is org #0.
-export async function loadStaffActor(staffUserId: string, mfaVerified: boolean) {
+/// org and no grant, so the actor can do nothing. A session names its org
+/// (R-288: the host's, proved at sign-in) and only a live membership in THAT
+/// org counts. The calendar feed has no session and passes none, so it takes
+/// the earliest live membership - org #0 for every user until R-289 builds its
+/// links on the org's host.
+export async function loadStaffActor(staffUserId: string, mfaVerified: boolean, orgId?: string) {
   const staffUser = await prisma.staffUser.findUnique({
     where: { id: staffUserId },
     select: {
@@ -55,7 +57,7 @@ export async function loadStaffActor(staffUserId: string, mfaVerified: boolean) 
       waiveFeeCents: true,
       // Removed members keep their row for history and must never act.
       orgMemberships: {
-        where: { removedAt: null },
+        where: { removedAt: null, ...(orgId === undefined ? {} : { orgId }) },
         orderBy: { joinedAt: 'asc' },
         select: { orgId: true },
         take: 1,
@@ -82,8 +84,8 @@ export async function loadStaffActor(staffUserId: string, mfaVerified: boolean) 
   if (!staffUser) return null
 
   // '' is no organisation's id, so a member of none matches no row anywhere.
-  const orgId = staffUser.orgMemberships[0]?.orgId ?? ''
-  const inOrg = staffUser.assignments.filter((row) => row.orgId === orgId)
+  const memberOf = staffUser.orgMemberships[0]?.orgId ?? ''
+  const inOrg = staffUser.assignments.filter((row) => row.orgId === memberOf)
 
   const assignments: Assignment[] = inOrg.map((row) => ({
     orgId: row.orgId,
@@ -97,7 +99,7 @@ export async function loadStaffActor(staffUserId: string, mfaVerified: boolean) 
 
   const actor: Actor = {
     id: staffUser.id,
-    orgId,
+    orgId: memberOf,
     kind: 'staff',
     active: staffUser.active,
     mfaVerified,
@@ -216,7 +218,11 @@ export const currentActor = cache(async (): Promise<Actor | null> => {
 
   switch (session.principal.kind) {
     case 'staff':
-      return loadStaffActor(session.principal.id, session.principal.mfaVerified)
+      return loadStaffActor(
+        session.principal.id,
+        session.principal.mfaVerified,
+        session.principal.orgId,
+      )
     case 'guarantor':
       return loadGuarantorActor(session.principal.id)
     default:

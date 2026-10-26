@@ -3,6 +3,12 @@
 //
 //   npm run db:create-owner -- --email you@example.com --name "Your Name"
 //   npm run db:create-staff -- --email pm@example.com --name "Pat M" --role manager
+//   npm run db:create-owner -- --email a@acme.test --name "A" --org acme
+//
+// `--org` is the organisation's slug (R-288), default `default` - org #0. The
+// person becomes a member of that org and the grant is scoped to it, so they
+// sign in on that org's host and nowhere else. The owner guard counts owners
+// IN THAT ORG: org #1's first owner is not org #0's second.
 //
 // `--role` exists because there is NO in-app staff management: `grantAssignment`
 // in apps/web/lib/staff/assignments.ts has no caller, so `owner` was the only
@@ -36,6 +42,7 @@ interface Args {
   email: string
   name: string
   roleKey: string
+  orgSlug: string
   force: boolean
 }
 
@@ -52,7 +59,7 @@ function parseArgs(argv: string[]): Args {
   if (!email || !name) {
     console.error(
       'Usage: npm run db:create-owner -- --email <address> --name "<full name>"\n' +
-        `       [--role ${STAFF_ROLE_KEYS.join('|')}] [--force]`,
+        `       [--role ${STAFF_ROLE_KEYS.join('|')}] [--org <slug>] [--force]`,
     )
     process.exit(1)
   }
@@ -65,11 +72,18 @@ function parseArgs(argv: string[]): Args {
     process.exit(1)
   }
 
-  return { email, name, roleKey, force: argv.includes('--force') }
+  const orgSlug = get('--org')?.trim().toLowerCase() ?? 'default'
+  return { email, name, roleKey, orgSlug, force: argv.includes('--force') }
 }
 
 async function main() {
   const args = parseArgs(process.argv.slice(2))
+
+  const org = await prisma.organization.findUnique({ where: { slug: args.orgSlug } })
+  if (!org) {
+    console.error(`No organisation has the slug "${args.orgSlug}".`)
+    process.exit(1)
+  }
 
   const role = await prisma.role.findUnique({ where: { key: args.roleKey } })
   if (!role) {
@@ -84,11 +98,13 @@ async function main() {
   // in the way.
   const existingOwners =
     args.roleKey === 'owner'
-      ? await prisma.staffAssignment.count({ where: { roleId: role.id, revokedAt: null } })
+      ? await prisma.staffAssignment.count({
+          where: { orgId: org.id, roleId: role.id, revokedAt: null },
+        })
       : 0
   if (existingOwners > 0 && !args.force) {
     console.error(
-      `This deployment already has ${existingOwners} owner assignment(s).\n` +
+      `${org.name} already has ${existingOwners} owner assignment(s).\n` +
         'Re-run with --force if you genuinely mean to add another. Granting\n' +
         'access to an existing person is better done in the app, where it is\n' +
         'audited against the granting staff member rather than against a script.',
@@ -122,9 +138,13 @@ async function main() {
       },
     })
 
+    // Membership first: the staff_assignment_membership trigger refuses a
+    // grant in any org but org #0 without one.
+    await tx.orgMembership.create({ data: { orgId: org.id, staffUserId: created.id } })
+
     // The whole point: a null scope on an ordinary assignment row.
     await tx.staffAssignment.create({
-      data: { staffUserId: created.id, roleId: role.id },
+      data: { orgId: org.id, staffUserId: created.id, roleId: role.id },
     })
 
     await tx.authToken.create({
@@ -147,6 +167,7 @@ async function main() {
       entityId: created.id,
       after: {
         roleKey: args.roleKey,
+        orgId: org.id,
         scope: 'all properties',
         bootstrapped: true,
         forced: args.force,
@@ -166,9 +187,11 @@ async function main() {
     [
       '',
       `Created staff user: ${staffUser.name} <${staffUser.email}>`,
-      `Role: ${args.roleKey}, scoped to all properties (an ordinary assignment row - D-5).`,
+      `Role: ${args.roleKey} in ${org.name}, scoped to all its properties (an ordinary assignment row - D-5).`,
       '',
-      'Single-use setup link - open it to set a password:',
+      org.id === 'org_0'
+        ? 'Single-use setup link - open it to set a password:'
+        : `Single-use setup link - set a password here, then sign in on ${org.slug}.<ORG_BASE_DOMAIN>:`,
       `  ${new URL(`/reset-password?token=${setup.token}`, baseUrl)}`,
       '',
       `It expires in ${minutes} minutes and works once. Re-run this script if it lapses.`,

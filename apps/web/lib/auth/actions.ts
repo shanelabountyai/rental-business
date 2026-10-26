@@ -22,6 +22,7 @@ import { redirect } from 'next/navigation'
 import { MfaRateLimited, auth, signIn, signOut } from '@/auth.ts'
 import { currentAuditActor } from '@/lib/audit/index.ts'
 import { authUrl, deliverAuthLink } from './delivery.ts'
+import { hostOrgId } from './org.ts'
 import { consumeRateLimit, issueToken, redeemToken, revokeTokens } from './store.ts'
 
 // Every flow in this file follows two rules.
@@ -33,6 +34,13 @@ import { consumeRateLimit, issueToken, redeemToken, revokeTokens } from './store
 //
 // 2. Rate limit BEFORE doing work. The limiter runs before the password hash,
 //    not after, or the expensive operation is itself the denial of service.
+//
+// 3. THE HOST'S ORG FIRST (R-288, PRD 10 §1.4). Every lookup is inside the org
+//    the host names, and every rate-limit key carries it, so one org's abuse or
+//    shared office IP cannot spend another's budget. A staff identity is still
+//    one global email, but it signs in only where it holds a live membership;
+//    anywhere else it is a wrong password, and it never touches the lockout
+//    counter, so a stranger on org B's host cannot lock out org A's owner.
 
 const CHALLENGE_COOKIE = 'rental_mfa_challenge'
 
@@ -103,18 +111,25 @@ export async function startStaffSignIn(
   const password = String(formData.get('password') ?? '')
   if (!email || !password) return { error: GENERIC_SIGN_IN_ERROR }
 
+  const orgId = await hostOrgId()
+  if (!orgId) return { error: GENERIC_SIGN_IN_ERROR }
+
   const ip = await clientIp()
-  const limit = await consumeRateLimit(`login:staff:${ip}`, RATE_LIMITS.login)
+  const limit = await consumeRateLimit(`login:staff:${orgId}:${ip}`, RATE_LIMITS.login)
   if (!limit.allowed) return { error: GENERIC_RATE_LIMIT_ERROR }
 
   const staffUser = await prisma.staffUser.findUnique({
     where: { email },
-    include: { credential: true },
+    include: {
+      credential: true,
+      orgMemberships: { where: { orgId, removedAt: null }, select: { orgId: true } },
+    },
   })
 
-  // Deliberately uniform: no account, no credential, inactive account and
-  // locked account all fall through to the same failure as a wrong password.
-  if (!staffUser?.active || !staffUser.credential) {
+  // Deliberately uniform: no account, no credential, inactive account, no
+  // membership in this org and locked account all fall through to the same
+  // failure as a wrong password.
+  if (!staffUser?.active || !staffUser.credential || staffUser.orgMemberships.length === 0) {
     return { error: GENERIC_SIGN_IN_ERROR }
   }
   if (isLockedOut(staffUser.credential.lockedUntil)) {
@@ -218,27 +233,21 @@ export async function signOutEverywhere(): Promise<void> {
   const session = await auth()
   if (session?.principal) {
     const actor = await currentAuditActor()
+    const { id, kind } = session.principal
     await recordAudit(prisma, {
       actor,
       action: 'auth.sessions_revoked',
-      entityType: session.principal.kind === 'staff' ? 'StaffUser' : 'Tenant',
-      entityId: session.principal.id,
+      entityType: kind === 'staff' ? 'StaffUser' : kind === 'guarantor' ? 'Guarantor' : 'Tenant',
+      entityId: id,
       after: { allDevices: true },
     })
     // Bumping the watermark kills every other device too, which is the point:
-    // "sign out" after a lost laptop has to mean everywhere.
-    const now = new Date()
-    if (session.principal.kind === 'staff') {
-      await prisma.staffUser.update({
-        where: { id: session.principal.id },
-        data: { sessionsValidFrom: now },
-      })
-    } else {
-      await prisma.tenant.update({
-        where: { id: session.principal.id },
-        data: { sessionsValidFrom: now },
-      })
-    }
+    // "sign out" after a lost laptop has to mean everywhere. A guarantor used
+    // to fall into the tenant branch and throw on a row that does not exist.
+    const data = { sessionsValidFrom: new Date() }
+    if (kind === 'staff') await prisma.staffUser.update({ where: { id }, data })
+    else if (kind === 'guarantor') await prisma.guarantor.update({ where: { id }, data })
+    else await prisma.tenant.update({ where: { id }, data })
   }
   await signOut({ redirectTo: '/login' })
 }
@@ -328,17 +337,26 @@ export async function requestPasswordReset(
     .trim()
     .toLowerCase()
 
+  const orgId = await hostOrgId()
+  if (!orgId) return { notice: RESET_SENT_NOTICE }
+
   const ip = await clientIp()
   const limit = await consumeRateLimit(
-    `reset:${ip}`,
+    `reset:${orgId}:${ip}`,
     RATE_LIMITS.passwordResetRequest,
   )
   // Even the rate-limit response is the neutral one: a distinguishable "too
   // many requests" would confirm which addresses are worth retrying.
   if (!limit.allowed) return { notice: RESET_SENT_NOTICE }
 
-  const staffUser = await prisma.staffUser.findUnique({ where: { email } })
-  if (staffUser?.active) {
+  // The password is global to the identity, but only a member of THIS org
+  // may ask for it here: otherwise any org's forgot-password form would mail
+  // links to every org's staff.
+  const staffUser = await prisma.staffUser.findUnique({
+    where: { email },
+    include: { orgMemberships: { where: { orgId, removedAt: null }, select: { orgId: true } } },
+  })
+  if (staffUser?.active && staffUser.orgMemberships.length > 0) {
     const issued = await issueToken(
       'STAFF_PASSWORD_RESET',
       { type: 'StaffUser', id: staffUser.id },
@@ -454,11 +472,15 @@ export async function completePasswordReset(
 async function findByContact(
   table: 'Tenant' | 'Guarantor',
   raw: string,
+  orgId: string,
 ): Promise<{ id: string; firstName: string; to: string; channel: 'EMAIL' | 'SMS' } | null> {
   const input = raw.trim()
   if (input.includes('@')) {
     const email = input.toLowerCase()
-    const where = { email, active: true }
+    // `email` is not unique: the same renter can be on a lease in two orgs.
+    // Without the org this signed them in as whichever row came back first
+    // (R-288, PRD 10 §M2 - the one defect there on day one of org #2).
+    const where = { orgId, email, active: true }
     const row =
       table === 'Tenant'
         ? await prisma.tenant.findFirst({ where })
@@ -471,9 +493,10 @@ async function findByContact(
   // `table` is one of two literals from this file, never user input.
   const rows = await prisma.$queryRawUnsafe<{ id: string; firstName: string; phone: string }[]>(
     `SELECT "id", "firstName", "phone" FROM "${table}"
-      WHERE "active" AND ("email" IS NULL OR btrim("email") = '')
+      WHERE "active" AND "orgId" = $2 AND ("email" IS NULL OR btrim("email") = '')
         AND right(regexp_replace("phone", '\\D', '', 'g'), 10) = $1`,
     e164.slice(-10),
+    orgId,
   )
   const matches = rows.filter((row) => normalizePhone(row.phone) === e164)
   return matches.length === 1
@@ -488,14 +511,17 @@ export async function requestTenantMagicLink(
   _previous: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  const orgId = await hostOrgId()
+  if (!orgId) return { notice: MAGIC_LINK_NOTICE }
+
   const ip = await clientIp()
   const limit = await consumeRateLimit(
-    `magiclink:${ip}`,
+    `magiclink:${orgId}:${ip}`,
     RATE_LIMITS.magicLinkRequest,
   )
   if (!limit.allowed) return { notice: MAGIC_LINK_NOTICE }
 
-  const tenant = await findByContact('Tenant', String(formData.get('contact') ?? ''))
+  const tenant = await findByContact('Tenant', String(formData.get('contact') ?? ''), orgId)
   if (tenant) {
     const issued = await issueToken(
       'TENANT_MAGIC_LINK',
@@ -527,17 +553,20 @@ export async function requestGuarantorMagicLink(
   _previous: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  const orgId = await hostOrgId()
+  if (!orgId) return { notice: GUARANTOR_MAGIC_LINK_NOTICE }
+
   const ip = await clientIp()
   // Same shared bucket as the tenant flow: both are "somebody asking for a
   // sign-in link from this IP", and a separate budget per flow would just
   // double the attempts an attacker gets.
   const limit = await consumeRateLimit(
-    `magiclink:${ip}`,
+    `magiclink:${orgId}:${ip}`,
     RATE_LIMITS.magicLinkRequest,
   )
   if (!limit.allowed) return { notice: GUARANTOR_MAGIC_LINK_NOTICE }
 
-  const guarantor = await findByContact('Guarantor', String(formData.get('contact') ?? ''))
+  const guarantor = await findByContact('Guarantor', String(formData.get('contact') ?? ''), orgId)
   if (guarantor) {
     const issued = await issueToken(
       'GUARANTOR_MAGIC_LINK',

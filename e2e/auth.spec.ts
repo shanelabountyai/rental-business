@@ -47,6 +47,10 @@ async function createStaffUser(options: { active?: boolean } = {}) {
       name: 'Test Manager',
       active: options.active ?? true,
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
+      // Staff of org #0, which is what localhost names. Since R-288 a person
+      // with no membership in the host's org gets the wrong-password answer
+      // and never touches the lockout counter (D-344).
+      orgMemberships: { create: { orgId: 'org_0' } },
     },
   })
   createdStaffIds.push(staffUser.id)

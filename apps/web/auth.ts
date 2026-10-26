@@ -9,6 +9,7 @@ import {
 import { prisma } from '@rental/db'
 import NextAuth, { CredentialsSignin } from 'next-auth'
 import Credentials from 'next-auth/providers/credentials'
+import { hostOrgId, principalIsStillValid } from './lib/auth/org.ts'
 import { consumeRateLimit, redeemToken } from './lib/auth/store.ts'
 
 // Auth.js v5, JWT sessions, no database adapter.
@@ -41,6 +42,10 @@ import { consumeRateLimit, redeemToken } from './lib/auth/store.ts'
 export interface Principal {
   id: string
   kind: 'staff' | 'tenant' | 'guarantor'
+  /// The organisation this session acts in: the host's org at sign-in
+  /// (R-288). A session is valid only on that org's host and, for staff,
+  /// only while the membership is live - see `principalIsStillValid`.
+  orgId: string
   email: string | null
   name: string
   /// Whether this staff user has completed MFA enrolment at all.
@@ -95,11 +100,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const staffUserId = await peekChallengeSubject(challengeToken)
         if (!staffUserId) return null
 
+        // This provider is reachable directly, so it re-checks the host's org
+        // rather than trusting that the password step did.
+        const orgId = await hostOrgId()
+        if (!orgId) return null
         const staffUser = await prisma.staffUser.findUnique({
           where: { id: staffUserId },
-          include: { credential: true },
+          include: {
+            credential: true,
+            orgMemberships: { where: { orgId, removedAt: null }, select: { orgId: true } },
+          },
         })
         if (!staffUser?.active || !staffUser.credential) return null
+        if (staffUser.orgMemberships.length === 0) return null
         if (isLockedOut(staffUser.credential.lockedUntil)) return null
 
         const enrolled = staffUser.credential.mfaEnrolledAt !== null
@@ -161,6 +174,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email: staffUser.email,
           name: staffUser.name,
           kind: 'staff',
+          orgId,
           mfaEnrolled: enrolled,
           mfaVerified,
         } as never
@@ -188,7 +202,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const tenant = await prisma.tenant.findUnique({
           where: { id: redeemed.subjectId },
         })
-        if (!tenant?.active) return null
+        // A link opened on another org's host signs nobody in (R-288).
+        if (!tenant?.active || tenant.orgId !== (await hostOrgId())) return null
 
         await recordAudit(prisma, {
           actor: {
@@ -207,6 +222,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email: tenant.email,
           name: `${tenant.firstName} ${tenant.lastName}`,
           kind: 'tenant',
+          orgId: tenant.orgId,
           mfaEnrolled: false,
           mfaVerified: false,
         } as never
@@ -234,7 +250,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const guarantor = await prisma.guarantor.findUnique({
           where: { id: redeemed.subjectId },
         })
-        if (!guarantor?.active) return null
+        if (!guarantor?.active || guarantor.orgId !== (await hostOrgId())) return null
 
         await recordAudit(prisma, {
           actor: {
@@ -253,6 +269,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email: guarantor.email,
           name: `${guarantor.firstName} ${guarantor.lastName}`,
           kind: 'guarantor',
+          orgId: guarantor.orgId,
           mfaEnrolled: false,
           mfaVerified: false,
         } as never
@@ -265,6 +282,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user) {
         const principal = user as unknown as Principal & { id: string }
         token.kind = principal.kind
+        token.orgId = principal.orgId
         token.mfaEnrolled = principal.mfaEnrolled
         token.mfaVerified = principal.mfaVerified
         token.name = principal.name
@@ -281,6 +299,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.sub,
         token.kind as Principal['kind'] | undefined,
         token.authenticatedAt as number | undefined,
+        token.orgId as string | undefined,
       )
       return stillValid ? token : null
     },
@@ -289,6 +308,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       session.principal = {
         id: token.sub ?? '',
         kind: (token.kind as Principal['kind']) ?? 'tenant',
+        orgId: (token.orgId as string) ?? '',
         email: (token.email as string | null) ?? null,
         name: (token.name as string) ?? '',
         mfaEnrolled: Boolean(token.mfaEnrolled),
@@ -298,35 +318,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
 })
-
-async function principalIsStillValid(
-  id: string | undefined,
-  kind: Principal['kind'] | undefined,
-  authenticatedAt: number | undefined,
-): Promise<boolean> {
-  if (!id || !kind || !authenticatedAt) return false
-
-  const record =
-    kind === 'staff'
-      ? await prisma.staffUser.findUnique({
-          where: { id },
-          select: { active: true, sessionsValidFrom: true },
-        })
-      : kind === 'guarantor'
-        ? await prisma.guarantor.findUnique({
-            where: { id },
-            select: { active: true, sessionsValidFrom: true },
-          })
-        : await prisma.tenant.findUnique({
-            where: { id },
-            select: { active: true, sessionsValidFrom: true },
-          })
-
-  if (!record?.active) return false
-  // Strictly greater-than: a watermark set in the same millisecond as the
-  // sign-in belongs to that sign-in, not to a revocation of it.
-  return record.sessionsValidFrom.getTime() <= authenticatedAt
-}
 
 /// Reads a challenge token's subject WITHOUT consuming it, so a mistyped MFA
 /// code does not cost the user their challenge.

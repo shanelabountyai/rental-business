@@ -7,6 +7,7 @@ import { prisma } from '@rental/db'
 import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { auditAsSystem } from '@/lib/audit/system.ts'
+import { hostOrgId } from '@/lib/auth/org.ts'
 import { consumeRateLimit } from '@/lib/auth/store.ts'
 import { sendPrescreenInvite } from './invite.ts'
 
@@ -91,7 +92,10 @@ export async function submitInquiry(
   formData: FormData,
 ): Promise<InquiryFormState> {
   const ip = await clientIp()
-  const limit = await consumeRateLimit(`prospect-inquiry:${ip}`, RATE_LIMITS.prospectInquiry)
+  // Keyed on the host's org too (R-288), so one org's listing traffic cannot
+  // spend another's budget. No org is its own bucket, not a pass.
+  const org = (await hostOrgId()) ?? 'none'
+  const limit = await consumeRateLimit(`prospect-inquiry:${org}:${ip}`, RATE_LIMITS.prospectInquiry)
   if (!limit.allowed) return { error: GENERIC_RATE_LIMIT_ERROR, values: typed(formData) }
 
   const listing = await prisma.listing.findFirst({
