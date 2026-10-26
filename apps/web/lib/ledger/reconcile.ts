@@ -91,6 +91,8 @@ export interface ReconciliationReport {
  * older than the window was already reported on the night it happened.
  */
 export async function reconcileLedger(
+  /// One org per call (R-290): one org's drift is one org's alarm.
+  orgId: string,
   now = new Date(),
   windowDays = 30,
 ): Promise<ReconciliationReport> {
@@ -98,11 +100,11 @@ export async function reconcileLedger(
 
   const [events, entries] = await Promise.all([
     prisma.processedStripeEvent.findMany({
-      where: { occurredAt: { gte: since } },
+      where: { orgId, occurredAt: { gte: since } },
       select: { stripeEventId: true, outcome: true, type: true, detail: true },
     }),
     prisma.ledgerEntry.findMany({
-      where: { occurredAt: { gte: since }, stripeEventId: { not: null } },
+      where: { orgId, occurredAt: { gte: since }, stripeEventId: { not: null } },
       select: { id: true, stripeEventId: true, amountCents: true },
     }),
   ])
@@ -138,6 +140,7 @@ export async function reconcileLedger(
   // the case with no other witness, since the report dies with the process.
   const unpushed = await prisma.paymentInvoiceSplit.findMany({
     where: {
+      orgId,
       pushedAt: null,
       claimedByEventId: null,
       createdAt: { gte: since, lt: new Date(now.getTime() - UNPUSHED_CLAIM_WINDOW_MS) },
@@ -168,7 +171,7 @@ export async function reconcileLedger(
   const externalChecked = billingIsLive()
   if (externalChecked) {
     const payers = await prisma.leasePayer.findMany({
-      where: { active: true, stripeSubscriptionId: { not: null } },
+      where: { orgId, active: true, stripeSubscriptionId: { not: null } },
       select: { leaseId: true, stripeSubscriptionId: true },
     })
 
@@ -207,6 +210,7 @@ export async function reconcileLedger(
       action: 'ledger.drift_detected',
       entityType: 'LedgerEntry',
       entityId: 'reconciliation',
+      orgId,
       after: {
         windowDays,
         checkedEvents: events.length,
@@ -295,9 +299,9 @@ export function externalReconciliationAvailable(): boolean {
 /// Drift found on recent runs, for the screen. Read from the audit trail
 /// rather than a table of its own - the trail is already append-only and
 /// already the place this product records things that must not be edited.
-export async function recentDrift(limit = 20) {
+export async function recentDrift(orgId: string, limit = 20) {
   return prisma.auditLog.findMany({
-    where: { action: 'ledger.drift_detected' },
+    where: { orgId, action: 'ledger.drift_detected' },
     orderBy: { occurredAt: 'desc' },
     take: limit,
     select: { id: true, occurredAt: true, after: true },

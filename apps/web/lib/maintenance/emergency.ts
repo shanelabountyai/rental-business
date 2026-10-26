@@ -149,18 +149,13 @@ export async function unacknowledgedEmergencies(
    * emergencies any spec or e2e run has ever created, which is exactly how
    * this one came to blow a 30s timeout.
    *
-   * The five-minute cron passes nothing and sweeps globally, which is what a
-   * cron is for.
+   * The cron passes one org (R-290): there is no global sweep any more.
    */
-  only?: { ticketIds: readonly string[] },
+  scope: { orgId: string } | { ticketIds: readonly string[] },
 ) {
-  // An explicit empty set means "none of mine are open" and must not fall
-  // through to a global sweep.
-  if (only && only.ticketIds.length === 0) return []
-
   return prisma.ticket.findMany({
     where: {
-      ...(only ? { id: { in: [...only.ticketIds] } } : {}),
+      ...('orgId' in scope ? { orgId: scope.orgId } : { id: { in: [...scope.ticketIds] } }),
       priority: 'EMERGENCY',
       acknowledgedAt: null,
       // From when it BECAME an emergency (R-223), which is its creation only

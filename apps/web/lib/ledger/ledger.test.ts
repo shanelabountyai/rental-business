@@ -211,7 +211,7 @@ describe('reconcileLedger', () => {
     })
     await entry(-150_000, 'PAYMENT', occurredAt.toISOString(), { stripeEventId: eventId })
 
-    const report = await reconcileLedger()
+    const report = await reconcileLedger('org_0')
     expect(report.drift.filter((d) => d.stripeEventId === eventId)).toEqual([])
   })
 
@@ -228,7 +228,7 @@ describe('reconcileLedger', () => {
       },
     })
 
-    const report = await reconcileLedger()
+    const report = await reconcileLedger('org_0')
     const found = report.drift.find((d) => d.stripeEventId === eventId)
     expect(found?.kind).toBe('projected_but_missing')
   })
@@ -251,7 +251,7 @@ describe('reconcileLedger', () => {
       },
     })
 
-    const report = await reconcileLedger()
+    const report = await reconcileLedger('org_0')
     expect(report.drift.find((d) => d.stripeEventId === eventId)?.kind).toBe(
       'projected_but_missing',
     )
@@ -269,7 +269,7 @@ describe('reconcileLedger', () => {
       },
     })
 
-    const report = await reconcileLedger()
+    const report = await reconcileLedger('org_0')
     expect(report.drift.find((d) => d.stripeEventId === eventId)?.kind).toBe(
       'projected_but_missing',
     )
@@ -290,7 +290,7 @@ describe('reconcileLedger', () => {
       },
     })
 
-    const report = await reconcileLedger()
+    const report = await reconcileLedger('org_0')
     expect(report.drift.filter((d) => d.stripeEventId === eventId)).toEqual([])
   })
 
@@ -306,7 +306,7 @@ describe('reconcileLedger', () => {
       },
     })
 
-    const report = await reconcileLedger()
+    const report = await reconcileLedger('org_0')
     expect(report.drift.find((d) => d.stripeEventId === eventId)?.kind).toBe('stuck_claim')
   })
 
@@ -318,7 +318,7 @@ describe('reconcileLedger', () => {
       stripeEventId: orphanEventId,
     })
 
-    const report = await reconcileLedger()
+    const report = await reconcileLedger('org_0')
     const found = report.drift.find((d) => d.ledgerEntryId === row.id)
     expect(found?.kind).toBe('orphan_entry')
   })
@@ -337,7 +337,7 @@ describe('reconcileLedger', () => {
     })
 
     const before = await prisma.auditLog.count({ where: { action: 'ledger.drift_detected' } })
-    await reconcileLedger()
+    await reconcileLedger('org_0')
     expect(
       await prisma.auditLog.count({ where: { action: 'ledger.drift_detected' } }),
     ).toBeGreaterThan(before)
@@ -346,7 +346,7 @@ describe('reconcileLedger', () => {
   it('says out loud that it did NOT check against Stripe', async () => {
     // "Reconciled" meaning two different things depending on configuration
     // is exactly how a check stops being trusted.
-    const report = await reconcileLedger()
+    const report = await reconcileLedger('org_0')
     expect(report.externalChecked).toBe(false)
   })
 
@@ -362,7 +362,7 @@ describe('reconcileLedger', () => {
       },
     })
 
-    const report = await reconcileLedger(new Date(), 30)
+    const report = await reconcileLedger('org_0', new Date(), 30)
     expect(report.drift.find((d) => d.stripeEventId === old)).toBeUndefined()
   })
 })

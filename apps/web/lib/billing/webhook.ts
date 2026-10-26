@@ -979,8 +979,9 @@ export async function unclaimedCounterPayments(propertyIds: string[], now = new 
 /// The recent event log, for the operational screen R-036 will build out.
 /// Exported here so this item leaves something readable behind rather than a
 /// table only tests have ever selected from.
-export async function recentStripeEvents(limit = 25) {
+export async function recentStripeEvents(orgId: string, limit = 25) {
   return prisma.processedStripeEvent.findMany({
+    where: { orgId },
     orderBy: { occurredAt: 'desc' },
     take: limit,
   })

@@ -304,7 +304,7 @@ describe('sweepShowingReminders', () => {
     })
     showingIds.push(showing.id)
 
-    const first = await sweepShowingReminders(new Date())
+    const first = await sweepShowingReminders('org_0', new Date())
     expect(first.reminded).toBeGreaterThanOrEqual(1)
 
     // One row per template CHANNEL (SMS included, suppressed - no phone on
@@ -321,7 +321,7 @@ describe('sweepShowingReminders', () => {
 
     // A second tick a moment later must not double-send - idempotencyKey is
     // keyed on the lead AND the showing.
-    await sweepShowingReminders(new Date())
+    await sweepShowingReminders('org_0', new Date())
     const afterSecond = await prisma.notification.count({ where: countWhere })
     expect(afterSecond).toBe(afterFirst)
   })

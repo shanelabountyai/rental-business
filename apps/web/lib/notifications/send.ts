@@ -636,16 +636,15 @@ export async function dispatchPendingNotifications(
    * now nor the page. Found when an emergency submit started exceeding 30s
    * against a database holding a few hundred stale test notifications.
    *
-   * The hourly cron passes nothing and still sweeps globally, which is
-   * exactly what a cron is for.
+   * The cron passes one org (R-290): each org's drain is its own invocation,
+   * so there is no global sweep left to fall through to.
    */
-  only?: { deliveryIds: readonly string[] },
+  scope: { orgId: string } | { deliveryIds: readonly string[] },
 ): Promise<DispatchResult> {
   const config = notificationConfig()
   if (!config.enabled) return { sent: 0, failed: 0, remaining: 0 }
-  // An explicit empty set means "nothing of mine was queued" - every channel
-  // suppressed, say - and must not fall through to a global sweep.
-  if (only && only.deliveryIds.length === 0) return { sent: 0, failed: 0, remaining: 0 }
+  // Nothing of mine was queued - every channel suppressed, say.
+  if ('deliveryIds' in scope && scope.deliveryIds.length === 0) return { sent: 0, failed: 0, remaining: 0 }
 
   // A QUEUED row with attempts > 0 is one a dispatcher has CLAIMED and not
   // finished (D-299): the claim below leaves the status QUEUED, so the count
@@ -655,7 +654,7 @@ export async function dispatchPendingNotifications(
   // is the database's own, and callers replay `now`.
   const claimExpired = new Date(Date.now() - CLAIM_STALE_MS)
   const dueWhere = {
-    ...(only ? { id: { in: [...only.deliveryIds] } } : {}),
+    ...('orgId' in scope ? { orgId: scope.orgId } : { id: { in: [...scope.deliveryIds] } }),
     OR: [
       { status: 'QUEUED' as const, attempts: 0 },
       { status: 'QUEUED' as const, updatedAt: { lt: claimExpired } },

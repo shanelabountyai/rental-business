@@ -162,7 +162,7 @@ describe('delist-sweep: reconciling the network side', () => {
     syndicationIds.push(liveRow.id)
 
     const adapter = new SimulatedSyndicationAdapter()
-    const result = await sweepPendingDelists(adapter)
+    const result = await sweepPendingDelists('org_0', adapter)
     expect(result.delisted).toBeGreaterThanOrEqual(1)
 
     const after = await prisma.listingSyndication.findUniqueOrThrow({
@@ -192,7 +192,7 @@ describe('delist-sweep: reconciling the network side', () => {
     syndicationIds.push(row.id)
 
     const faulting = new SimulatedSyndicationAdapter({ fault: () => 'timeout' })
-    await sweepPendingDelists(faulting)
+    await sweepPendingDelists('org_0', faulting)
 
     const afterFault = await prisma.listingSyndication.findUniqueOrThrow({ where: { id: row.id } })
     // Still LISTED - a failed delist must not silently look successful, and
@@ -201,7 +201,7 @@ describe('delist-sweep: reconciling the network side', () => {
     expect(afterFault.lastFaultCode).toBe('timeout')
 
     const healthy = new SimulatedSyndicationAdapter()
-    const secondSweep = await sweepPendingDelists(healthy)
+    const secondSweep = await sweepPendingDelists('org_0', healthy)
     expect(secondSweep.delisted).toBeGreaterThanOrEqual(1)
 
     const afterRetry = await prisma.listingSyndication.findUniqueOrThrow({ where: { id: row.id } })

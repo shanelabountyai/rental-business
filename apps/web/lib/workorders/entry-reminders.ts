@@ -26,6 +26,7 @@ export interface ReminderSweepResult {
 }
 
 export async function sweepEntryReminders(
+  orgId: string,
   now = new Date(),
 ): Promise<ReminderSweepResult> {
   const from = new Date(now.getTime() + (REMINDER_LEAD_HOURS - WINDOW_HOURS) * 3_600_000)
@@ -33,6 +34,7 @@ export async function sweepEntryReminders(
 
   const upcoming = await prisma.workOrder.findMany({
     where: {
+      orgId,
       scheduledStart: { gte: from, lte: to },
       status: { in: ['SCHEDULED', 'ASSIGNED', 'IN_PROGRESS'] },
     },

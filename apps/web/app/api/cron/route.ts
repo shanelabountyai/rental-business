@@ -1,5 +1,5 @@
-import { auditAsSystem } from '@/lib/audit/index.ts'
-import { isAuthorizedCron } from '@/lib/cron/authorize.ts'
+import { auditAsSystem } from '@/lib/audit/system.ts'
+import { cronRoute, withOrgClaim } from '@/lib/cron/per-org.ts'
 import { dispatchOutbox } from '@/lib/jobs/outbox.ts'
 // Side-effect import: populates SCHEDULED_JOBS before runDueJobs() reads it.
 // See registrations.ts for why every job module is imported from exactly here.
@@ -30,13 +30,16 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-export async function GET(request: Request) {
-  if (!isAuthorizedCron(request)) {
-    // 404, not 401. An unauthenticated caller learns nothing about whether
-    // this endpoint exists, and a scanner gets no signal to come back.
-    return new Response('Not found', { status: 404 })
-  }
+// 404, not 401, for a bad token. An unauthenticated caller learns nothing
+// about whether this endpoint exists, and a scanner gets no signal to come
+// back. Per org since R-290: see lib/cron/per-org.ts.
+export function GET(request: Request) {
+  return cronRoute(request, (orgId) =>
+    withOrgClaim('cron.daily', orgId, new Date(), () => runDaily(orgId)),
+  )
+}
 
+async function runDaily(orgId: string) {
   const startedAt = Date.now()
 
   // Jobs first, then dispatch: a job that emits an event gets it delivered in
@@ -44,36 +47,36 @@ export async function GET(request: Request) {
   // last for the same reason - a consumer that decided one during the dispatch
   // above gets it sent now, not an hour from now, and this pass also picks up
   // whatever quiet hours deferred overnight (R-016).
-  const runs = await runDueJobs()
-  const dispatch = await dispatchOutbox()
-  const notifications = await dispatchPendingNotifications()
+  const runs = await runDueJobs(new Date(), { orgId })
+  const dispatch = await dispatchOutbox(100, { orgId })
+  const notifications = await dispatchPendingNotifications(new Date(), 100, { orgId })
   // Hourly rather than a SCHEDULED_JOBS entry, because it measures elapsed
   // hours since a dispatch rather than calendar days - see
   // lib/vendors/no-response.ts's own header for why that distinction puts it
   // here beside the other latency-driven sweeps (R-025).
-  const vendorSilence = await sweepUnansweredDispatches()
+  const vendorSilence = await sweepUnansweredDispatches(orgId)
   // T-1-day entry reminders (MAINT-05, R-027). Hourly for the same reason -
   // a fixed distance in hours from a scheduled instant, not a calendar-day
   // question, and "tomorrow" sent at 3am is not a reminder anybody reads.
-  const entryReminders = await sweepEntryReminders()
+  const entryReminders = await sweepEntryReminders(orgId)
   // T-1-day / T-2-hour showing reminders (LEASE-08, R-064). Same elapsed-
   // time reasoning as the entry reminders above.
-  const showingReminders = await sweepShowingReminders()
+  const showingReminders = await sweepShowingReminders(orgId)
   // COMM-07: "unanswered tenant messages past X days surface on the
   // dashboard." Elapsed-time, not a calendar-day question, for the same
   // reason as the sweeps above.
-  const unanswered = await sweepUnansweredTenantMessages()
+  const unanswered = await sweepUnansweredTenantMessages(new Date(), { orgId })
   // LEASE-02's "≤24h delist on lease-up" (R-057, D-7). Reconciles the
   // network side of a listing delist-consumer.ts already applied locally -
   // never inside that consumer's own transaction, see delist-sweep.ts's
   // own header for why.
-  const delisting = await sweepPendingDelists()
+  const delisting = await sweepPendingDelists(orgId)
   // The ledger projection, checked against the event log that produced it
   // (D-11, R-035). Hourly rather than a SCHEDULED_JOBS entry for the same
   // reason as the sweeps above: it is not a per-property calendar-day
   // question, it is one comparison over recent rows. "A projection nobody
   // checks is a lie with a timestamp."
-  const reconciliation = await reconcileLedger()
+  const reconciliation = await reconcileLedger(orgId)
 
   const ran = runs.filter((r) => r.outcome === 'ran')
   // R-174. A run that filled a business date an earlier tick missed, counted
@@ -91,13 +94,14 @@ export async function GET(request: Request) {
       action: 'job.failed',
       entityType: 'JobRun',
       entityId: 'cron',
+      orgId,
       after: { failures },
     }).catch(() => {
       // An audit failure must not swallow the response the cron needs to see.
     })
   }
 
-  return Response.json({
+  return {
     ok: failures.length === 0,
     ranJobs: ran.length,
     caughtUpJobs: caughtUp.length,
@@ -133,5 +137,5 @@ export async function GET(request: Request) {
     // opens a photo months later and it is gone.
     storageDurable: storageIsDurable,
     durationMs: Date.now() - startedAt,
-  })
+  }
 }

@@ -37,13 +37,13 @@ export interface EscalationSweep {
 
 export async function sweepEmergencyEscalations(
   now = new Date(),
-  /// Narrows the sweep to specific tickets (R-102b). See
-  /// `unacknowledgedEmergencies` for why this exists; the cron passes nothing.
-  only?: { ticketIds: readonly string[] },
+  /// One org (the cron, R-290) or specific tickets (R-102b). See
+  /// `unacknowledgedEmergencies` for why.
+  scope: { orgId: string } | { ticketIds: readonly string[] },
 ): Promise<EscalationSweep> {
   // The query filters on `emergencyAt`, so null cannot reach here; the
   // narrowing is for the type.
-  const open = (await unacknowledgedEmergencies(now, only)).flatMap((ticket) =>
+  const open = (await unacknowledgedEmergencies(now, scope)).flatMap((ticket) =>
     ticket.emergencyAt ? [{ ...ticket, emergencyAt: ticket.emergencyAt }] : [],
   )
   const due = open.filter((ticket) => shouldEscalate(ticket, now))

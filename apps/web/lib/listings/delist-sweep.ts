@@ -34,13 +34,14 @@ export interface DelistSweepResult {
 }
 
 export async function sweepPendingDelists(
+  orgId: string,
   /// Defaults to the wired provider; a test passes a fault-configured
   /// SimulatedSyndicationAdapter to prove the FAILED/retry path without a
   /// global toggle every other test would have to remember to reset.
   adapter: SyndicationAdapter = syndicationAdapter,
 ): Promise<DelistSweepResult> {
   const pending = await prisma.listingSyndication.findMany({
-    where: { status: 'LISTED', listing: { status: 'UNPUBLISHED' } },
+    where: { orgId, status: 'LISTED', listing: { status: 'UNPUBLISHED' } },
     select: { id: true, network: true, externalId: true },
   })
 

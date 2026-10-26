@@ -1,4 +1,4 @@
-import { isAuthorizedCron } from '@/lib/cron/authorize.ts'
+import { cronRoute } from '@/lib/cron/per-org.ts'
 import { dispatchPendingNotifications } from '@/lib/notifications/send.ts'
 
 // Hourly: release what is due (R-261). `/api/cron` runs once a day at 16:00
@@ -11,9 +11,10 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-export async function GET(request: Request) {
-  if (!isAuthorizedCron(request)) return new Response('Not found', { status: 404 })
-
-  const notifications = await dispatchPendingNotifications()
-  return Response.json({ ok: true, ...notifications })
+// Per org (R-290), with no claim, for the escalation route's reason.
+export function GET(request: Request) {
+  return cronRoute(request, async (orgId) => ({
+    ok: true,
+    ...(await dispatchPendingNotifications(new Date(), 100, { orgId })),
+  }))
 }

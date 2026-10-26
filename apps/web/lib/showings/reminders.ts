@@ -29,6 +29,7 @@ export interface ShowingReminderSweepResult {
 }
 
 export async function sweepShowingReminders(
+  orgId: string,
   now = new Date(),
 ): Promise<ShowingReminderSweepResult> {
   let checked = 0
@@ -40,7 +41,7 @@ export async function sweepShowingReminders(
     const to = new Date(now.getTime() + lead.hours * 3_600_000)
 
     const upcoming = await prisma.showing.findMany({
-      where: { status: 'BOOKED', scheduledStart: { gte: from, lte: to } },
+      where: { orgId, status: 'BOOKED', scheduledStart: { gte: from, lte: to } },
       select: {
         id: true,
         propertyId: true,

@@ -50,8 +50,8 @@ export default async function MoneyPage() {
   // the same rule announcement history follows, for the same reason.
   const ops = permissionScope.everything
     ? await Promise.all([
-        recentDrift(),
-        recentStripeEvents(),
+        recentDrift(actor.orgId),
+        recentStripeEvents(actor.orgId),
         unclaimedCounterPayments(scope.propertyIds),
       ])
     : null

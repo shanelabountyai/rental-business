@@ -36,13 +36,16 @@ SCHEDULED_JOBS.push({
   description:
     "Flags a vendor's certificate of insurance once it is within 30 days of expiring, or once it has lapsed (MAINT-11).",
   run: async ({ propertyId, businessDate }) => {
-    const [property, vendors] = await Promise.all([
-      prisma.property.findUniqueOrThrow({ where: { id: propertyId }, select: { city: true, postalCode: true } }),
-      prisma.vendor.findMany({
-        where: { active: true, coiExpiresOn: { not: null } },
-        select: { id: true, name: true, serviceAreas: true, coiExpiresOn: true },
-      }),
-    ])
+    const property = await prisma.property.findUniqueOrThrow({
+      where: { id: propertyId },
+      select: { orgId: true, city: true, postalCode: true },
+    })
+    // The property's own org (R-290): another org's vendor covering the same
+    // city is not this property's vendor.
+    const vendors = await prisma.vendor.findMany({
+      where: { orgId: property.orgId, active: true, coiExpiresOn: { not: null } },
+      select: { id: true, name: true, serviceAreas: true, coiExpiresOn: true },
+    })
 
     let flagged = 0
     for (const vendor of vendors) {

@@ -47,19 +47,17 @@ export async function sweepUnansweredTenantMessages(
    * accumulated in the shared test database. `Message` and `Thread` cannot
    * be deleted in cleanup (Message is append-only), so an unfiltered sweep
    * run from a test only grows slower over time - the same trap CLAUDE.md
-   * names for a global sweep in a test.
+   * names for a global sweep in a test. The cron passes one org (R-290).
    */
-  only?: { threadIds: readonly string[] },
+  scope: { orgId: string } | { threadIds: readonly string[] },
 ): Promise<UnansweredSweepResult> {
-  if (only && only.threadIds.length === 0) return { checked: 0, flagged: 0 }
-
   const cutoff = new Date(now.getTime() - UNANSWERED_THRESHOLD_DAYS * 24 * 60 * 60 * 1000)
 
   const candidates = await prisma.thread.findMany({
     where: {
       tenantId: { not: null },
       lastMessageAt: { lte: cutoff },
-      ...(only ? { id: { in: [...only.threadIds] } } : {}),
+      ...('orgId' in scope ? { orgId: scope.orgId } : { id: { in: [...scope.threadIds] } }),
     },
     select: {
       id: true,

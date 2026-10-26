@@ -50,6 +50,9 @@ export interface AuditInput {
   /// Scopes the entry for R-004's property filtering, so a property-scoped
   /// manager reading the audit trail sees their properties and no others.
   propertyId?: string | null
+  /// For an entry with no property (R-290): a per-org sweep's own finding.
+  /// With a property, the org_scope trigger derives it and refuses a mismatch.
+  orgId?: string
   before?: Snapshot
   after?: Snapshot
   reasonCode?: ReasonCode | null
@@ -101,6 +104,7 @@ export async function recordAudit(
       entityType: input.entityType,
       entityId: input.entityId,
       propertyId: input.propertyId ?? null,
+      ...(input.orgId ? { orgId: input.orgId } : {}),
       before: (change.before ?? undefined) as Prisma.InputJsonValue | undefined,
       after: (change.after ?? undefined) as Prisma.InputJsonValue | undefined,
       reasonCode: input.reasonCode ?? null,

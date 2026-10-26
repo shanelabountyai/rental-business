@@ -639,14 +639,14 @@ describe('scoped dispatch', () => {
     }
   })
 
-  it('still sweeps globally when given no filter - which is what the cron is for', async () => {
+  it("sweeps a whole org when given one - which is what the cron is for", async () => {
     const queued = await queueOne('global')
-    // Unfiltered IS the point here - this is the one test that proves the
+    // Org-wide IS the point here - this is the one test that proves the
     // cron's own path. The batch has to be large enough that a parallel
     // suite's backlog cannot crowd this test's rows out of it (the sweep
     // orders by id, and a fresh cuid sorts last), and the timeout has to
     // allow for actually sending that backlog.
-    await dispatchPendingNotifications(new Date(), 5_000)
+    await dispatchPendingNotifications(new Date(), 5_000, { orgId: 'org_0' })
     const deliveries = await prisma.notificationDelivery.findMany({
       where: { id: { in: queued.deliveryIds } },
     })
@@ -734,7 +734,7 @@ describe('the kill switch', () => {
       }
 
       // And the dispatcher refuses to run at all while it is off.
-      const result = await dispatchPendingNotifications()
+      const result = await dispatchPendingNotifications(new Date(), 100, { orgId: 'org_0' })
       expect(result).toEqual({ sent: 0, failed: 0, remaining: 0 })
     } finally {
       if (previous === undefined) delete process.env.NOTIFICATIONS_ENABLED

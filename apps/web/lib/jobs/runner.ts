@@ -112,11 +112,9 @@ export interface RunSummary {
 }
 
 /**
- * Runs every due job for every active property. Called by the cron route.
- *
- * `options.propertyIds` narrows the run to specific properties. The cron never
- * passes it; it exists for backfilling one property after a fix, and for tests
- * that must not touch rows they did not create.
+ * Runs every due job for every active property of one org - the cron route,
+ * one invocation per org (R-290) - or for specific properties: backfilling one
+ * property after a fix, and tests that must not touch rows they did not create.
  *
  * Properties are processed sequentially rather than in parallel: a 10-50 unit
  * portfolio is small, the work is database-bound, and a serverless function
@@ -125,12 +123,12 @@ export interface RunSummary {
  */
 export async function runDueJobs(
   now = new Date(),
-  options: { propertyIds?: string[] } = {},
+  scope: { orgId: string } | { propertyIds: string[] },
 ): Promise<RunSummary[]> {
   const properties = await prisma.property.findMany({
     where: {
       active: true,
-      ...(options.propertyIds ? { id: { in: options.propertyIds } } : {}),
+      ...('orgId' in scope ? { orgId: scope.orgId } : { id: { in: scope.propertyIds } }),
     },
     select: { id: true, timezone: true },
   })

@@ -1625,7 +1625,7 @@ describe('a portal payment reaches the invoice (MONEY-01)', () => {
     })
 
     // Scoped to this payment: the sweep reads the whole shared database.
-    const report = await reconcileLedger()
+    const report = await reconcileLedger('org_0')
     const mine = report.drift.filter((item) => item.detail.includes(paymentId))
     expect(mine).toMatchObject([{ kind: 'portal_push_unconfirmed', differenceCents: -100_000 }])
 

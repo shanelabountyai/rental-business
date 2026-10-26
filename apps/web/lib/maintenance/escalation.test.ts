@@ -349,13 +349,13 @@ describe('sweepEmergencyEscalations', { timeout: 90_000 }, () => {
     })
     ticketIds.push(routine.id)
 
-    // THE ONE GENUINELY GLOBAL SWEEP in this file - no `only:` - because a
-    // routine ticket being ignored is a claim about what the cron's own
-    // unfiltered query selects, and filtering to the ticket would assert
+    // THE ONE ORG-WIDE SWEEP in this file - org #0, the cron's own scope
+    // since R-290 - because a routine ticket being ignored is a claim about
+    // what the cron's query selects, and filtering to the ticket would assert
     // nothing. It is the counterpart of the notification suite's single
     // unfiltered dispatch, and it carries the same cost, which is why
     // `acknowledgeStaleEmergencies()` runs in beforeAll.
-    await sweepEmergencyEscalations(now)
+    await sweepEmergencyEscalations(now, { orgId: 'org_0' })
     expect(await escalationsSentFor(routine.id)).toHaveLength(0)
   })
 })

@@ -45,6 +45,7 @@ export interface NoResponseSweepResult {
  * rather than either spamming hourly or going quiet forever after one ask.
  */
 export async function sweepUnansweredDispatches(
+  orgId: string,
   now = new Date(),
 ): Promise<NoResponseSweepResult> {
   // The partial index this query was written against
@@ -52,6 +53,7 @@ export async function sweepUnansweredDispatches(
   // a vendor has already answered are the ones it never needs to look at.
   const candidates = await prisma.workOrder.findMany({
     where: {
+      orgId,
       dispatchedAt: { not: null },
       vendorRespondedAt: null,
       vendorId: { not: null },

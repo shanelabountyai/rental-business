@@ -1,5 +1,5 @@
 import { sweepEmergencyEscalations } from '@/lib/maintenance/escalation.ts'
-import { isAuthorizedCron } from '@/lib/cron/authorize.ts'
+import { cronRoute } from '@/lib/cron/per-org.ts'
 
 // The escalation tick (NOTIF-05, R-029). Every fifteen minutes in
 // production since D-263 - a five-minute tick kept the demo's Neon database
@@ -17,10 +17,11 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-export async function GET(request: Request) {
-  // 404, not 401 - same reasoning as the hourly route.
-  if (!isAuthorizedCron(request)) return new Response('Not found', { status: 404 })
-
-  const sweep = await sweepEmergencyEscalations()
-  return Response.json({ ok: true, ...sweep })
+// Per org (R-290), with no claim: each tick's sweep is idempotent per ticket
+// on its own, and a claim per fifteen minutes would be a row per org per tick.
+export function GET(request: Request) {
+  return cronRoute(request, async (orgId) => ({
+    ok: true,
+    ...(await sweepEmergencyEscalations(new Date(), { orgId })),
+  }))
 }

@@ -65,11 +65,11 @@ test.describe('the cron endpoint', () => {
     // R-009 registered the first real job (unit auto-make-ready); this
     // asserts the runner reports cleanly against whatever properties exist,
     // not that any particular job did work - that is units.spec.ts's job.
+    // Since R-290 the route calls itself once per org over real HTTP, so this
+    // is also the one test of that fan-out: org #0 must be in the report.
     const body = await response.json()
-    expect(body).toMatchObject({
-      ok: true,
-      failedJobs: 0,
-    })
+    expect(body.ok, JSON.stringify(body).slice(0, 2000)).toBe(true)
+    expect(body.orgs.org_0).toMatchObject({ ok: true })
     expect(typeof body.durationMs).toBe('number')
   })
 })
