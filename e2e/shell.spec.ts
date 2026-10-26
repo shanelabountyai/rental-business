@@ -26,6 +26,11 @@ async function createStaff(roleKey: string | null, scopedToPropertyId?: string) 
       email,
       name: 'Shell Test',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
+      // Explicit, because the StaffAssignment trigger only adds org #0
+      // membership when a role is granted - and since R-288 a non-member is
+      // refused at sign-in like a stranger (D-344), so `createStaff(null)`
+      // would test the wrong refusal.
+      orgMemberships: { create: { orgId: 'org_0' } },
     },
   })
   staffIds.push(staff.id)
