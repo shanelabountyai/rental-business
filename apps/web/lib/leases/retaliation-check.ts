@@ -1,6 +1,6 @@
 import 'server-only'
 
-import type { AuditInput } from '@rental/core/audit'
+import type { AuditEntry } from '@rental/core/audit'
 import {
   retaliationWarning,
   validateRetaliationAck,
@@ -189,7 +189,7 @@ export function retaliationAckAudit(args: {
   trigger: string
   /// Anything else that makes the act legible two years later.
   details?: Record<string, unknown>
-}): Omit<AuditInput, 'actor'> {
+}): AuditEntry {
   return {
     action: 'lease.retaliation_window_acknowledged',
     entityType: 'Lease',

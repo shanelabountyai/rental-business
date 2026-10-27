@@ -1664,6 +1664,7 @@ describe('an autopay ACH debit settles its own pending row (MONEY-08)', () => {
     await prisma.auditLog.create({
       data: {
         actorType: 'SYSTEM',
+        orgId: 'org_0',
         entityType: 'LeasePayer',
         entityId: payer.id,
         action: 'payment.intent_created',

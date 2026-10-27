@@ -91,6 +91,9 @@ describe('ORG-06: every org-owned model', () => {
     const missing = models
       .filter((m) => !(m.name in ORG_LESS))
       .filter((m) => !/^\s+orgId\s+String\s/m.test(m.body))
+      // The one nullable org (D-352): a CHECK allows null only on a PLATFORM
+      // act about the platform itself (packages/db/schema.test.ts proves it).
+      .filter((m) => !(m.name === 'AuditLog' && /^\s+orgId\s+String\?\s/m.test(m.body)))
       .map((m) => m.name)
     expect(missing).toEqual([])
   })

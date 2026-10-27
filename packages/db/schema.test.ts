@@ -112,6 +112,7 @@ describe('append-only tables', () => {
         const log = await tx.auditLog.create({
           data: {
             actorType: 'SYSTEM',
+            orgId: 'org_0',
             entityType: 'Lease',
             entityId: 'test',
             action: 'test.performed',
@@ -131,6 +132,7 @@ describe('append-only tables', () => {
         const log = await tx.auditLog.create({
           data: {
             actorType: 'SYSTEM',
+            orgId: 'org_0',
             entityType: 'Lease',
             entityId: 'test',
             action: 'test.performed',
@@ -139,6 +141,31 @@ describe('append-only tables', () => {
         await tx.auditLog.delete({ where: { id: log.id } })
       }),
     ).rejects.toThrow(/append-only/)
+  })
+
+  // D-352: an entry is in the org its writer names. Org-less is a platform
+  // act about the platform itself, and nothing else.
+  it('refuses an org-less AuditLog row from any actor but PLATFORM', async () => {
+    await expect(
+      prisma.auditLog.create({
+        data: { actorType: 'SYSTEM', entityType: 'Lease', entityId: 'test', action: 'test.performed' },
+      }),
+    ).rejects.toThrow(/AuditLog_org_named_check/)
+  })
+
+  it('accepts an org-less AuditLog row from PLATFORM', async () => {
+    // Rolled back: the table is append-only, so a committed probe row would
+    // sit in rental_test for ever.
+    const rolledBack = new Error('roll back')
+    await expect(
+      prisma.$transaction(async (tx) => {
+        const log = await tx.auditLog.create({
+          data: { actorType: 'PLATFORM', actorRef: 'test', entityType: 'PlatformAdmin', entityId: 'test', action: 'test.performed' },
+        })
+        expect(log.orgId).toBeNull()
+        throw rolledBack
+      }),
+    ).rejects.toBe(rolledBack)
   })
 
   it('rejects UPDATE on Message', async () => {
@@ -407,7 +434,10 @@ describe('orgId on every org-owned table (R-285a)', () => {
     const owned = [...schema.matchAll(/^model (\w+) \{\n([\s\S]*?)^\}/gm)]
       .filter(([, name]) => !ORGLESS.includes(name!))
     expect(owned.length).toBeGreaterThan(100)
-    expect(owned.filter(([, , body]) => !/^\s+orgId\s+String\s/m.test(body!)).map(([, n]) => n)).toEqual([])
+    // AuditLog's org is nullable by CHECK for PLATFORM only (D-352).
+    const orgRequired = (n: string, body: string) =>
+      /^\s+orgId\s+String\s/m.test(body) || (n === 'AuditLog' && /^\s+orgId\s+String\?\s/m.test(body))
+    expect(owned.filter(([, n, body]) => !orgRequired(n!, body!)).map(([, n]) => n)).toEqual([])
 
     const triggered = await prisma.$queryRaw<{ table: string }[]>`
       SELECT c.relname AS table FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid

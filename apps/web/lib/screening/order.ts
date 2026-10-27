@@ -25,6 +25,7 @@ import { screeningAdapter } from './provider.ts'
 export interface ApplicantToScreen {
   id: string
   applicationId: string
+  orgId: string
 }
 
 /**
@@ -102,6 +103,7 @@ export async function orderScreeningForApplicant(applicant: ApplicantToScreen): 
     action: 'screening.ordered',
     entityType: 'Applicant',
     entityId: applicant.id,
+    orgId: applicant.orgId,
     after: { providerId: result.providerId, status: result.status },
   })
 }
@@ -120,7 +122,7 @@ export async function orderScreeningForApplicant(applicant: ApplicantToScreen): 
 export async function orderScreeningForApplication(applicationId: string): Promise<void> {
   const application = await prisma.application.findUniqueOrThrow({
     where: { id: applicationId },
-    include: { applicants: { select: { id: true, applicationId: true } } },
+    include: { applicants: { select: { id: true, applicationId: true, orgId: true } } },
   })
 
   for (const applicant of application.applicants) {

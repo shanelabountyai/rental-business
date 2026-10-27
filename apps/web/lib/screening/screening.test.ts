@@ -124,7 +124,7 @@ describe('currentScreeningCriteria', () => {
 describe('orderScreeningForApplicant', () => {
   it('creates a report matching the simulated adapter, deterministic from the applicant id', async () => {
     const { lead } = await seedApplication()
-    await orderScreeningForApplicant({ id: lead.id, applicationId: lead.applicationId })
+    await orderScreeningForApplicant({ id: lead.id, applicationId: lead.applicationId, orgId: lead.orgId })
 
     const report = await prisma.screeningReport.findUniqueOrThrow({
       where: { applicantId: lead.id },
@@ -146,8 +146,8 @@ describe('orderScreeningForApplicant', () => {
 
   it('is idempotent - a second call for the same applicant creates nothing new', async () => {
     const { lead } = await seedApplication()
-    await orderScreeningForApplicant({ id: lead.id, applicationId: lead.applicationId })
-    await orderScreeningForApplicant({ id: lead.id, applicationId: lead.applicationId })
+    await orderScreeningForApplicant({ id: lead.id, applicationId: lead.applicationId, orgId: lead.orgId })
+    await orderScreeningForApplicant({ id: lead.id, applicationId: lead.applicationId, orgId: lead.orgId })
 
     const reports = await prisma.screeningReport.findMany({ where: { applicantId: lead.id } })
     expect(reports).toHaveLength(1)
@@ -155,7 +155,7 @@ describe('orderScreeningForApplicant', () => {
 
   it('logs screening.ordered attributed to SYSTEM', async () => {
     const { lead } = await seedApplication()
-    await orderScreeningForApplicant({ id: lead.id, applicationId: lead.applicationId })
+    await orderScreeningForApplicant({ id: lead.id, applicationId: lead.applicationId, orgId: lead.orgId })
 
     const audited = await prisma.auditLog.findFirst({
       where: { action: 'screening.ordered', entityId: lead.id },
@@ -216,7 +216,7 @@ describe('outOfOrderApplicationIds', () => {
 describe('screeningForApplication', () => {
   it('scopes to the property and evaluates criteria alongside the report', async () => {
     const { application, lead } = await seedApplication()
-    await orderScreeningForApplicant({ id: lead.id, applicationId: application.id })
+    await orderScreeningForApplicant({ id: lead.id, applicationId: application.id, orgId: lead.orgId })
 
     const result = await screeningForApplication(application.id, scopeOf([propertyId]))
     expect(result).not.toBeNull()

@@ -165,6 +165,9 @@ async function main() {
       action: 'staff.assignment_granted',
       entityType: 'StaffUser',
       entityId: created.id,
+      // In the org the owner was made for. Until R-294a a `--org` owner's
+      // bootstrap grant was audited in org #0's trail by the column default.
+      orgId: org.id,
       after: {
         roleKey: args.roleKey,
         orgId: org.id,

@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { type AuditInput, type AuditDb } from '@rental/core/audit'
+import { type AuditEntry, type AuditDb } from '@rental/core/audit'
 import { validateVerification } from '@rental/core/workorders'
 import { prisma } from '@rental/db'
 import { isUniqueViolation } from '@/lib/db/unique-violation.ts'
@@ -14,7 +14,7 @@ import { readyToCloseTask, reopenWorkOrder } from '@/lib/workorders/verify.ts'
 /// which cannot load outside a request context — so a module importing it is
 /// untestable under Vitest, which is precisely how the missing attribution
 /// below went unnoticed until a test tried to load this file.
-export type AuditWriter = (input: Omit<AuditInput, 'actor'>, db: AuditDb) => Promise<void>
+export type AuditWriter = (input: AuditEntry, db: AuditDb) => Promise<void>
 
 // Recording the tenant's answer (MAINT-07, R-030), independent of how they
 // were identified.

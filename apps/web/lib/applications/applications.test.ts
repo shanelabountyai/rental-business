@@ -337,7 +337,7 @@ describe('projectApplicationFeeEvent (the webhook half)', () => {
     })
 
     const detail = await projectApplicationFeeEvent(
-      { id: lead.id, applicationId: application.id, firstName: lead.firstName },
+      { id: lead.id, applicationId: application.id, firstName: lead.firstName, orgId: lead.orgId },
       {
         kind: 'payment_succeeded',
         stripeObjectId: 'pi_test',
@@ -391,7 +391,7 @@ describe('projectApplicationFeeEvent (the webhook half)', () => {
       occurredAt: new Date(),
       description: 'Application fee',
     }
-    const applicantRef = { id: lead.id, applicationId: application.id, firstName: lead.firstName }
+    const applicantRef = { id: lead.id, applicationId: application.id, firstName: lead.firstName, orgId: lead.orgId }
 
     const first = await projectApplicationFeeEvent(applicantRef, intent)
     expect(first).toContain('fee paid')

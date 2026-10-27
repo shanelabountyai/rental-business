@@ -31,7 +31,9 @@ import { type Snapshot, changedFields } from './redact.ts'
 export type AuditDb = PrismaClient | Prisma.TransactionClient
 
 export interface AuditActor {
-  type: 'STAFF' | 'TENANT' | 'GUARANTOR' | 'VENDOR' | 'SYSTEM'
+  /// PLATFORM is a platform admin (PRD 11, D-352): the only actor whose row
+  /// may name no org, for an act about the platform itself.
+  type: 'STAFF' | 'TENANT' | 'GUARANTOR' | 'VENDOR' | 'SYSTEM' | 'PLATFORM'
   /// Set only for STAFF; the foreign key that ties the entry to a person.
   staffUserId?: string | null
   /// Non-staff identity: a tenant id, a guarantor id, a vendor id, or a job
@@ -42,22 +44,43 @@ export interface AuditActor {
   userAgent?: string | null
 }
 
-export interface AuditInput {
-  actor: AuditActor
+interface AuditFields {
   action: AuditAction
   entityType: string
   entityId: string
-  /// Scopes the entry for R-004's property filtering, so a property-scoped
-  /// manager reading the audit trail sees their properties and no others.
-  propertyId?: string | null
-  /// For an entry with no property (R-290): a per-org sweep's own finding.
-  /// With a property, the org_scope trigger derives it and refuses a mismatch.
-  orgId?: string
   before?: Snapshot
   after?: Snapshot
   reasonCode?: ReasonCode | null
   reason?: string | null
 }
+
+/**
+ * WHICH ORG THE ENTRY IS IN, named by the caller and never defaulted (D-352).
+ *
+ * A property names it: the org_scope trigger derives `orgId` from it. With no
+ * property the caller passes `orgId`. Until R-294a a missing one silently
+ * filed the entry under org #0 (D-348's ceiling); now the type refuses it at
+ * compile time and a CHECK refuses it at the database. `propertyId` also
+ * scopes the entry for R-004's property filtering.
+ */
+export type AuditWhere =
+  | { propertyId: string; orgId?: string }
+  | { propertyId?: null; orgId: string }
+
+/// An entry without its actor: what the request- and job-aware wrappers take.
+export type AuditEntry = AuditFields & AuditWhere
+
+/**
+ * `orgId: null` is a platform act about the platform itself (an admin
+ * invited, a lockout) - the only org-less row there is. It has to be written
+ * out, so it cannot happen by forgetting, and the database's CHECK refuses
+ * it from any actor but PLATFORM. A platform act about an org names that org,
+ * so the org reads it.
+ */
+export type AuditInput = AuditFields & { actor: AuditActor } & (
+  | AuditWhere
+  | { propertyId?: null; orgId: null }
+)
 
 export class MissingAuditReasonError extends Error {
   // Not a constructor parameter property: Node's strip-only TypeScript support
@@ -104,7 +127,7 @@ export async function recordAudit(
       entityType: input.entityType,
       entityId: input.entityId,
       propertyId: input.propertyId ?? null,
-      ...(input.orgId ? { orgId: input.orgId } : {}),
+      orgId: input.orgId ?? null,
       before: (change.before ?? undefined) as Prisma.InputJsonValue | undefined,
       after: (change.after ?? undefined) as Prisma.InputJsonValue | undefined,
       reasonCode: input.reasonCode ?? null,

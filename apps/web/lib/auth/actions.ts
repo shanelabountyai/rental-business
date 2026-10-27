@@ -154,6 +154,7 @@ export async function startStaffSignIn(
         action: 'auth.locked_out',
         entityType: 'StaffUser',
         entityId: staffUser.id,
+        orgId,
         after: { failedLoginCount, lockedUntil },
       })
     }
@@ -233,12 +234,13 @@ export async function signOutEverywhere(): Promise<void> {
   const session = await auth()
   if (session?.principal) {
     const actor = await currentAuditActor()
-    const { id, kind } = session.principal
+    const { id, kind, orgId } = session.principal
     await recordAudit(prisma, {
       actor,
       action: 'auth.sessions_revoked',
       entityType: kind === 'staff' ? 'StaffUser' : kind === 'guarantor' ? 'Guarantor' : 'Tenant',
       entityId: id,
+      orgId,
       after: { allDevices: true },
     })
     // Bumping the watermark kills every other device too, which is the point:
@@ -311,6 +313,7 @@ export async function confirmMfaEnrolment(
       action: 'auth.mfa_enrolled',
       entityType: 'StaffUser',
       entityId: session.principal.id,
+      orgId: session.principal.orgId,
       after: { mfaEnrolled: true, recoveryCodesIssued: recovery.codes.length },
     })
   })
@@ -383,6 +386,10 @@ export async function completePasswordReset(
   const password = String(formData.get('password') ?? '')
   const confirmation = String(formData.get('confirmPassword') ?? '')
   const ip = await clientIp()
+  // The link was built on the org's host (`authUrl`), so the reset is audited
+  // in that org. The password itself is global to the identity.
+  const orgId = await hostOrgId()
+  if (!orgId) return { error: 'That reset link is no longer valid. Request a new one.' }
 
   if (password !== confirmation) {
     return { error: 'Those two passwords do not match.' }
@@ -432,6 +439,7 @@ export async function completePasswordReset(
       action: 'auth.password_reset',
       entityType: 'StaffUser',
       entityId: redeemed.subjectId,
+      orgId,
       after: { passwordChangedAt: now, sessionsRevoked: true },
     })
   })

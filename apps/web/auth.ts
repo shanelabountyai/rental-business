@@ -166,6 +166,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           action: 'auth.signed_in',
           entityType: 'StaffUser',
           entityId: staffUser.id,
+          orgId,
           after: { mfaVerified, method: enrolled ? 'password+totp' : 'password' },
         })
 
@@ -214,6 +215,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           action: 'auth.signed_in',
           entityType: 'Tenant',
           entityId: tenant.id,
+          orgId: tenant.orgId,
           after: { method: 'magic_link' },
         })
 
@@ -261,6 +263,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           action: 'auth.signed_in',
           entityType: 'Guarantor',
           entityId: guarantor.id,
+          orgId: guarantor.orgId,
           after: { method: 'magic_link' },
         })
 

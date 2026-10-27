@@ -79,7 +79,7 @@ export async function recordOptOut(args: {
     return { recorded: false, phone }
   }
 
-  await prisma.smsOptOut.upsert({
+  const row = await prisma.smsOptOut.upsert({
     where: { phone },
     create: { phone, source: args.source, reason: args.reason },
     // A number that opted out, back in, and out again: same row, new dates,
@@ -99,6 +99,7 @@ export async function recordOptOut(args: {
     action: 'notification.opted_out',
     entityType: 'SmsOptOut',
     entityId: phone,
+    orgId: row.orgId,
     after: { phone, source: args.source, reason: args.reason },
   }).catch((error) => {
     // The opt-out is already recorded and is the part that must not be lost.
@@ -116,16 +117,18 @@ export async function recordOptIn(args: {
   const phone = normalizePhone(args.phone)
   if (!phone) return { recorded: false, phone: null }
 
-  const updated = await prisma.smsOptOut.updateMany({
+  const updated = await prisma.smsOptOut.updateManyAndReturn({
     where: { phone, revokedAt: null },
     data: { revokedAt: new Date(), reason: args.reason },
+    select: { orgId: true },
   })
-  if (updated.count === 0) return { recorded: false, phone }
+  if (updated.length === 0) return { recorded: false, phone }
 
   await auditAsSystem('sms-opt-out', {
     action: 'notification.opted_in',
     entityType: 'SmsOptOut',
     entityId: phone,
+    orgId: updated[0].orgId,
     after: { phone, reason: args.reason },
   }).catch((error) => {
     console.error('[sms] failed to audit an opt-in', error)

@@ -3,12 +3,14 @@ import 'server-only'
 import {
   type AuditActor,
   type AuditDb,
-  type AuditInput,
+  type AuditEntry,
   recordAudit,
 } from '@rental/core/audit'
 import { prisma } from '@rental/db'
+import type { Session } from 'next-auth'
 import { headers } from 'next/headers'
 import { auth } from '@/auth.ts'
+import { hostOrgId } from '@/lib/auth/org.ts'
 
 // Request-aware wrapper around the shared audit service.
 //
@@ -20,8 +22,18 @@ import { auth } from '@/auth.ts'
 /// Resolves the current principal into an audit actor, including the request
 /// metadata that makes an entry useful in a dispute.
 export async function currentAuditActor(): Promise<AuditActor> {
-  const [session, headerList] = await Promise.all([auth(), headers()])
+  return (await requestAuditContext()).actor
+}
 
+/// The actor and the session's org from ONE `auth()`, which re-reads the
+/// principal from the database every time it is called.
+async function requestAuditContext(): Promise<{ actor: AuditActor; orgId?: string }> {
+  const [session, headerList] = await Promise.all([auth(), headers()])
+  const orgId = session?.principal?.orgId || undefined
+  return { actor: actorFor(session, headerList), orgId }
+}
+
+function actorFor(session: Session | null, headerList: Pick<Headers, 'get'>): AuditActor {
   const ipAddress =
     headerList.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null
   const userAgent = headerList.get('user-agent')
@@ -39,12 +51,21 @@ export async function currentAuditActor(): Promise<AuditActor> {
     }
   }
 
+  // A guarantor was recorded as TENANT until R-294a, which said "the renter
+  // did this" about someone who was never a party to the tenancy.
   return {
-    type: 'TENANT',
+    type: session.principal.kind === 'guarantor' ? 'GUARANTOR' : 'TENANT',
     ref: session.principal.id,
     ipAddress,
     userAgent,
   }
+}
+
+/// An entry as `audit()` takes it: the org may be left out, because the
+/// request knows it.
+export type RequestAuditEntry = Omit<AuditEntry, 'propertyId' | 'orgId'> & {
+  propertyId?: string | null
+  orgId?: string
 }
 
 /**
@@ -55,10 +76,18 @@ export async function currentAuditActor(): Promise<AuditActor> {
  * matters more than it looks.
  */
 export async function audit(
-  input: Omit<AuditInput, 'actor'>,
+  input: RequestAuditEntry,
   db: AuditDb = prisma,
 ): Promise<void> {
-  await recordAudit(db, { ...input, actor: await currentAuditActor() })
+  const context = await requestAuditContext()
+  // With no property and no org named, the entry is in the org this request
+  // acts in: the session's, which R-288 holds equal to the host's, or the
+  // host's for an anonymous caller (a public form). Null only on a host that
+  // names no org, where the CHECK refuses the row - loud, not misfiled.
+  const orgId = input.propertyId
+    ? input.orgId
+    : (input.orgId ?? context.orgId ?? (await hostOrgId()) ?? undefined)
+  await recordAudit(db, { ...input, orgId, actor: context.actor } as Parameters<typeof recordAudit>[1])
 }
 
 /// Re-exported for the callers that already had it from here. New callers

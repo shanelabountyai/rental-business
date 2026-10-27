@@ -448,6 +448,8 @@ enum ActorType {
   GUARANTOR
   VENDOR
   SYSTEM
+  /// R-294a (D-352): a platform admin. Its audit rows may name no org.
+  PLATFORM
 }
 
 // ---------------------------------------------------------------------------
@@ -7308,9 +7310,11 @@ model JurisdictionRule {
 /// authors of an audit row and none of them is a StaffUser.
 model AuditLog {
   id           String       @id @default(cuid())
-  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
-  orgId        String       @default("org_0")
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  /// Derived from the property by trigger and immutable (D-339); with no
+  /// property the writer names it. No default (D-352): null only for a
+  /// PLATFORM act about the platform itself, by CHECK.
+  orgId        String?
+  organization Organization? @relation(fields: [orgId], references: [id], onDelete: Restrict)
   propertyId   String?
   actorType    ActorType
   actorStaffId String?

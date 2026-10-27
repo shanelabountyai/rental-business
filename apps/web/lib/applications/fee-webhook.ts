@@ -23,6 +23,7 @@ export interface ApplicantForFeeEvent {
   id: string
   applicationId: string
   firstName: string
+  orgId: string
 }
 
 export async function findApplicantByStripeCustomer(
@@ -31,7 +32,7 @@ export async function findApplicantByStripeCustomer(
   if (!stripeCustomerId) return null
   return prisma.applicant.findFirst({
     where: { stripeCustomerId },
-    select: { id: true, applicationId: true, firstName: true },
+    select: { id: true, applicationId: true, firstName: true, orgId: true },
   })
 }
 
@@ -65,6 +66,7 @@ export async function projectApplicationFeeEvent(
     action: 'application.fee_paid',
     entityType: 'Applicant',
     entityId: applicant.id,
+    orgId: applicant.orgId,
     after: { feeCents: intent.amountCents },
   })
 

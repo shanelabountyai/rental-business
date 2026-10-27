@@ -66,6 +66,7 @@ export async function grantAssignment(
       entityType: 'StaffUser',
       entityId: staffUserId,
       propertyId: scope.propertyId ?? null,
+      orgId: grantor.orgId,
       after: {
         roleKey,
         propertyId: assignment.propertyId,
@@ -110,6 +111,7 @@ export async function revokeAssignment(assignmentId: string, reason?: string) {
       entityType: 'StaffUser',
       entityId: existing.staffUserId,
       propertyId: existing.propertyId,
+      orgId: existing.orgId,
       before: { roleKey: existing.role.key, revokedAt: null },
       after: { roleKey: existing.role.key, revokedAt: revoked.revokedAt },
       reason,

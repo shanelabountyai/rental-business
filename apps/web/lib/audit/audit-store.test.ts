@@ -53,6 +53,7 @@ describe('recording an entry', () => {
         action: 'workorder.approved',
         entityType: 'WorkOrder',
         entityId: 'wo_1',
+        orgId: 'org_0',
         before: { status: 'PENDING_APPROVAL' },
         after: { status: 'APPROVED' },
       })
@@ -77,6 +78,7 @@ describe('recording an entry', () => {
         action: 'auth.password_reset',
         entityType: 'StaffUser',
         entityId: 'staff_1',
+        orgId: 'org_0',
         before: { passwordHash: 'scrypt$OLD-SECRET', email: 'a@b.test' },
         after: { passwordHash: 'scrypt$NEW-SECRET', email: 'a@b.test' },
       })
@@ -98,6 +100,7 @@ describe('recording an entry', () => {
         action: 'ledger.adjusted',
         entityType: 'Lease',
         entityId: 'lease_1',
+        orgId: 'org_0',
         before: { rentCents: 185_000, status: 'ACTIVE', unitId: 'unit_1' },
         after: { rentCents: 195_000, status: 'ACTIVE', unitId: 'unit_1' },
         reasonCode: 'correction',
@@ -120,6 +123,7 @@ describe('recording an entry', () => {
         action: 'fee.waived',
         entityType: 'Charge',
         entityId: 'charge_1',
+        orgId: 'org_0',
       }),
     ).rejects.toThrow(MissingAuditReasonError)
 
@@ -137,6 +141,7 @@ describe('recording an entry', () => {
         action: 'fee.waived',
         entityType: 'Charge',
         entityId: 'charge_2',
+        orgId: 'org_0',
         reasonCode: 'first_occurrence',
       })
       expect(await tx.auditLog.count({ where: { entityId: 'charge_2' } })).toBe(1)
@@ -162,6 +167,7 @@ describe('atomicity', () => {
           action: 'staff.assignment_granted',
           entityType: 'LegalEntity',
           entityId: entity.id,
+          orgId: 'org_0',
           after: { name: marker },
         })
         throw new Rollback()
@@ -192,6 +198,7 @@ describe('immutability (ROLE-03)', () => {
           action: 'accesscode.revealed',
           entityType: 'WorkOrder',
           entityId: 'wo_immutable',
+          orgId: 'org_0',
         })
         const entry = await tx.auditLog.findFirstOrThrow({
           where: { entityId: 'wo_immutable' },
@@ -212,6 +219,7 @@ describe('immutability (ROLE-03)', () => {
           action: 'accesscode.revealed',
           entityType: 'WorkOrder',
           entityId: 'wo_undeletable',
+          orgId: 'org_0',
         })
         const entry = await tx.auditLog.findFirstOrThrow({
           where: { entityId: 'wo_undeletable' },
@@ -235,6 +243,7 @@ describe('reading the trail', () => {
           action,
           entityType: 'WorkOrder',
           entityId: 'wo_trail',
+          orgId: 'org_0',
           // `workorder.chargeback_posted` joined REASON_REQUIRED in R-031 -
           // billing a tenant for damage with no stated reason is
           // indistinguishable from retaliation. This test is about ordering,
@@ -262,12 +271,14 @@ describe('reading the trail', () => {
         action: 'workorder.approved',
         entityType: 'WorkOrder',
         entityId: 'wo_mine',
+        orgId: 'org_0',
       })
       await recordAudit(tx, {
         actor: SYSTEM,
         action: 'workorder.approved',
         entityType: 'WorkOrder',
         entityId: 'wo_theirs',
+        orgId: 'org_0',
       })
       expect(await auditTrailFor(tx, 'WorkOrder', 'wo_mine')).toHaveLength(1)
     })

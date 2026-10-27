@@ -135,6 +135,7 @@ async function upsertStaff(persona: Persona, passwordHash: string) {
       action: 'staff.assignment_granted',
       entityType: 'StaffUser',
       entityId: user.id,
+      orgId: 'org_0',
       after: {
         roleKey: persona.roleKey,
         scope: persona.scopeToPropertyNamed ?? 'all properties',

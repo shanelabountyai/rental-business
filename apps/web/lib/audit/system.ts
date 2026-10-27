@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { type AuditDb, type AuditInput, recordAudit } from '@rental/core/audit'
+import { type AuditDb, type AuditEntry, recordAudit } from '@rental/core/audit'
 import { prisma } from '@rental/db'
 
 // The request-less half of the audit wrapper.
@@ -24,7 +24,7 @@ import { prisma } from '@rental/db'
 /// the job or endpoint so an entry can be traced back to what produced it.
 export async function auditAsSystem(
   ref: string,
-  input: Omit<AuditInput, 'actor'>,
+  input: AuditEntry,
   db: AuditDb = prisma,
 ): Promise<void> {
   await recordAudit(db, { ...input, actor: { type: 'SYSTEM', ref } })
@@ -46,7 +46,7 @@ export async function auditAsSystem(
  */
 export async function auditAsTenant(
   tenantId: string,
-  input: Omit<AuditInput, 'actor'>,
+  input: AuditEntry,
   db: AuditDb = prisma,
 ): Promise<void> {
   await recordAudit(db, { ...input, actor: { type: 'TENANT', ref: tenantId } })
@@ -65,7 +65,7 @@ export async function auditAsTenant(
  */
 export async function auditAsVendor(
   vendorId: string,
-  input: Omit<AuditInput, 'actor'>,
+  input: AuditEntry,
   db: AuditDb = prisma,
 ): Promise<void> {
   await recordAudit(db, { ...input, actor: { type: 'VENDOR', ref: vendorId } })

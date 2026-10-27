@@ -2,7 +2,7 @@ import 'server-only'
 
 import { holdIsActive } from '@rental/core/payments'
 import type { PaymentHold } from '@rental/core/payments'
-import type { AuditDb, AuditInput } from '@rental/core/audit'
+import type { AuditDb, AuditEntry } from '@rental/core/audit'
 import { prisma } from '@rental/db'
 import { syncLeasePayer } from '@/lib/billing/lifecycle.ts'
 import { revokePayLinks } from '@/lib/portal/pay-link.ts'
@@ -14,7 +14,7 @@ import { revokePayLinks } from '@/lib/portal/pay-link.ts'
 /// this module untestable under Vitest, and the one test the backlog demands
 /// by name is a test OF this module. Same injection R-032c's
 /// `recordVerification` uses, for the same reason.
-export type AuditWriter = (input: Omit<AuditInput, 'actor'>, db?: AuditDb) => Promise<void>
+export type AuditWriter = (input: AuditEntry, db?: AuditDb) => Promise<void>
 
 // Placing and lifting a legal-action payment hold (PAY-12, R-047).
 //
