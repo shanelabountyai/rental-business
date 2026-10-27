@@ -37,7 +37,7 @@ const UNKNOWN_PHONE = `+1512557${RUN}`
 beforeAll(async () => {
   const stamp = `sms-${Date.now()}`
   const entity = await prisma.legalEntity.create({
-    data: { name: stamp, type: 'LLC' },
+    data: { orgId: 'org_0', name: stamp, type: 'LLC' },
   })
   entityId = entity.id
   const property = await prisma.property.create({
@@ -61,7 +61,7 @@ beforeAll(async () => {
   unitId = unit.id
 
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Sam', lastName: `Sms-${randomUUID().slice(0, 6)}`, phone: TENANT_PHONE },
+    data: { orgId: 'org_0', firstName: 'Sam', lastName: `Sms-${randomUUID().slice(0, 6)}`, phone: TENANT_PHONE },
   })
   tenantId = tenant.id
   tenantIds.push(tenant.id)
@@ -80,7 +80,7 @@ beforeAll(async () => {
   // A vendor with a work order at this property, so their texts route
   // (R-017's candidatesForPhone requires one).
   const vendor = await prisma.vendor.create({
-    data: { name: `Vendor-${randomUUID().slice(0, 6)}`, phone: VENDOR_PHONE, trades: ['plumbing'] },
+    data: { orgId: 'org_0', name: `Vendor-${randomUUID().slice(0, 6)}`, phone: VENDOR_PHONE, trades: ['plumbing'] },
   })
   vendorId = vendor.id
   await prisma.workOrder.create({
@@ -92,7 +92,7 @@ beforeAll(async () => {
   // grant in the shared database (191 of them when this was written) on
   // every text in this file that says "leak".
   const onCall = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email: `sms-oncall-${randomUUID()}@example.test`,
       name: 'SMS On Call',
       phone: `+1512558${RUN}`,

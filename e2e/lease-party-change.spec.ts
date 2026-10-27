@@ -30,7 +30,7 @@ async function createStaff() {
   const email = `swap-${unique}@example.test`
   const enrolment = createTotpEnrolment(email)
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: `Swap Manager ${unique}`,
       credential: {
@@ -50,7 +50,7 @@ async function createStaff() {
 
 async function makeTenant(first: string, unique: string) {
   const tenant = await prisma.tenant.create({
-    data: {
+    data: { orgId: 'org_0',
       firstName: first,
       lastName: `Swap-${unique}`,
       email: `${first.toLowerCase()}-${unique}@example.test`,
@@ -67,7 +67,7 @@ async function makeTenant(first: string, unique: string) {
 async function seedLiveLease() {
   const unique = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `Swap LLC-${unique}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Swap LLC-${unique}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({

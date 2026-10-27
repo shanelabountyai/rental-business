@@ -75,7 +75,7 @@ const leaseIds: string[] = []
 async function seed(options: { collectionPaused?: boolean } = {}) {
   const stamp = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `PayLink LLC-${stamp}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `PayLink LLC-${stamp}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -97,7 +97,7 @@ async function seed(options: { collectionPaused?: boolean } = {}) {
   const tenant = await prisma.tenant.create({
     // NO EMAIL — the persona this item exists for. An email-only portal login
     // is a wall this tenant cannot get over at all.
-    data: {
+    data: { orgId: 'org_0',
       firstName: `Robin${stamp}`,
       lastName: `PayLink-${stamp}`,
       email: null,

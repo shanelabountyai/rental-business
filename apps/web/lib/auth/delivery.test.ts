@@ -19,7 +19,7 @@ const staffIds: string[] = []
 
 async function staffUser() {
   const user = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email: `delivery-${randomUUID()}@example.test`,
       name: 'Dana Reyes',
       credential: { create: { passwordHash: await hashPassword('correct-horse-battery-staple') } },
@@ -114,7 +114,7 @@ describe('deliverAuthLink', () => {
   it('ignores a preference row switching it off', async () => {
     const user = await staffUser()
     await prisma.notificationPreference.create({
-      data: {
+      data: { orgId: 'org_0',
         recipientType: 'STAFF',
         recipientId: user.id,
         category: 'account_access',
@@ -148,7 +148,7 @@ describe('canReceiveAuthLink', () => {
   })
 
   async function tenant(data: { email?: string; phone?: string }) {
-    const row = await prisma.tenant.create({ data: { firstName: 'Dana', lastName: 'Reyes', ...data } })
+    const row = await prisma.tenant.create({ data: { orgId: 'org_0', firstName: 'Dana', lastName: 'Reyes', ...data } })
     tenantIds.push(row.id)
     return row
   }

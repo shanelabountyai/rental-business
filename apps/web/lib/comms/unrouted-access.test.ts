@@ -29,7 +29,7 @@ const staffIds: string[] = []
 const unroutedIds: string[] = []
 
 async function house(label: string) {
-  const entity = await prisma.legalEntity.create({ data: { name: `unrouted-${label}-${unique}`, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: `unrouted-${label}-${unique}`, type: 'LLC' } })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
     data: {
@@ -47,7 +47,7 @@ async function house(label: string) {
   const unit = await prisma.unit.create({
     data: { propertyId: property.id, name: `U-${unique}`, status: 'OCCUPIED' },
   })
-  const tenant = await prisma.tenant.create({ data: { firstName: 'Casey', lastName: `${label}-${unique}` } })
+  const tenant = await prisma.tenant.create({ data: { orgId: 'org_0', firstName: 'Casey', lastName: `${label}-${unique}` } })
   const lease = await prisma.lease.create({
     data: { propertyId: property.id, unitId: unit.id, status: 'ACTIVE', startsOn: new Date('2026-01-01'), rentCents: 150_000 },
   })
@@ -57,7 +57,7 @@ async function house(label: string) {
 
 async function staff(grants: Array<{ role: string; propertyId?: string }>) {
   const user = await prisma.staffUser.create({
-    data: { email: `unrouted-${randomUUID()}@example.test`, name: 'Unrouted Test' },
+    data: { orgMemberships: { create: { orgId: 'org_0' } }, email: `unrouted-${randomUUID()}@example.test`, name: 'Unrouted Test' },
   })
   staffIds.push(user.id)
   for (const grant of grants) {

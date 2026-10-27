@@ -24,7 +24,7 @@ const inspectionIds: string[] = []
 
 beforeAll(async () => {
   const entity = await prisma.legalEntity.create({
-    data: { name: `PreMoveOut LLC-${Date.now()}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `PreMoveOut LLC-${Date.now()}`, type: 'LLC' },
   })
   entityId = entity.id
 })
@@ -115,7 +115,7 @@ async function seedLeaseUnderNotice(propertyId: string, noticeEffectiveOn: strin
   const unit = await prisma.unit.create({ data: { propertyId, name: `U-${unique}`, status: 'OCCUPIED' } })
   unitIds.push(unit.id)
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Pat', lastName: 'Leaver', email: `pat-${unique}@example.test` },
+    data: { orgId: 'org_0', firstName: 'Pat', lastName: 'Leaver', email: `pat-${unique}@example.test` },
   })
   tenantIds.push(tenant.id)
   const lease = await prisma.lease.create({

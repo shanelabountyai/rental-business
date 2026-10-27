@@ -28,7 +28,7 @@ const propertyIds: string[] = []
 async function createStaff(roleKey: string | null, scope?: { propertyId?: string; legalEntityId?: string }) {
   const email = `props-${randomUUID()}@example.test`
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Properties Test',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -52,7 +52,7 @@ async function createStaff(roleKey: string | null, scope?: { propertyId?: string
 
 async function seedEntity(name = 'Seed LLC') {
   const entity = await prisma.legalEntity.create({
-    data: { name: `${name}-${randomUUID().slice(0, 8)}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `${name}-${randomUUID().slice(0, 8)}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   return entity

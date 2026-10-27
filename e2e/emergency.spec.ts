@@ -20,7 +20,7 @@ const documentIds: string[] = []
 
 async function seedEmergencyTenancy() {
   const entity = await prisma.legalEntity.create({
-    data: { name: `Emg LLC-${randomUUID().slice(0, 8)}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Emg LLC-${randomUUID().slice(0, 8)}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -38,7 +38,7 @@ async function seedEmergencyTenancy() {
   propertyIds.push(property.id)
 
   const tenant = await prisma.tenant.create({
-    data: {
+    data: { orgId: 'org_0',
       firstName: 'Rae',
       lastName: `Emergency-${randomUUID().slice(0, 6)}`,
       phone: uniquePhone(),
@@ -80,7 +80,7 @@ async function seedEmergencyTenancy() {
 
   // An on-call recipient - anyone holding ticket.write on the property.
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email: `emg-oncall-${randomUUID()}@example.test`,
       name: 'On Call',
       phone: uniquePhone(),

@@ -52,7 +52,7 @@ async function makeTenant(args: {
   startsOn?: Date
 }) {
   const tenant = await prisma.tenant.create({
-    data: {
+    data: { orgId: 'org_0',
       firstName: 'Test',
       lastName: randomUUID().slice(0, 8),
       phone: args.phone ?? null,
@@ -86,7 +86,7 @@ async function makeTenant(args: {
 beforeAll(async () => {
   const stamp = `comms-${Date.now()}`
   const entity = await prisma.legalEntity.create({
-    data: { name: stamp, type: 'LLC' },
+    data: { orgId: 'org_0', name: stamp, type: 'LLC' },
   })
   entityId = entity.id
 
@@ -107,7 +107,7 @@ beforeAll(async () => {
   propertyB = (await make('b')).id
 
   const staff = await prisma.staffUser.create({
-    data: { email: `${stamp}@example.test`, name: 'Comms Test' },
+    data: { orgMemberships: { create: { orgId: 'org_0' } }, email: `${stamp}@example.test`, name: 'Comms Test' },
   })
   staffId = staff.id
 })

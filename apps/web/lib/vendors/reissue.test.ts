@@ -20,7 +20,7 @@ let otherVendorId: string
 
 beforeAll(async () => {
   const stamp = `reissue-${randomUUID().slice(0, 8)}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   const property = await prisma.property.create({
     data: {
@@ -40,11 +40,11 @@ beforeAll(async () => {
   })
   unitId = unit.id
   const vendor = await prisma.vendor.create({
-    data: { name: `Slow-${randomUUID().slice(0, 6)}`, trades: ['PLUMBING'], phone: '+15125550111' },
+    data: { orgId: 'org_0', name: `Slow-${randomUUID().slice(0, 6)}`, trades: ['PLUMBING'], phone: '+15125550111' },
   })
   vendorId = vendor.id
   const other = await prisma.vendor.create({
-    data: { name: `Other-${randomUUID().slice(0, 6)}`, trades: ['PLUMBING'] },
+    data: { orgId: 'org_0', name: `Other-${randomUUID().slice(0, 6)}`, trades: ['PLUMBING'] },
   })
   otherVendorId = other.id
 })

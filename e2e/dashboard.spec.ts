@@ -66,7 +66,7 @@ function daysAgoAtNoonUtc(n: number): Date {
 
 async function seedProperty() {
   const stamp = randomUUID().slice(0, 8)
-  const entity = await prisma.legalEntity.create({ data: { name: `Dash LLC-${stamp}`, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: `Dash LLC-${stamp}`, type: 'LLC' } })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
     data: {
@@ -112,7 +112,7 @@ async function seedProperty() {
   })
   leaseIds.push(lease.id)
   const tenant = await prisma.tenant.create({
-    data: { firstName: `Dash${stamp}`, lastName: 'Tenant', phone: uniquePhone() },
+    data: { orgId: 'org_0', firstName: `Dash${stamp}`, lastName: 'Tenant', phone: uniquePhone() },
   })
   await prisma.leaseTenant.create({ data: { leaseId: lease.id, tenantId: tenant.id } })
 
@@ -162,7 +162,7 @@ async function seedProperty() {
 async function seedManager(propertyId: string) {
   const email = `dash-${randomUUID()}@example.test`
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Dashboard Manager',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },

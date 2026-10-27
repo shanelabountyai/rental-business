@@ -24,7 +24,7 @@ const leaseIds: string[] = []
 
 beforeAll(async () => {
   const stamp = `billing-${Date.now()}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   const property = await prisma.property.create({
     data: {
@@ -44,7 +44,7 @@ beforeAll(async () => {
   })
   unitId = unit.id
   const tenant = await prisma.tenant.create({
-    data: {
+    data: { orgId: 'org_0',
       firstName: 'Pat',
       lastName: `Payer-${randomUUID().slice(0, 6)}`,
       email: `pat-${randomUUID().slice(0, 8)}@example.test`,
@@ -1133,7 +1133,7 @@ describe('out-of-band money already recorded at the counter (D-177)', () => {
     const { stripeCustomerId } = await provisionLeaseBilling(lease.id)
     const payer = await prisma.leasePayer.findFirstOrThrow({ where: { leaseId: lease.id } })
     const staff = await prisma.staffUser.create({
-      data: { email: `counter-${randomUUID()}@example.test`, name: 'Counter staff' },
+      data: { orgMemberships: { create: { orgId: 'org_0' } }, email: `counter-${randomUUID()}@example.test`, name: 'Counter staff' },
     })
     const stripeInvoiceId = `in_sim${payer.id.slice(0, 16)}`
     const payment = await prisma.payment.create({

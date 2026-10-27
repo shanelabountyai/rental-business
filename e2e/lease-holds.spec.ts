@@ -35,7 +35,7 @@ const roleIds: string[] = []
 async function seedTenancy() {
   const stamp = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `Hold LLC-${stamp}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Hold LLC-${stamp}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -55,7 +55,7 @@ async function seedTenancy() {
     data: { propertyId: property.id, name: `U-${stamp}`, status: 'OCCUPIED' },
   })
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Hold', lastName: `Tenant-${stamp}` },
+    data: { orgId: 'org_0', firstName: 'Hold', lastName: `Tenant-${stamp}` },
   })
   tenantIds.push(tenant.id)
   const lease = await prisma.lease.create({
@@ -87,7 +87,7 @@ async function seedStaff(options: {
   const email = `hold-${randomUUID()}@example.test`
   const { secret } = createTotpEnrolment(email)
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Hold Manager',
       credential: {
@@ -132,7 +132,7 @@ async function seedUnprivilegedManager(propertyId: string) {
   })
   roleIds.push(role.id)
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Junior Manager',
       credential: {

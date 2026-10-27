@@ -28,7 +28,7 @@ type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 /** Minimum viable entity chain: entity -> property -> unit -> lease. */
 async function seedLease(tx: Tx) {
   const legalEntity = await tx.legalEntity.create({
-    data: { name: 'Test Holdings LLC', type: 'LLC' },
+    data: { orgId: 'org_0', name: 'Test Holdings LLC', type: 'LLC' },
   })
   const property = await tx.property.create({
     data: {
@@ -219,7 +219,7 @@ describe('two-payer ledger shape', () => {
         async (tx) => {
           const { property, lease } = await seedLease(tx)
           const tenant = await tx.tenant.create({
-            data: { firstName: 'Dana', lastName: 'Reyes' },
+            data: { orgId: 'org_0', firstName: 'Dana', lastName: 'Reyes' },
           })
 
           const hapPayer = await tx.leasePayer.create({
@@ -426,7 +426,7 @@ describe('orgId on every org-owned table (R-285a)', () => {
           const { lease } = await seedLease(tx)
           // A writer naming the wrong org is overwritten from the parent.
           const tenant = await tx.tenant.create({
-            data: { firstName: 'Ana', lastName: 'Ruiz' },
+            data: { orgId: 'org_0', firstName: 'Ana', lastName: 'Ruiz' },
           })
           const link = await tx.leaseTenant.create({
             data: { orgId: orgB.id, leaseId: lease.id, tenantId: tenant.id },
@@ -443,28 +443,45 @@ describe('orgId on every org-owned table (R-285a)', () => {
     ).rejects.toThrow(/cross-organisation reference: LeaseTenant\.tenantId/)
   })
 
-  it('refuses a grant in an org where the holder has no membership', async () => {
+  // R-301 removed D-339's org #0 bridge: org #0 is enforced like any other.
+  it.each(['org_0', 'second org'])('refuses a grant in %s when the holder has no membership', async (which) => {
     await expect(
       prisma.$transaction(
         async (tx) => {
-          const orgB = await tx.organization.create({
-            data: { slug: `r285-m-${Date.now()}`, name: 'Org B' },
-          })
+          const orgId =
+            which === 'org_0'
+              ? 'org_0'
+              : (await tx.organization.create({ data: { slug: `r301-m-${Date.now()}`, name: 'Org B' } })).id
           const role = await tx.role.findFirstOrThrow()
           const staff = await tx.staffUser.create({
-            data: { email: `r285-${Date.now()}@example.test`, name: 'R-285' },
+            data: { email: `r301-${Date.now()}@example.test`, name: 'R-301' },
           })
-          // Org #0 bridge (D-339): the membership is created, not refused.
-          await tx.staffAssignment.create({ data: { staffUserId: staff.id, roleId: role.id } })
-          expect(
-            await tx.orgMembership.count({ where: { orgId: 'org_0', staffUserId: staff.id } }),
-          ).toBe(1)
-          await tx.staffAssignment.create({
-            data: { orgId: orgB.id, staffUserId: staff.id, roleId: role.id },
-          })
+          await tx.staffAssignment.create({ data: { orgId, staffUserId: staff.id, roleId: role.id } })
         },
         { timeout: 30_000 },
       ),
     ).rejects.toThrow(/needs a live membership/)
+  })
+
+  it('checks the membership at commit, so one nested write can create staff, membership and grant', async () => {
+    const role = await prisma.role.findFirstOrThrow()
+    const staff = await prisma.staffUser.create({
+      data: {
+        email: `r301-nested-${Date.now()}@example.test`,
+        name: 'R-301',
+        assignments: { create: { orgId: 'org_0', roleId: role.id } },
+        orgMemberships: { create: { orgId: 'org_0' } },
+      },
+      include: { assignments: true },
+    })
+    expect(staff.assignments).toHaveLength(1)
+    await prisma.staffUser.update({ where: { id: staff.id }, data: { active: false } })
+  })
+
+  // 23502 is not_null_violation; orgId is the only NOT NULL column left unset.
+  it('refuses a parentless org-owned row that names no org', async () => {
+    await expect(
+      prisma.$executeRaw`INSERT INTO "LegalEntity" ("id", "name", "type", "updatedAt") VALUES (${`r301-${Date.now()}`}, 'No org', 'LLC', now())`,
+    ).rejects.toThrow(/23502/)
   })
 })

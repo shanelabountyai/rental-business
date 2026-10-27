@@ -32,7 +32,7 @@ const templateIds: string[] = []
 async function seedTwoProperties() {
   const stamp = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `Announce LLC-${stamp}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Announce LLC-${stamp}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
 
@@ -59,7 +59,7 @@ async function seedTwoProperties() {
     })
     unitIds.push(unit.id)
     const tenant = await prisma.tenant.create({
-      data: {
+      data: { orgId: 'org_0',
         // STAMPED — see rent-roll.spec.ts's identical comment: an unstamped
         // name risks matching another test's row on this shared database.
         firstName: `${label}${stamp}`,
@@ -103,7 +103,7 @@ async function seedTwoProperties() {
 async function seedScopedManager(legalEntityId: string) {
   const email = `announce-${randomUUID()}@example.test`
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Announcements Manager',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -119,7 +119,7 @@ async function seedScopedManager(legalEntityId: string) {
 
 async function seedTemplate(staffId: string) {
   const template = await prisma.messageTemplate.create({
-    data: {
+    data: { orgId: 'org_0',
       name: `Hydrant flushing ${randomUUID().slice(0, 6)}`,
       kind: 'ROUTINE',
       subject: 'Hydrant flushing Tuesday',
@@ -136,7 +136,7 @@ async function seedTemplate(staffId: string) {
 async function seedOwner() {
   const email = `announce-owner-${randomUUID()}@example.test`
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Announcements Owner',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -432,7 +432,7 @@ test.describe('reviewed recipients and saved audiences (R-259)', () => {
     const { entity, a } = await seedTwoProperties()
     const staff = await seedScopedManager(entity.id)
     const template = await prisma.messageTemplate.create({
-      data: {
+      data: { orgId: 'org_0',
         name: `Too long ${randomUUID().slice(0, 6)}`,
         kind: 'ROUTINE',
         subject: 'Long',

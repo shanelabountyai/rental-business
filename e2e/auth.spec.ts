@@ -59,7 +59,7 @@ async function createStaffUser(options: { active?: boolean } = {}) {
 
 async function createTenant() {
   const tenant = await prisma.tenant.create({
-    data: {
+    data: { orgId: 'org_0',
       firstName: 'Dana',
       lastName: 'Reyes',
       email: uniqueEmail('tenant'),
@@ -673,7 +673,7 @@ test.describe('tenant magic link', () => {
     // to guess at one. A random line keeps it clear of other runs' rows.
     const e164 = `+1512${String(Math.floor(Math.random() * 1e7)).padStart(7, '0')}`
     const tenant = await prisma.tenant.create({
-      data: {
+      data: { orgId: 'org_0',
         firstName: 'Dana',
         lastName: 'Reyes',
         // Stored the way staff type it, and asked for below in a third shape:

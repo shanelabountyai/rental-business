@@ -84,7 +84,7 @@ const tenantIds: string[] = []
 
 beforeAll(async () => {
   const stamp = `chargeback-${Date.now()}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   const property = await prisma.property.create({
     data: {
@@ -107,7 +107,7 @@ beforeAll(async () => {
   unitId = unit.id
 
   const staff = await prisma.staffUser.create({
-    data: { email: `chargeback-${randomUUID()}@example.test`, name: 'Priya Owner' },
+    data: { orgMemberships: { create: { orgId: 'org_0' } }, email: `chargeback-${randomUUID()}@example.test`, name: 'Priya Owner' },
   })
   session.staffId = staff.id
   // `owner` is the seeded role that holds `ledger.adjust` - `manager`
@@ -133,7 +133,7 @@ afterAll(async () => {
 /** A closed, tenant-caused, invoiced job with a live tenancy to bill. */
 async function billableJob(options: { withPaymentMethod: boolean; email?: false }) {
   const tenant = await prisma.tenant.create({
-    data: {
+    data: { orgId: 'org_0',
       firstName: 'Dara',
       lastName: `Sash-${randomUUID().slice(0, 6)}`,
       // `email: false` is R-210's case: a tenancy the office holds a phone

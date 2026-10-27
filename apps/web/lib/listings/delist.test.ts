@@ -23,7 +23,7 @@ const syndicationIds: string[] = []
 
 beforeAll(async () => {
   const stamp = `delist-${randomUUID().slice(0, 8)}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   const property = await prisma.property.create({
     data: {

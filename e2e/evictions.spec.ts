@@ -23,7 +23,7 @@ const caseIds: string[] = []
 
 async function seedOwner() {
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email: `evict-${randomUUID()}@example.test`,
       name: 'Eviction Test Owner',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -39,7 +39,7 @@ async function seedOwner() {
 /// `payOrQuitDays` is 3 - the number the cure clock in these tests runs on.
 async function seedTenancy() {
   const stamp = randomUUID().slice(0, 8)
-  const entity = await prisma.legalEntity.create({ data: { name: `Evict LLC-${stamp}`, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: `Evict LLC-${stamp}`, type: 'LLC' } })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
     data: {
@@ -58,7 +58,7 @@ async function seedTenancy() {
     data: { propertyId: property.id, name: `U-${stamp}`, status: 'OCCUPIED' },
   })
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Evict', lastName: `Tenant-${stamp}` },
+    data: { orgId: 'org_0', firstName: 'Evict', lastName: `Tenant-${stamp}` },
   })
   tenantIds.push(tenant.id)
   const lease = await prisma.lease.create({
@@ -508,7 +508,7 @@ test('serving a pay-or-quit places the hold in the same press, and proves it rea
   const email = `evict-hold-${randomUUID()}@example.test`
   const { secret } = createTotpEnrolment(email)
   const holder = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Serve And Hold Owner',
       credential: {

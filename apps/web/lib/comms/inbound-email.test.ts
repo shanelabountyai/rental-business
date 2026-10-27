@@ -33,7 +33,7 @@ beforeEach(() => {
 
 beforeAll(async () => {
   const stamp = `inmail-${randomUUID().slice(0, 8)}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   const make = async (suffix: string) => {
     const property = await prisma.property.create({
@@ -81,7 +81,7 @@ afterAll(async () => {
 
 async function tenantAt(propertyIds: readonly string[], email: string) {
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'In', lastName: `Box-${randomUUID().slice(0, 6)}`, email },
+    data: { orgId: 'org_0', firstName: 'In', lastName: `Box-${randomUUID().slice(0, 6)}`, email },
   })
   tenantIds.push(tenant.id)
   for (const propertyId of propertyIds) {

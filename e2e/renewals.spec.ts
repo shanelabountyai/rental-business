@@ -52,7 +52,7 @@ const ruleIds: string[] = []
 async function createStaff() {
   const unique = randomUUID().slice(0, 8)
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email: `renewal-${unique}@example.test`,
       name: `Renewal Test ${unique}`,
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -88,7 +88,7 @@ async function seedJurisdictionRule(overrides: {
 async function seedRunningLease(overrides: { state: string; endsOn?: string }) {
   const endsOn = overrides.endsOn ?? '2026-12-31'
   const unique = randomUUID().slice(0, 8)
-  const entity = await prisma.legalEntity.create({ data: { name: `Renewal LLC-${unique}`, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: `Renewal LLC-${unique}`, type: 'LLC' } })
   const property = await prisma.property.create({
     data: {
       legalEntityId: entity.id,
@@ -107,7 +107,7 @@ async function seedRunningLease(overrides: { state: string; endsOn?: string }) {
   })
   unitIds.push(unit.id)
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Rosa', lastName: `Renewer-${unique}`, email: `rosa-${unique}@example.test`, phone: uniquePhone() },
+    data: { orgId: 'org_0', firstName: 'Rosa', lastName: `Renewer-${unique}`, email: `rosa-${unique}@example.test`, phone: uniquePhone() },
   })
   tenantIds.push(tenant.id)
   const lease = await prisma.lease.create({

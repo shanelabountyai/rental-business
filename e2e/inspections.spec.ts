@@ -44,7 +44,7 @@ const templateIds: string[] = []
 async function createStaff() {
   const unique = randomUUID().slice(0, 8)
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email: `inspection-${unique}@example.test`,
       name: `Inspection Test ${unique}`,
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -59,7 +59,7 @@ async function createStaff() {
 async function seedUnit() {
   const unique = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `Inspection LLC-${unique}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Inspection LLC-${unique}`, type: 'LLC' },
   })
   const property = await prisma.property.create({
     data: {
@@ -89,7 +89,7 @@ async function seedUnitWithTenant() {
   const { property, unit, unique } = await seedUnit()
   await prisma.unit.update({ where: { id: unit.id }, data: { status: 'OCCUPIED' } })
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Robin', lastName: `Reviewer-${unique}`, email: `robin-${unique}@example.test` },
+    data: { orgId: 'org_0', firstName: 'Robin', lastName: `Reviewer-${unique}`, email: `robin-${unique}@example.test` },
   })
   tenantIds.push(tenant.id)
   const lease = await prisma.lease.create({
@@ -494,7 +494,7 @@ test('a move-out inspection copies the move-in checklist and shows the side-by-s
     },
   })
   const template = await prisma.inspectionTemplate.create({
-    data: {
+    data: { orgId: 'org_0',
       name: `Ignored template ${randomUUID().slice(0, 8)}`,
       items: [{ room: 'Bathroom', item: 'Toilet' }],
       createdByStaffId: staff.id,
@@ -564,7 +564,7 @@ async function seedOccupiedUnitWithEntryRule(staffId: string) {
     },
   })
   const entity = await prisma.legalEntity.create({
-    data: { name: `Entry LLC-${unique}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Entry LLC-${unique}`, type: 'LLC' },
   })
   const property = await prisma.property.create({
     data: {
@@ -586,7 +586,7 @@ async function seedOccupiedUnitWithEntryRule(staffId: string) {
   })
   unitIds.push(unit.id)
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Noor', lastName: `Athome-${unique}`, email: `noor-${unique}@example.test` },
+    data: { orgId: 'org_0', firstName: 'Noor', lastName: `Athome-${unique}`, email: `noor-${unique}@example.test` },
   })
   tenantIds.push(tenant.id)
   const lease = await prisma.lease.create({
@@ -600,7 +600,7 @@ async function seedOccupiedUnitWithEntryRule(staffId: string) {
   })
   await prisma.leaseTenant.create({ data: { leaseId: lease.id, tenantId: tenant.id, isPrimary: true } })
   const template = await prisma.inspectionTemplate.create({
-    data: {
+    data: { orgId: 'org_0',
       name: `Annual-${unique}`,
       items: [{ room: 'Kitchen', item: 'Sink' }],
       createdByStaffId: staffId,

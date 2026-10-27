@@ -28,7 +28,7 @@ const vendorIds: string[] = []
 async function createStaff() {
   const unique = randomUUID().slice(0, 8)
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email: `comms-${unique}@example.test`,
       name: `Comms Test ${unique}`,
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -43,7 +43,7 @@ async function createStaff() {
 async function seedJob() {
   const unique = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `Comms LLC-${unique}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Comms LLC-${unique}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -63,7 +63,7 @@ async function seedJob() {
     data: { propertyId: property.id, name: `U-${unique}`, status: 'OCCUPIED' },
   })
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Sam', lastName: `Comms-${unique}`, phone: uniquePhone() },
+    data: { orgId: 'org_0', firstName: 'Sam', lastName: `Comms-${unique}`, phone: uniquePhone() },
   })
   tenantIds.push(tenant.id)
   const lease = await prisma.lease.create({
@@ -91,7 +91,7 @@ async function seedJob() {
   })
   ticketIds.push(ticket.id)
   const vendor = await prisma.vendor.create({
-    data: { name: `Comms Plumbing-${unique}`, trades: ['plumbing'] },
+    data: { orgId: 'org_0', name: `Comms Plumbing-${unique}`, trades: ['plumbing'] },
   })
   vendorIds.push(vendor.id)
   const workOrder = await prisma.workOrder.create({

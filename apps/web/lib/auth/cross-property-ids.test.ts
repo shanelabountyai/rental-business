@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { prisma } from '@rental/db'
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildPartyChange, loadLeaseForPartyChange } from '@/lib/leases/party-change-builder.ts'
 import { updateUnit } from '@/lib/units/actions.ts'
 
@@ -8,7 +8,10 @@ import { updateUnit } from '@/lib/units/actions.ts'
 // the record named in the URL, then trusted a SECOND id off the form. A
 // manager of house A, holding nothing on house B, could name B's rows.
 //
-// Two houses on two entities; the actor owns A only. Session mocked, the
+// Two houses on two entities; the actor owns A only. R-301 adds house C in a
+// second organisation and a portfolio-wide owner of org #0: "everything" is
+// bounded by the org (D-340), so C's rows are as unreachable as B's.
+// Session mocked, the
 // grant and the RBAC decision real - same seam as chargeback-actions.test.ts.
 
 vi.mock('next/cache', () => ({ revalidatePath: () => {}, revalidateTag: () => {} }))
@@ -22,8 +25,8 @@ const unique = randomUUID().slice(0, 8)
 const entityIds: string[] = []
 const propertyIds: string[] = []
 
-async function house(label: string) {
-  const entity = await prisma.legalEntity.create({ data: { name: `${label}-${unique}`, type: 'LLC' } })
+async function house(label: string, orgId = 'org_0') {
+  const entity = await prisma.legalEntity.create({ data: { orgId, name: `${label}-${unique}`, type: 'LLC' } })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
     data: {
@@ -58,11 +61,16 @@ async function house(label: string) {
 
 let a: Awaited<ReturnType<typeof house>>
 let b: Awaited<ReturnType<typeof house>>
+let c: Awaited<ReturnType<typeof house>>
 let leaseId: string
+let scopedOwnerId = ''
+let portfolioOwnerId = ''
 
 beforeAll(async () => {
   a = await house('A')
   b = await house('B')
+  const orgB = await prisma.organization.create({ data: { slug: `xorg-${unique}`, name: `Org B-${unique}` } })
+  c = await house('C', orgB.id)
   const lease = await prisma.lease.create({
     data: {
       propertyId: a.property.id,
@@ -74,17 +82,30 @@ beforeAll(async () => {
   })
   leaseId = lease.id
   const staff = await prisma.staffUser.create({
-    data: { email: `sec-scope-${unique}@example.test`, name: 'Scoped Owner' },
+    data: { orgMemberships: { create: { orgId: 'org_0' } }, email: `sec-scope-${unique}@example.test`, name: 'Scoped Owner' },
   })
-  session.staffId = staff.id
+  scopedOwnerId = staff.id
   const owner = await prisma.role.findUniqueOrThrow({ where: { key: 'owner' } })
   await prisma.staffAssignment.create({
     data: { staffUserId: staff.id, roleId: owner.id, propertyId: a.property.id },
   })
+  const portfolio = await prisma.staffUser.create({
+    data: {
+      orgMemberships: { create: { orgId: 'org_0' } },
+      email: `sec-portfolio-${unique}@example.test`,
+      name: 'Portfolio Owner',
+      assignments: { create: { orgId: 'org_0', roleId: owner.id } },
+    },
+  })
+  portfolioOwnerId = portfolio.id
+})
+
+beforeEach(() => {
+  session.staffId = scopedOwnerId
 })
 
 afterAll(async () => {
-  await prisma.staffUser.updateMany({ where: { id: session.staffId }, data: { active: false } })
+  await prisma.staffUser.updateMany({ where: { id: { in: [scopedOwnerId, portfolioOwnerId] } }, data: { active: false } })
   await prisma.property.updateMany({ where: { id: { in: propertyIds } }, data: { active: false } })
   await prisma.legalEntity.updateMany({ where: { id: { in: entityIds } }, data: { active: false } })
 })
@@ -110,6 +131,11 @@ describe('SEC-09: party change takes only applicants from the lease property', (
     expect((await attempt(b.applicant.id)).error).toBe('One of the applicants named could not be found.')
   })
 
+  it("treats another org's applicant as not found, even for a portfolio-wide owner", async () => {
+    session.staffId = portfolioOwnerId
+    expect((await attempt(c.applicant.id)).error).toBe('One of the applicants named could not be found.')
+  })
+
   it("loads this property's applicant", async () => {
     expect((await attempt(a.applicant.id)).error).not.toBe('One of the applicants named could not be found.')
   })
@@ -129,5 +155,12 @@ describe('SEC-10: updateUnit refuses a unit from another property', () => {
     const after = await prisma.unit.findUniqueOrThrow({ where: { id: b.unit.id } })
     expect(after.name).toBe(`U-${unique}`)
     expect(after.marketRentCents).toBe(150_000)
+  })
+
+  it("does not touch another org's unit, even for a portfolio-wide owner", async () => {
+    session.staffId = portfolioOwnerId
+    await expect(updateUnit(a.property.id, c.unit.id, {}, form('1'))).rejects.toThrow()
+    const after = await prisma.unit.findUniqueOrThrow({ where: { id: c.unit.id } })
+    expect(after.name).toBe(`U-${unique}`)
   })
 })

@@ -29,7 +29,7 @@ const mortgageIds: string[] = []
 async function createStaff() {
   const email = `packet-${randomUUID()}@example.test`
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Tax Packet Test',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -43,7 +43,7 @@ async function createStaff() {
 
 async function seedEntity(label: string) {
   const entity = await prisma.legalEntity.create({
-    data: { name: `${label} LLC-${randomUUID().slice(0, 8)}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `${label} LLC-${randomUUID().slice(0, 8)}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   return entity
@@ -73,7 +73,7 @@ async function seedProperty(entityId: string, name: string) {
 
 async function seedLease(propertyId: string, unitId: string, stamp: string) {
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Pack', lastName: `Test-${stamp}`, email: `pack-${stamp}@example.test` },
+    data: { orgId: 'org_0', firstName: 'Pack', lastName: `Test-${stamp}`, email: `pack-${stamp}@example.test` },
   })
   tenantIds.push(tenant.id)
   const lease = await prisma.lease.create({
@@ -203,7 +203,7 @@ test.describe('Schedule E per property', () => {
     const staff = await createStaff()
 
     const vendor = await prisma.vendor.create({
-      data: { name: `Plumber-${randomUUID().slice(0, 6)}`, trades: ['plumbing'], w9OnFile: true },
+      data: { orgId: 'org_0', name: `Plumber-${randomUUID().slice(0, 6)}`, trades: ['plumbing'], w9OnFile: true },
     })
     vendorIds.push(vendor.id)
     await seedPaidJob(one.property.id, one.unit.id, vendor.id, 26_000, 'CHECK')
@@ -280,7 +280,7 @@ test.describe('1099-NEC candidates', () => {
     const { property, unit } = await seedProperty(entity.id, 'Vendor House')
 
     const vendor = await prisma.vendor.create({
-      data: { name: `Mixed-${randomUUID().slice(0, 6)}`, trades: ['hvac'], w9OnFile: false },
+      data: { orgId: 'org_0', name: `Mixed-${randomUUID().slice(0, 6)}`, trades: ['hvac'], w9OnFile: false },
     })
     vendorIds.push(vendor.id)
     // $400 by card + $300 by check. Only the $300 is 1099-NEC reportable, so
@@ -304,7 +304,7 @@ test.describe('1099-NEC candidates', () => {
     const { property, unit } = await seedProperty(entity.id, 'Chase House')
 
     const vendor = await prisma.vendor.create({
-      data: { name: `NoW9-${randomUUID().slice(0, 6)}`, trades: ['roofing'], w9OnFile: false },
+      data: { orgId: 'org_0', name: `NoW9-${randomUUID().slice(0, 6)}`, trades: ['roofing'], w9OnFile: false },
     })
     vendorIds.push(vendor.id)
     await seedPaidJob(property.id, unit.id, vendor.id, 80_000, 'CHECK')
@@ -322,7 +322,7 @@ test.describe('the CSV', () => {
     const entity = await seedEntity('Csv')
     const { property, unit } = await seedProperty(entity.id, 'Csv House')
     const vendor = await prisma.vendor.create({
-      data: { name: `CsvVendor-${randomUUID().slice(0, 6)}`, trades: ['plumbing'], w9OnFile: true },
+      data: { orgId: 'org_0', name: `CsvVendor-${randomUUID().slice(0, 6)}`, trades: ['plumbing'], w9OnFile: true },
     })
     vendorIds.push(vendor.id)
     await seedPaidJob(property.id, unit.id, vendor.id, 26_000, 'CHECK')
@@ -457,7 +457,7 @@ test.describe('accessibility', () => {
     const entity = await seedEntity('Axe')
     const { property, unit } = await seedProperty(entity.id, 'Axe House')
     const vendor = await prisma.vendor.create({
-      data: { name: `AxeVendor-${randomUUID().slice(0, 6)}`, trades: ['plumbing'], w9OnFile: false },
+      data: { orgId: 'org_0', name: `AxeVendor-${randomUUID().slice(0, 6)}`, trades: ['plumbing'], w9OnFile: false },
     })
     vendorIds.push(vendor.id)
     await seedPaidJob(property.id, unit.id, vendor.id, 80_000, 'CHECK')

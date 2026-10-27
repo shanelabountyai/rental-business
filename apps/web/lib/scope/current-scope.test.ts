@@ -18,7 +18,7 @@ let propB: string
 
 beforeAll(async () => {
   const stamp = `sec03-${Date.now()}`
-  const entity = await prisma.legalEntity.create({ data: { name: `${stamp}-Entity`, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: `${stamp}-Entity`, type: 'LLC' } })
   entityId = entity.id
   const makeProperty = async (name: string) =>
     (

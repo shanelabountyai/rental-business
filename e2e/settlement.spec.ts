@@ -26,7 +26,7 @@ const propertyIds: string[] = []
 async function createStaff() {
   const email = `settlement-${randomUUID()}@example.test`
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Settlement Test',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -45,7 +45,7 @@ async function createOwnerWithMfa() {
   const email = `settlement-mfa-${randomUUID()}@example.test`
   const { secret } = createTotpEnrolment(email)
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Settlement Owner',
       credential: {
@@ -65,7 +65,7 @@ async function createOwnerWithMfa() {
 
 async function seedEntity(label: string) {
   const entity = await prisma.legalEntity.create({
-    data: { name: `${label} LLC-${randomUUID().slice(0, 8)}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `${label} LLC-${randomUUID().slice(0, 8)}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   return entity
@@ -95,7 +95,7 @@ async function seedHouse(legalEntityId: string, name: string) {
     data: { propertyId: property.id, name: `U-${stamp}`, status: 'OCCUPIED' },
   })
   const tenant = await prisma.tenant.create({
-    data: {
+    data: { orgId: 'org_0',
       firstName: 'Settle',
       lastName: `Payer-${stamp}`,
       email: `settle-${stamp}@example.test`,

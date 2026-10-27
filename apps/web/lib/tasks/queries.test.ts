@@ -25,7 +25,7 @@ function scopeOf(ids: string[]) {
 
 beforeAll(async () => {
   const stamp = `taskq-${Date.now()}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
 
   const makeProperty = async (name: string) => {
@@ -51,7 +51,7 @@ beforeAll(async () => {
 
   const makeStaff = async (name: string) => {
     const staff = await prisma.staffUser.create({
-      data: { email: `${stamp}-${name}@example.test`, name },
+      data: { orgMemberships: { create: { orgId: 'org_0' } }, email: `${stamp}-${name}@example.test`, name },
     })
     staffIds.push(staff.id)
     return staff.id

@@ -26,7 +26,7 @@ const entityIds: string[] = []
 async function createOwner() {
   const email = `property-expense-${randomUUID()}@example.test`
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Property Expense Test',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -41,7 +41,7 @@ async function createOwner() {
 async function seedEntityWithTwoHouses() {
   const stamp = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `Expense LLC-${stamp}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Expense LLC-${stamp}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const houses = []

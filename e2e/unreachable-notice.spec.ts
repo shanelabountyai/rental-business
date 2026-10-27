@@ -48,7 +48,7 @@ test.afterAll(async () => {
 async function seedOwner() {
   const email = `unreachable-${randomUUID()}@example.test`
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Unreachable Test',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -67,7 +67,7 @@ async function seedOwner() {
 /// delivery SUPPRESSED / no_address, and the task pointing at the base key.
 async function seedUndeliverableNotice() {
   const entity = await prisma.legalEntity.create({
-    data: { name: `Unreachable LLC-${randomUUID().slice(0, 8)}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Unreachable LLC-${randomUUID().slice(0, 8)}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -86,7 +86,7 @@ async function seedUndeliverableNotice() {
 
   const tenant = await prisma.tenant.create({
     // Neither column set. That is the whole premise, and both are nullable.
-    data: { firstName: 'Nomail', lastName: `Nophone-${randomUUID().slice(0, 6)}` },
+    data: { orgId: 'org_0', firstName: 'Nomail', lastName: `Nophone-${randomUUID().slice(0, 6)}` },
   })
   tenantIds.push(tenant.id)
 
@@ -185,7 +185,7 @@ test.describe('a notice nobody could be sent', () => {
     const { property: mine } = await seedUndeliverableNotice()
     const email = `scoped-${randomUUID()}@example.test`
     const staff = await prisma.staffUser.create({
-      data: {
+      data: { orgMemberships: { create: { orgId: 'org_0' } },
         email,
         name: 'Scoped Test',
         credential: { create: { passwordHash: await hashPassword(PASSWORD) } },

@@ -60,7 +60,7 @@ const tenantIds: string[] = []
 async function seedTextedRequest(text = 'half the kitchen has no power') {
   const stamp = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `Clarify LLC-${stamp}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Clarify LLC-${stamp}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -82,7 +82,7 @@ async function seedTextedRequest(text = 'half the kitchen has no power') {
   const tenant = await prisma.tenant.create({
     // NO EMAIL, deliberately: this is R-021's persona and the reason the page
     // cannot be behind the portal's email-only login.
-    data: {
+    data: { orgId: 'org_0',
       firstName: 'Dana',
       lastName: `Texter-${stamp}`,
       email: null,

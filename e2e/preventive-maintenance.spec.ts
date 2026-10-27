@@ -28,7 +28,7 @@ const templateIds: string[] = []
 async function seedOwner() {
   const email = `pm-e2e-${randomUUID()}@example.test`
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Preventive Test Owner',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -42,7 +42,7 @@ async function seedOwner() {
 
 async function seedPropertyAndUnit() {
   const stamp = randomUUID().slice(0, 8)
-  const entity = await prisma.legalEntity.create({ data: { name: `PM LLC-${stamp}`, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: `PM LLC-${stamp}`, type: 'LLC' } })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
     data: {
@@ -108,7 +108,7 @@ test('a PM creates a template and runs the batch, auto-assigning by territory', 
   // ranking instead of this test's own.
   const trade = `hvac-${randomUUID().slice(0, 8)}`
   const vendor = await prisma.vendor.create({
-    data: {
+    data: { orgId: 'org_0',
       name: `Territory HVAC-${randomUUID().slice(0, 6)}`,
       trades: [trade],
       serviceAreas: ['Houston'],
@@ -161,7 +161,7 @@ test('a batch run skips a vendor with no current COI and raises a Task naming it
   const { property, unit } = await seedPropertyAndUnit()
   const trade = `plumbing-${randomUUID().slice(0, 8)}`
   const vendor = await prisma.vendor.create({
-    data: {
+    data: { orgId: 'org_0',
       name: `Lapsed Plumbing-${randomUUID().slice(0, 6)}`,
       trades: [trade],
       serviceAreas: ['Houston'],

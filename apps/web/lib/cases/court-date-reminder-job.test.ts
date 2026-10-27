@@ -23,7 +23,7 @@ const caseIds: string[] = []
 
 beforeAll(async () => {
   const stamp = `courtreminder-${Date.now()}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   const property = await prisma.property.create({
     data: {
@@ -39,7 +39,7 @@ beforeAll(async () => {
   })
   propertyId = property.id
   const staff = await prisma.staffUser.create({
-    data: { email: `courtreminder-${Date.now()}@example.test`, name: 'Case Handler' },
+    data: { orgMemberships: { create: { orgId: 'org_0' } }, email: `courtreminder-${Date.now()}@example.test`, name: 'Case Handler' },
   })
   staffId = staff.id
 })
@@ -68,7 +68,7 @@ afterAll(async () => {
 async function seedCase(unique: string, courtDate: string, stage: 'COURT' | 'CLOSED' = 'COURT') {
   const unit = await prisma.unit.create({ data: { propertyId, name: `U-${unique}`, status: 'OCCUPIED' } })
   unitIds.push(unit.id)
-  const tenant = await prisma.tenant.create({ data: { firstName: 'Sam', lastName: `Resident-${unique}` } })
+  const tenant = await prisma.tenant.create({ data: { orgId: 'org_0', firstName: 'Sam', lastName: `Resident-${unique}` } })
   tenantIds.push(tenant.id)
   const lease = await prisma.lease.create({
     data: { propertyId, unitId: unit.id, status: 'ACTIVE', startsOn: new Date('2026-01-01'), rentCents: 150_000 },

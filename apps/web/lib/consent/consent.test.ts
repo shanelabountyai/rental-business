@@ -31,7 +31,7 @@ const tenantsById = new Map<string, { id: string; email: string | null; phone: s
 
 beforeAll(async () => {
   const stamp = `consent-${Date.now()}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   const property = await prisma.property.create({
     data: {
@@ -49,7 +49,7 @@ beforeAll(async () => {
 
   const makeTenant = async (label: string) => {
     return prisma.tenant.create({
-      data: {
+      data: { orgId: 'org_0',
         firstName: label,
         lastName: `Consent-${randomUUID().slice(0, 6)}`,
         email: `${label.toLowerCase()}-${randomUUID().slice(0, 8)}@example.test`,

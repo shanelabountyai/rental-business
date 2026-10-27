@@ -53,7 +53,7 @@ async function seed(
     ruleIds.push(rule.id)
   }
   const entity = await prisma.legalEntity.create({
-    data: { name: `Pay LLC-${stamp}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Pay LLC-${stamp}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -73,7 +73,7 @@ async function seed(
     data: { propertyId: property.id, name: `U-${stamp}`, status: 'OCCUPIED' },
   })
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Robin', lastName: `Pay-${stamp}`, phone: uniquePhone() },
+    data: { orgId: 'org_0', firstName: 'Robin', lastName: `Pay-${stamp}`, phone: uniquePhone() },
   })
   tenantIds.push(tenant.id)
   const lease = await prisma.lease.create({

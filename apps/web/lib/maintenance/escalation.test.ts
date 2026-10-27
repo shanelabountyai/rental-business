@@ -55,7 +55,7 @@ async function acknowledgeStaleEmergencies() {
 beforeAll(async () => {
   await acknowledgeStaleEmergencies()
   const stamp = `escalation-${Date.now()}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   const property = await prisma.property.create({
     data: {
@@ -75,7 +75,7 @@ beforeAll(async () => {
   })
   unitId = unit.id
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Dana', lastName: 'Reyes', phone: '+15125550111' },
+    data: { orgId: 'org_0', firstName: 'Dana', lastName: 'Reyes', phone: '+15125550111' },
   })
   tenantId = tenant.id
 
@@ -108,7 +108,7 @@ afterAll(async () => {
 
 async function makeStaff() {
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email: `escalation-${randomUUID()}@example.test`,
       name: 'Escalation Test',
       phone: '+15125550100',

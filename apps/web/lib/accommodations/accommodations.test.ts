@@ -27,7 +27,7 @@ const tenantIds: string[] = []
 
 beforeAll(async () => {
   const stamp = `accom-${Date.now()}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   const property = await prisma.property.create({
     data: {
@@ -43,7 +43,7 @@ beforeAll(async () => {
   })
   propertyId = property.id
   const staff = await prisma.staffUser.create({
-    data: { email: `accom-${randomUUID()}@example.test`, name: 'Accommodation Reviewer' },
+    data: { orgMemberships: { create: { orgId: 'org_0' } }, email: `accom-${randomUUID()}@example.test`, name: 'Accommodation Reviewer' },
   })
   staffId = staff.id
 })
@@ -65,7 +65,7 @@ async function seedTenancy() {
     data: { propertyId, name: `U-${stamp}`, status: 'OCCUPIED' },
   })
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Sam', lastName: `Accom-${stamp}` },
+    data: { orgId: 'org_0', firstName: 'Sam', lastName: `Accom-${stamp}` },
   })
   tenantIds.push(tenant.id)
   const lease = await prisma.lease.create({

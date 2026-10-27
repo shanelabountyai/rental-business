@@ -27,7 +27,7 @@ const leaseIds: string[] = []
 async function seedLeaseWithBalance() {
   const stamp = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `Deposit LLC-${stamp}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Deposit LLC-${stamp}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -47,7 +47,7 @@ async function seedLeaseWithBalance() {
     data: { propertyId: property.id, name: `U-${stamp}`, status: 'OCCUPIED' },
   })
   const tenant = await prisma.tenant.create({
-    data: {
+    data: { orgId: 'org_0',
       firstName: `Deposit${stamp}`,
       lastName: `Payer-${stamp}`,
       phone: uniquePhone(),
@@ -99,7 +99,7 @@ async function seedOwner() {
   const email = `deposits-${randomUUID()}@example.test`
   const { secret } = createTotpEnrolment(email)
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Deposits Owner',
       credential: {
@@ -124,7 +124,7 @@ async function seedOwner() {
 async function seedOwnerWithoutMfa() {
   const email = `deposits-nomfa-${randomUUID()}@example.test`
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Unenrolled Owner',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },

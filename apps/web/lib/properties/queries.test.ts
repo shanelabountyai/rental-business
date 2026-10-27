@@ -26,10 +26,10 @@ beforeAll(async () => {
   const stamp = `propq-${Date.now()}`
 
   const e1 = await prisma.legalEntity.create({
-    data: { name: `${stamp}-One`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `${stamp}-One`, type: 'LLC' },
   })
   const e2 = await prisma.legalEntity.create({
-    data: { name: `${stamp}-Two`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `${stamp}-Two`, type: 'LLC' },
   })
   entityOne = e1.id
   entityTwo = e2.id

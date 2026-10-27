@@ -42,7 +42,7 @@ const PNG_1PX = Buffer.from(
 async function createStaff(roleKey: string, propertyId?: string) {
   const email = `notice-${randomUUID()}@example.test`
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Notice Test Manager',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -59,7 +59,7 @@ async function createStaff(roleKey: string, propertyId?: string) {
 async function seedNotice() {
   const stamp = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `Notice LLC-${stamp}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Notice LLC-${stamp}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -82,7 +82,7 @@ async function seedNotice() {
     data: { propertyId: property.id, name: `U-${stamp}`, status: 'OCCUPIED' },
   })
   const tenant = await prisma.tenant.create({
-    data: {
+    data: { orgId: 'org_0',
       firstName: `Nadia${stamp}`,
       lastName: `Notice-${stamp}`,
       email: `tenant-${stamp}@example.test`,

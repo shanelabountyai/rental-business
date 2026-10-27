@@ -31,7 +31,7 @@ async function createStaff(
   const email = `staff-admin-${randomUUID()}@example.test`
   const enrolment = options.mfa ? createTotpEnrolment(email) : null
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: `Test Person ${randomUUID().slice(0, 6)}`,
       credential: {
@@ -54,7 +54,7 @@ async function createStaff(
 
 async function seedProperty() {
   const entity = await prisma.legalEntity.create({
-    data: { name: `Staff LLC-${randomUUID().slice(0, 8)}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Staff LLC-${randomUUID().slice(0, 8)}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({

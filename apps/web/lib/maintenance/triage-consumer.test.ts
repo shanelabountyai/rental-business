@@ -29,7 +29,7 @@ const taskIds: string[] = []
 
 beforeAll(async () => {
   const stamp = `triage-${randomUUID().slice(0, 8)}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   const property = await prisma.property.create({
     data: {
       legalEntityId: entity.id,

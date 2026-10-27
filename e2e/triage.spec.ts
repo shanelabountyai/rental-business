@@ -33,7 +33,7 @@ async function createStaff(
 ) {
   const email = `triage-${randomUUID()}@example.test`
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Triage Test',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -97,7 +97,7 @@ async function seedTicket(
   }> = {},
 ) {
   const entity = await prisma.legalEntity.create({
-    data: { name: `Triage LLC-${randomUUID().slice(0, 8)}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Triage LLC-${randomUUID().slice(0, 8)}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -117,7 +117,7 @@ async function seedTicket(
     data: { propertyId: property.id, name: `U-${randomUUID().slice(0, 6)}`, status: 'OCCUPIED' },
   })
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Tia', lastName: `Triage-${randomUUID().slice(0, 6)}` },
+    data: { orgId: 'org_0', firstName: 'Tia', lastName: `Triage-${randomUUID().slice(0, 6)}` },
   })
   tenantIds.push(tenant.id)
   const lease = await prisma.lease.create({
@@ -304,7 +304,7 @@ test.describe('a ticket-triage Task', () => {
     const { property, unit } = await seedTicket({ category: 'PLUMBING' })
     // A second, independent ticket at the SAME property/unit - the realistic
     // duplicate (two reports of the same leak).
-    const tenant2 = await prisma.tenant.create({ data: { firstName: 'Dup', lastName: 'Licate' } })
+    const tenant2 = await prisma.tenant.create({ data: { orgId: 'org_0', firstName: 'Dup', lastName: 'Licate' } })
     tenantIds.push(tenant2.id)
     const lease2 = await prisma.lease.create({
       data: {

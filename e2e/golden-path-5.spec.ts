@@ -73,7 +73,7 @@ async function seedOwner(legalEntityId: string) {
   const email = `gp5-owner-${randomUUID()}@example.test`
   const { secret } = createTotpEnrolment(email)
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'GP5 Owner',
       credential: {
@@ -145,7 +145,7 @@ test('Golden Path 5: what the fence stops, and what it must not forgive', async 
 
   const unique = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `GP5 LLC-${unique}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `GP5 LLC-${unique}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -173,7 +173,7 @@ test('Golden Path 5: what the fence stops, and what it must not forgive', async 
   })
 
   const tenant = await prisma.tenant.create({
-    data: {
+    data: { orgId: 'org_0',
       firstName: 'Mabel',
       lastName: `Keeler-${unique}`,
       email: `mabel-${unique}@example.test`,
@@ -226,7 +226,7 @@ test('Golden Path 5: what the fence stops, and what it must not forgive', async 
 
   const staff = await seedOwner(entity.id)
   const template = await prisma.messageTemplate.create({
-    data: {
+    data: { orgId: 'org_0',
       name: `GP5 rent reminder ${unique}`,
       kind: 'ROUTINE',
       subject: 'Rent is overdue at {{property.address}}',

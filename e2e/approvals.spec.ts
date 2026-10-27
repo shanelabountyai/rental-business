@@ -42,7 +42,7 @@ async function createStaff(
   const unique = randomUUID().slice(0, 8)
   const { secret } = createTotpEnrolment(`appr-${unique}@example.test`)
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email: `appr-${unique}@example.test`,
       name: `Approval Test ${unique}`,
       approveWorkOrderCents: options.approveWorkOrderCents,
@@ -70,7 +70,7 @@ async function seedWorkOrder(options: {
 }) {
   const unique = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: {
+    data: { orgId: 'org_0',
       name: `Appr LLC-${unique}`,
       type: 'LLC',
       approvalThresholdCents: options.thresholdCents ?? 50_000,
@@ -446,10 +446,10 @@ test.describe('bid collection (MAINT-04)', () => {
     const { workOrder } = await seedWorkOrder({ estimateCents: 400_000 })
     const unique = randomUUID().slice(0, 6)
     const cheap = await prisma.vendor.create({
-      data: { name: `Cheap-${unique}`, trades: ['plumbing'], phone: uniquePhone() },
+      data: { orgId: 'org_0', name: `Cheap-${unique}`, trades: ['plumbing'], phone: uniquePhone() },
     })
     const dear = await prisma.vendor.create({
-      data: { name: `Dear-${unique}`, trades: ['plumbing'], phone: uniquePhone() },
+      data: { orgId: 'org_0', name: `Dear-${unique}`, trades: ['plumbing'], phone: uniquePhone() },
     })
     vendorIds.push(cheap.id, dear.id)
 
@@ -534,7 +534,7 @@ test.describe('bid collection (MAINT-04)', () => {
       // no addressable channel, so R-016 records the notification as
       // suppressed and there is no message to read a token out of. That is
       // correct behaviour, and not what this test is about.
-      data: { name: `Late-${unique}`, trades: ['plumbing'], phone: uniquePhone() },
+      data: { orgId: 'org_0', name: `Late-${unique}`, trades: ['plumbing'], phone: uniquePhone() },
     })
     vendorIds.push(vendor.id)
 

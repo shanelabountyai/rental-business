@@ -34,10 +34,10 @@ beforeAll(async () => {
   const stamp = `rbac-${Date.now()}`
 
   const e1 = await prisma.legalEntity.create({
-    data: { name: `${stamp}-Entity One`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `${stamp}-Entity One`, type: 'LLC' },
   })
   const e2 = await prisma.legalEntity.create({
-    data: { name: `${stamp}-Entity Two`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `${stamp}-Entity Two`, type: 'LLC' },
   })
   entityOne = e1.id
   entityTwo = e2.id
@@ -91,7 +91,7 @@ beforeAll(async () => {
       data: { propertyId, unitId: unit.id, startsOn: new Date('2026-01-01'), rentCents: 150000 },
     })
     const tenant = await prisma.tenant.create({
-      data: { firstName: 'Scoped', lastName: stamp, leaseTenants: { create: { leaseId: lease.id } } },
+      data: { orgId: 'org_0', firstName: 'Scoped', lastName: stamp, leaseTenants: { create: { leaseId: lease.id } } },
     })
     created.tenants.push(tenant.id)
     return tenant.id
@@ -278,7 +278,7 @@ describe('assignment integrity', () => {
   it('refuses an assignment scoped to a property AND an entity at once', async () => {
     const role = await prisma.role.findUniqueOrThrow({ where: { key: 'manager' } })
     const staff = await prisma.staffUser.create({
-      data: { email: `scope-${Date.now()}@example.test`, name: 'Scope Test' },
+      data: { orgMemberships: { create: { orgId: 'org_0' } }, email: `scope-${Date.now()}@example.test`, name: 'Scope Test' },
     })
 
     // An ambiguous scope means one reader sees a narrow grant and another sees
@@ -318,7 +318,7 @@ describe('assignment integrity', () => {
     // the scope columns, which has no opinion about whether the person is
     // still employed.
     const staff = await prisma.staffUser.create({
-      data: { email: `dupe-${Date.now()}@example.test`, name: 'Dupe Test', active: false },
+      data: { orgMemberships: { create: { orgId: 'org_0' } }, email: `dupe-${Date.now()}@example.test`, name: 'Dupe Test', active: false },
     })
 
     // Portfolio-wide grants have two NULL scope columns, and NULL never equals

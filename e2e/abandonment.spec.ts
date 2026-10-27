@@ -55,7 +55,7 @@ async function seedTenancy(options: {
   ruleIds.push(rule.id)
 
   const entity = await prisma.legalEntity.create({
-    data: { name: `Dark LLC-${stamp}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Dark LLC-${stamp}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -75,7 +75,7 @@ async function seedTenancy(options: {
     data: { propertyId: property.id, name: `U-${stamp}`, status: 'OCCUPIED' },
   })
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Jo', lastName: `Gone-${stamp}` },
+    data: { orgId: 'org_0', firstName: 'Jo', lastName: `Gone-${stamp}` },
   })
   tenantIds.push(tenant.id)
   const lease = await prisma.lease.create({
@@ -98,7 +98,7 @@ async function seedTenancy(options: {
 /// lease-holds and scra specs each record for their own pages.
 async function seedOwner() {
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email: `dark-${randomUUID()}@example.test`,
       name: 'Gone Dark Owner',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },

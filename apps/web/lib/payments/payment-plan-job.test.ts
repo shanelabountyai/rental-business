@@ -36,7 +36,7 @@ const leaseIds: string[] = []
 
 beforeAll(async () => {
   const stamp = `planjob-${Date.now()}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   const property = await prisma.property.create({
     data: {
@@ -52,7 +52,7 @@ beforeAll(async () => {
   })
   propertyId = property.id
   const staff = await prisma.staffUser.create({
-    data: { email: `planjob-${randomUUID()}@example.test`, name: 'Plan Agreer' },
+    data: { orgMemberships: { create: { orgId: 'org_0' } }, email: `planjob-${randomUUID()}@example.test`, name: 'Plan Agreer' },
   })
   staffId = staff.id
 })
@@ -91,7 +91,7 @@ async function seedPlan() {
   })
   unitIds.push(unit.id)
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Robin', lastName: `Plan-${stamp}` },
+    data: { orgId: 'org_0', firstName: 'Robin', lastName: `Plan-${stamp}` },
   })
   tenantIds.push(tenant.id)
   const lease = await prisma.lease.create({

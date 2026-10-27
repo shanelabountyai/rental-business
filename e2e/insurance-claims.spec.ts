@@ -32,7 +32,7 @@ const propertyIds: string[] = []
 async function seedProperty(options: { withPolicy: boolean }) {
   const stamp = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `Claim LLC-${stamp}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Claim LLC-${stamp}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -73,7 +73,7 @@ async function seedProperty(options: { withPolicy: boolean }) {
 
 async function seedOwner() {
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email: `claim-${randomUUID()}@example.test`,
       name: 'Claim Owner',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -229,7 +229,7 @@ test('loss of rents is priced off the tenancy’s own rent, and says which rent 
   const staff = await seedOwner()
 
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Jo', lastName: `Claim-${randomUUID().slice(0, 6)}` },
+    data: { orgId: 'org_0', firstName: 'Jo', lastName: `Claim-${randomUUID().slice(0, 6)}` },
   })
   const lease = await prisma.lease.create({
     data: {

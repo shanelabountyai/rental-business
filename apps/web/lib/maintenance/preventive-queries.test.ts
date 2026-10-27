@@ -20,7 +20,7 @@ function scopeFor(ids: string[]): ResolvedScope {
 
 beforeAll(async () => {
   const stamp = `pmtemplate-${Date.now()}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   const property = await prisma.property.create({
     data: {
@@ -37,10 +37,10 @@ beforeAll(async () => {
   propertyId = property.id
   const unit = await prisma.unit.create({ data: { propertyId, name: `U-${stamp}`, status: 'OCCUPIED' } })
   unitId = unit.id
-  const staff = await prisma.staffUser.create({ data: { email: `${stamp}@example.test`, name: 'PM Test' } })
+  const staff = await prisma.staffUser.create({ data: { orgMemberships: { create: { orgId: 'org_0' } }, email: `${stamp}@example.test`, name: 'PM Test' } })
   staffId = staff.id
   const template = await prisma.preventiveMaintenanceTemplate.create({
-    data: { name: `HVAC filter-${stamp}`, intervalMonths: 6, createdByStaffId: staffId },
+    data: { orgId: 'org_0', name: `HVAC filter-${stamp}`, intervalMonths: 6, createdByStaffId: staffId },
   })
   templateId = template.id
 })

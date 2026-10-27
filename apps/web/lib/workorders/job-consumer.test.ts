@@ -23,7 +23,7 @@ const staffIds: string[] = []
 
 beforeAll(async () => {
   const stamp = `wojob-${randomUUID().slice(0, 8)}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   const property = await prisma.property.create({
     data: {
       legalEntityId: entity.id,
@@ -43,8 +43,8 @@ beforeAll(async () => {
   })
   unitId = unit.id
 
-  const staffA = await prisma.staffUser.create({ data: { email: `${stamp}-a@example.test`, name: 'Tech A' } })
-  const staffB = await prisma.staffUser.create({ data: { email: `${stamp}-b@example.test`, name: 'Tech B' } })
+  const staffA = await prisma.staffUser.create({ data: { orgMemberships: { create: { orgId: 'org_0' } }, email: `${stamp}-a@example.test`, name: 'Tech A' } })
+  const staffB = await prisma.staffUser.create({ data: { orgMemberships: { create: { orgId: 'org_0' } }, email: `${stamp}-b@example.test`, name: 'Tech B' } })
   staffAId = staffA.id
   staffBId = staffB.id
   staffIds.push(staffA.id, staffB.id)

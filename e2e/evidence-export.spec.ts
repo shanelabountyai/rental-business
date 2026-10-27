@@ -30,7 +30,7 @@ async function createStaff(
   scope?: { propertyId?: string; legalEntityId?: string },
 ) {
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email: `evidence-${randomUUID()}@example.test`,
       name: 'Evidence Test',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -51,7 +51,7 @@ async function createStaff(
 
 async function seedTenancy() {
   const entity = await prisma.legalEntity.create({
-    data: { name: `Evidence LLC-${randomUUID().slice(0, 8)}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Evidence LLC-${randomUUID().slice(0, 8)}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -69,7 +69,7 @@ async function seedTenancy() {
   propertyIds.push(property.id)
 
   const tenant = await prisma.tenant.create({
-    data: {
+    data: { orgId: 'org_0',
       firstName: 'Robin',
       lastName: `E-${randomUUID().slice(0, 6)}`,
       // Never a literal - a crashed run left an active tenant holding a

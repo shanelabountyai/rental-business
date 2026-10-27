@@ -18,7 +18,7 @@ const taskIds: string[] = []
 
 beforeAll(async () => {
   const stamp = `unanswered-${randomUUID().slice(0, 8)}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   const property = await prisma.property.create({
     data: {
@@ -45,7 +45,7 @@ afterAll(async () => {
 })
 
 async function seedTenant(name: string) {
-  return prisma.tenant.create({ data: { firstName: name, lastName: `Test-${randomUUID().slice(0, 6)}` } })
+  return prisma.tenant.create({ data: { orgId: 'org_0', firstName: name, lastName: `Test-${randomUUID().slice(0, 6)}` } })
 }
 
 async function seedThread(tenantId: string, key: string) {

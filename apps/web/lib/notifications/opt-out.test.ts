@@ -37,7 +37,7 @@ const taskIds: string[] = []
 
 beforeAll(async () => {
   const stamp = `optout-${randomUUID().slice(0, 8)}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   const property = await prisma.property.create({
     data: {
@@ -57,7 +57,7 @@ beforeAll(async () => {
   })
   unitId = unit.id
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Opt', lastName: `Out-${randomUUID().slice(0, 6)}`, phone: uniquePhone() },
+    data: { orgId: 'org_0', firstName: 'Opt', lastName: `Out-${randomUUID().slice(0, 6)}`, phone: uniquePhone() },
   })
   tenantId = tenant.id
   // SMS consent, so the texts below are really attempted. Until R-216 the

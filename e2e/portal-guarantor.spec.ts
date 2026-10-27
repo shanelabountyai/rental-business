@@ -30,7 +30,7 @@ const guarantorIds: string[] = []
 async function seedGuaranteedLease() {
   const stamp = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `Guarantor LLC-${stamp}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Guarantor LLC-${stamp}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -50,7 +50,7 @@ async function seedGuaranteedLease() {
     data: { propertyId: property.id, name: `U-${stamp}`, status: 'OCCUPIED' },
   })
   const tenant = await prisma.tenant.create({
-    data: {
+    data: { orgId: 'org_0',
       firstName: `Tenant${stamp}`,
       lastName: `Cosign-${stamp}`,
       email: `tenant-${stamp}@example.test`,

@@ -27,7 +27,7 @@ let ruleId: string
 
 beforeAll(async () => {
   const stamp = `rentchg-${randomUUID().slice(0, 8)}`
-  entityId = (await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })).id
+  entityId = (await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })).id
   propertyId = (
     await prisma.property.create({
       data: {
@@ -176,7 +176,7 @@ describe('telling the tenant an increase was withdrawn', () => {
   async function withTenant(servedAt: Date | null) {
     const made = await scheduled({ servedAt })
     const tenant = await prisma.tenant.create({
-      data: { firstName: 'Pat', lastName: 'Renter', email: `pat-${randomUUID()}@example.test` },
+      data: { orgId: 'org_0', firstName: 'Pat', lastName: 'Renter', email: `pat-${randomUUID()}@example.test` },
     })
     await prisma.leaseTenant.create({ data: { leaseId: made.lease.id, tenantId: tenant.id, isPrimary: true } })
     return made.change

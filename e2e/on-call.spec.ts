@@ -24,7 +24,7 @@ const vendorIds: string[] = []
 async function seed() {
   const stamp = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `OnCall LLC-${stamp}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `OnCall LLC-${stamp}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -45,12 +45,12 @@ async function seed() {
   })
   unitIds.push(unit.id)
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Rae', lastName: `Night-${stamp}`, phone: uniquePhone() },
+    data: { orgId: 'org_0', firstName: 'Rae', lastName: `Night-${stamp}`, phone: uniquePhone() },
   })
   tenantIds.push(tenant.id)
 
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email: `oncall-${randomUUID()}@example.test`,
       name: 'Night Manager',
       phone: uniquePhone(),
@@ -207,7 +207,7 @@ test.describe('the emergency response panel', () => {
     // behind, and two rows sharing a phone makes the link locator ambiguous.
     const phone = `+1512555${String(Math.floor(Math.random() * 9000) + 1000)}`
     const vendor = await prisma.vendor.create({
-      data: {
+      data: { orgId: 'org_0',
         name: `Nightshift Plumbing-${randomUUID().slice(0, 6)}`,
         trades: ['plumbing'],
         phone,

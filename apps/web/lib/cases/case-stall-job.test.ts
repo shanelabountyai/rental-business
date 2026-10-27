@@ -49,7 +49,7 @@ const ticketIds: string[] = []
 
 beforeAll(async () => {
   const stamp = `stall-${randomUUID().slice(0, 8)}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   const property = await prisma.property.create({
     data: {
@@ -69,7 +69,7 @@ beforeAll(async () => {
   })
   unitId = unit.id
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Sam', lastName: `Resident-${randomUUID().slice(0, 6)}` },
+    data: { orgId: 'org_0', firstName: 'Sam', lastName: `Resident-${randomUUID().slice(0, 6)}` },
   })
   tenantId = tenant.id
   const lease = await prisma.lease.create({
@@ -78,7 +78,7 @@ beforeAll(async () => {
   leaseId = lease.id
   await prisma.leaseTenant.create({ data: { leaseId, tenantId, isPrimary: true } })
   const staff = await prisma.staffUser.create({
-    data: { email: `stall-${randomUUID()}@example.test`, name: 'Case Handler' },
+    data: { orgMemberships: { create: { orgId: 'org_0' } }, email: `stall-${randomUUID()}@example.test`, name: 'Case Handler' },
   })
   staffId = staff.id
   const policy = await prisma.insurancePolicy.create({
@@ -335,7 +335,7 @@ describe('insurance claim silent past the mitigation target', () => {
 describe('party-change amendment unsigned with an unscreened occupant', () => {
   async function seedIncomingParty(decision: string | null) {
     const incomingTenant = await prisma.tenant.create({
-      data: { firstName: 'Alex', lastName: `Incoming-${randomUUID().slice(0, 6)}` },
+      data: { orgId: 'org_0', firstName: 'Alex', lastName: `Incoming-${randomUUID().slice(0, 6)}` },
     })
     incomingTenantIds.push(incomingTenant.id)
     const applicant = await prisma.applicant.create({

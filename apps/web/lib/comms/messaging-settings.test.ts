@@ -24,7 +24,7 @@ async function setAssignee(staffUserId: string | null) {
 
 async function staff(roleKey: string, propertyId: string) {
   const person = await prisma.staffUser.create({
-    data: { email: `assignee-${randomUUID()}@example.test`, name: 'Reply Assignee' },
+    data: { orgMemberships: { create: { orgId: 'org_0' } }, email: `assignee-${randomUUID()}@example.test`, name: 'Reply Assignee' },
   })
   staffIds.push(person.id)
   const role = await prisma.role.findUniqueOrThrow({ where: { key: roleKey } })
@@ -37,7 +37,7 @@ beforeAll(async () => {
     where: { orgId: 'org_0' },
     select: { replyTaskAssigneeStaffId: true },
   })
-  const entity = await prisma.legalEntity.create({ data: { name: `assignee-${Date.now()}`, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: `assignee-${Date.now()}`, type: 'LLC' } })
   for (const name of ['covered', 'uncovered']) {
     const property = await prisma.property.create({
       data: {

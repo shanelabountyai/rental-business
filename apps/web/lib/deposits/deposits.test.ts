@@ -47,7 +47,7 @@ const tenantIds: string[] = []
 
 beforeAll(async () => {
   const stamp = `deposits-${randomUUID().slice(0, 8)}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   const property = await prisma.property.create({
     data: {
@@ -63,7 +63,7 @@ beforeAll(async () => {
   })
   propertyId = property.id
   const staff = await prisma.staffUser.create({
-    data: { email: `deposits-${randomUUID()}@example.test`, name: 'Priya Owner' },
+    data: { orgMemberships: { create: { orgId: 'org_0' } }, email: `deposits-${randomUUID()}@example.test`, name: 'Priya Owner' },
   })
   session.staffId = staff.id
   const owner = await prisma.role.findUniqueOrThrow({ where: { key: 'owner' } })
@@ -92,7 +92,7 @@ async function endedTenancy(options: { heldCents: number; deductionCents?: numbe
     data: { propertyId, name: `U-${randomUUID().slice(0, 6)}`, status: 'VACANT' },
   })
   const tenant = await prisma.tenant.create({
-    data: {
+    data: { orgId: 'org_0',
       firstName: 'Noor',
       lastName: `Paidup-${randomUUID().slice(0, 6)}`,
       email: `noor-${randomUUID().slice(0, 8)}@example.test`,

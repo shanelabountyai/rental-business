@@ -34,7 +34,7 @@ const leaseIds: string[] = []
 async function seedTenancy() {
   const stamp = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `Consent LLC-${stamp}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Consent LLC-${stamp}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -56,7 +56,7 @@ async function seedTenancy() {
   // `uniquePhone()`, never a literal: a crashed run leaving a live tenant on
   // a hard-coded number is what makes inbound SMS routing refuse to guess.
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Dana', lastName: `Consenting-${stamp}`, phone: uniquePhone() },
+    data: { orgId: 'org_0', firstName: 'Dana', lastName: `Consenting-${stamp}`, phone: uniquePhone() },
   })
   tenantIds.push(tenant.id)
   const lease = await prisma.lease.create({
@@ -83,7 +83,7 @@ async function seedOwner() {
   const email = `consent-${randomUUID()}@example.test`
   const { secret } = createTotpEnrolment(email)
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Consent Owner',
       credential: {

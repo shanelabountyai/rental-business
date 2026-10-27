@@ -35,7 +35,7 @@ const prospectIds: string[] = []
 async function createStaff() {
   const unique = randomUUID().slice(0, 8)
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email: `selfshow-${unique}@example.test`,
       name: `Self Showing Owner ${unique}`,
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -50,7 +50,7 @@ async function createStaff() {
 async function seedLockedUnit(status: 'VACANT' | 'OCCUPIED' = 'VACANT') {
   const unique = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `SelfShow LLC-${unique}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `SelfShow LLC-${unique}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({

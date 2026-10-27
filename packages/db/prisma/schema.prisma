@@ -613,11 +613,9 @@ model Organization {
 
 model LegalEntity {
   id                      String          @id @default(cuid())
-  /// Immutable once written (trigger). The "org_0" default is a bridge so the
-  /// ~105 fixture and seed creates keep working until R-301 gives them an
-  /// org and R-288 gives the session one; R-301 drops it, after which a
-  /// create that names no org fails instead of landing in org #0.
-  orgId                   String          @default("org_0")
+  /// Immutable once written (trigger). No default (R-301, D-348): a create
+  /// that names no org fails instead of landing in org #0.
+  orgId                   String
   organization            Organization    @relation(fields: [orgId], references: [id], onDelete: Restrict)
   name                    String
   type                    LegalEntityType
@@ -1650,7 +1648,7 @@ model Applicant {
 model ScreeningCriteria {
   id           String       @id @default(cuid())
   /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
-  orgId        String       @default("org_0")
+  orgId        String
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   version      Int
 
@@ -2434,7 +2432,7 @@ model StaffUser {
 model Tenant {
   id                String       @id @default(cuid())
   /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
-  orgId             String       @default("org_0")
+  orgId             String
   organization      Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   firstName         String
   lastName          String
@@ -2518,7 +2516,7 @@ model Guarantor {
 model Vendor {
   id                 String       @id @default(cuid())
   /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
-  orgId              String       @default("org_0")
+  orgId              String
   organization       Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   name               String
   /// Free-form trade tags ("plumbing", "hvac"). Not an enum - the trade list
@@ -5518,7 +5516,7 @@ model WorkOrder {
 model PreventiveMaintenanceTemplate {
   id               String       @id @default(cuid())
   /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
-  orgId            String       @default("org_0")
+  orgId            String
   organization     Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   name             String
   /// Matched against `Vendor.trades` for auto-assignment on a batch run
@@ -6114,7 +6112,7 @@ model NotificationDelivery {
 model NotificationPreference {
   id            String                    @id @default(cuid())
   /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
-  orgId         String                    @default("org_0")
+  orgId         String
   organization  Organization              @relation(fields: [orgId], references: [id], onDelete: Restrict)
   recipientType NotificationRecipientType
   recipientId   String
@@ -6142,7 +6140,7 @@ model NotificationPreference {
 model MessageTemplate {
   id               String       @id @default(cuid())
   /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
-  orgId            String       @default("org_0")
+  orgId            String
   organization     Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   /// Free text, shown in the picker. Named by the person who will look for it.
   name             String
@@ -6286,7 +6284,7 @@ model AnnouncementSchedule {
 model Audience {
   id               String       @id @default(cuid())
   /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
-  orgId            String       @default("org_0")
+  orgId            String
   organization     Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   name             String
   /// What the composer posts, `ALL` or `TYPE:value`, parsed by `parseSegment`.
@@ -6632,7 +6630,7 @@ model NoticeDelivery {
 model InspectionTemplate {
   id               String          @id @default(cuid())
   /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
-  orgId            String          @default("org_0")
+  orgId            String
   organization     Organization    @relation(fields: [orgId], references: [id], onDelete: Restrict)
   name             String
   /// An ordered array of `{ room: string, item: string }` objects -
@@ -6803,7 +6801,7 @@ model InspectionItem {
 model DocumentTemplate {
   id               String       @id @default(cuid())
   /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
-  orgId            String       @default("org_0")
+  orgId            String
   organization     Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   /// Free text, shown in the picker.
   name             String
@@ -7479,7 +7477,7 @@ model ReceivableWriteOff {
 model MessagingSettings {
   id                       String       @id @default("default")
   /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
-  orgId                    String       @default("org_0")
+  orgId                    String
   organization             Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   /// Names the business in every announcement's SMS footer and fills
   /// `{{company.name}}`. Null means COMPANY_NAME.

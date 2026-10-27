@@ -113,6 +113,12 @@ async function upsertStaff(persona: Persona, passwordHash: string) {
         credential: { create: { passwordHash } },
       },
     })
+    // A grant needs a live membership in its org (R-301): the demo is org #0.
+    await tx.orgMembership.upsert({
+      where: { orgId_staffUserId: { orgId: 'org_0', staffUserId: user.id } },
+      update: { removedAt: null },
+      create: { orgId: 'org_0', staffUserId: user.id },
+    })
 
     // Assignments are additive rows, and a re-run must not stack a second
     // identical grant. Revoke what this script granted before, then grant.

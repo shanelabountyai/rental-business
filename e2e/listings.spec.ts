@@ -33,7 +33,7 @@ const listingIds: string[] = []
 async function createStaff() {
   const unique = randomUUID().slice(0, 8)
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email: `listing-${unique}@example.test`,
       name: `Listing Test ${unique}`,
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -48,7 +48,7 @@ async function createStaff() {
 async function seedUnit() {
   const unique = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `Listing LLC-${unique}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Listing LLC-${unique}`, type: 'LLC' },
   })
   const property = await prisma.property.create({
     data: {

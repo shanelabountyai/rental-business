@@ -33,7 +33,7 @@ const templateIds: string[] = []
 async function seedTenancy(startsOn = '2099-01-01') {
   const stamp = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `Tpl LLC-${stamp}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Tpl LLC-${stamp}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -54,7 +54,7 @@ async function seedTenancy(startsOn = '2099-01-01') {
   })
   unitIds.push(unit.id)
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Marisol', lastName: `Tpl-${stamp}`, phone: uniquePhone() },
+    data: { orgId: 'org_0', firstName: 'Marisol', lastName: `Tpl-${stamp}`, phone: uniquePhone() },
   })
   tenantIds.push(tenant.id)
   const lease = await prisma.lease.create({
@@ -79,7 +79,7 @@ async function seedStaff(role: 'owner' | 'manager') {
   const email = `tpl-${role}-${randomUUID()}@example.test`
   const { secret } = createTotpEnrolment(email)
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: role === 'owner' ? 'Template Owner' : 'Template Manager',
       credential: {
@@ -139,7 +139,7 @@ test.describe('writing a template (COMM-03)', () => {
     // stranger. Granted BEFORE the page loads: the preview's values are
     // resolved server-side once, at render.
     const propertyOwner = await prisma.staffUser.create({
-      data: {
+      data: { orgMemberships: { create: { orgId: 'org_0' } },
         email: `tpl-prop-owner-${randomUUID()}@example.test`,
         name: 'Priya Okafor',
         phone: '(512) 555-0188',
@@ -297,7 +297,7 @@ test.describe('version history (R-264)', () => {
 test.describe('approving a translation — the rule COMM-03 rests on', () => {
   async function seedLegalTemplateWithUnapprovedSpanish(staffId: string) {
     const template = await prisma.messageTemplate.create({
-      data: {
+      data: { orgId: 'org_0',
         name: `Notice to vacate ${randomUUID().slice(0, 6)}`,
         kind: 'LEGAL',
         subject: null,

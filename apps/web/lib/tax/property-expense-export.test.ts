@@ -71,12 +71,12 @@ async function expense(data: {
 
 beforeAll(async () => {
   const stamp = `r193-${Date.now()}`
-  entityId = (await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })).id
-  otherEntityId = (await prisma.legalEntity.create({ data: { name: `${stamp}-other`, type: 'LLC' } })).id
+  entityId = (await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })).id
+  otherEntityId = (await prisma.legalEntity.create({ data: { orgId: 'org_0', name: `${stamp}-other`, type: 'LLC' } })).id
   oakId = await makeProperty(entityId, `Oak-${stamp}`)
   elmId = await makeProperty(entityId, `Elm-${stamp}`)
   const otherHouse = await makeProperty(otherEntityId, `Ash-${stamp}`)
-  staffId = (await prisma.staffUser.create({ data: { email: `${stamp}@example.test`, name: 'R193 Tester' } })).id
+  staffId = (await prisma.staffUser.create({ data: { orgMemberships: { create: { orgId: 'org_0' } }, email: `${stamp}@example.test`, name: 'R193 Tester' } })).id
 
   await expense({ propertyId: oakId, description: 'in-year one-off', paidOn: '2026-01-30' })
   await expense({ propertyId: oakId, description: 'last-year one-off', paidOn: '2025-12-30' })

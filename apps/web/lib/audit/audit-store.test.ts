@@ -155,7 +155,7 @@ describe('atomicity', () => {
     await expect(
       prisma.$transaction(async (tx) => {
         const entity = await tx.legalEntity.create({
-          data: { name: marker, type: 'LLC' },
+          data: { orgId: 'org_0', name: marker, type: 'LLC' },
         })
         await recordAudit(tx, {
           actor: SYSTEM,

@@ -352,6 +352,8 @@ From the 2026-10-20 code audit. "Leak" = org A reads org B; "collision" = a uniq
 | 105 test files create a `LegalEntity` with no org; `uniqueStateCode()` exists to dodge the global jurisdiction unique; jobs tests assert exact run counts | `e2e/fixtures.ts`; `lib/jobs/jobs.test.ts` | R-301 (`uniqueOrg()` fixture) |
 | Cross-property tests exist, cross-org do not | `lib/auth/scoping.test.ts`; `cross-property-ids.test.ts` | R-286 |
 
+**Settled by R-301 (D-348):** every fixture and seed names its org explicitly, and both org #0 bridges are gone. There is no `uniqueOrg()` helper, because a second org is a one-line create and no e2e spec can reach one before host routing is configured. The demo stays in org #0.
+
 ## 10. Backlog rows, decisions and open questions
 
 Appended to `06-backlog.md` as **Milestone 19** and to `07-decisions.md` as **D-315–D-320** and **OQ-23–OQ-26** in the same commit as this document. Refined in place, not duplicated: R-272, R-273 (10DLC rate limit and status → depend on R-292), R-274 (org root → un-gated by D-315, spec §1), R-275 (`OrgIntegration` → spec §1.2, §3.1), R-276 (branding + custom domain → custom domain only; brand and subdomain move to R-289), R-277 (Connect → un-gated by D-316, spec §2), R-278 (Oklahoma → feeds §7.2).

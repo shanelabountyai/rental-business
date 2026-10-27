@@ -55,7 +55,7 @@ async function createOwner(legalEntityId: string) {
   const email = `gp4-owner-${unique}@example.test`
   const enrolment = createTotpEnrolment(email)
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: `GP4 Owner ${unique}`,
       credential: {
@@ -153,7 +153,7 @@ test('Golden Path 4: what a stranger is allowed to cause', async ({ page, browse
 
   const unique = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `GP4 LLC-${unique}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `GP4 LLC-${unique}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -306,7 +306,7 @@ test('Golden Path 4: what a stranger is allowed to cause', async ({ page, browse
   //    against a state change LEASING made, not showings.
   // ==================================================================
   const tenant = await prisma.tenant.create({
-    data: {
+    data: { orgId: 'org_0',
       firstName: 'Dorothy',
       lastName: `Vaughan-${unique}`,
       email: strangerEmail,

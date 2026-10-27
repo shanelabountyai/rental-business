@@ -38,7 +38,7 @@ const tenantIds: string[] = []
 async function seedTenancy({ contact = true }: { contact?: boolean } = {}) {
   const stamp = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `Plan LLC-${stamp}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Plan LLC-${stamp}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -60,7 +60,7 @@ async function seedTenancy({ contact = true }: { contact?: boolean } = {}) {
     data: { propertyId: property.id, name: `U-${stamp}`, status: 'OCCUPIED' },
   })
   const tenant = await prisma.tenant.create({
-    data: {
+    data: { orgId: 'org_0',
       firstName: 'Plan',
       lastName: `Tenant-${stamp}`,
       email: contact ? `plan-tenant-${stamp}@example.test` : null,
@@ -87,7 +87,7 @@ async function seedTenancy({ contact = true }: { contact?: boolean } = {}) {
 async function seedOwner() {
   const email = `plan-${randomUUID()}@example.test`
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Plan Owner',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },

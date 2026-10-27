@@ -24,7 +24,7 @@ const unroutedPhones: string[] = []
 
 async function seedTenant(phone: string) {
   const entity = await prisma.legalEntity.create({
-    data: { name: `Sms LLC-${randomUUID().slice(0, 8)}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Sms LLC-${randomUUID().slice(0, 8)}`, type: 'LLC' },
   })
   const property = await prisma.property.create({
     data: {
@@ -41,7 +41,7 @@ async function seedTenant(phone: string) {
   propertyIds.push(property.id)
 
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Text', lastName: `Sender-${randomUUID().slice(0, 6)}`, phone },
+    data: { orgId: 'org_0', firstName: 'Text', lastName: `Sender-${randomUUID().slice(0, 6)}`, phone },
   })
   tenantIds.push(tenant.id)
 

@@ -22,7 +22,7 @@ async function createStaff(
 ) {
   const email = `phonelog-${randomUUID()}@example.test`
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Phone Log Test',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -43,7 +43,7 @@ async function createStaff(
 
 async function seedCaller(propertyName = 'Phonelog House') {
   const entity = await prisma.legalEntity.create({
-    data: { name: `Phonelog LLC-${randomUUID().slice(0, 8)}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Phonelog LLC-${randomUUID().slice(0, 8)}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -64,7 +64,7 @@ async function seedCaller(propertyName = 'Phonelog House') {
     data: { propertyId: property.id, name: `U-${randomUUID().slice(0, 6)}`, status: 'OCCUPIED' },
   })
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Cara', lastName: `Caller-${randomUUID().slice(0, 6)}`, phone: uniquePhone() },
+    data: { orgId: 'org_0', firstName: 'Cara', lastName: `Caller-${randomUUID().slice(0, 6)}`, phone: uniquePhone() },
   })
   tenantIds.push(tenant.id)
   const lease = await prisma.lease.create({

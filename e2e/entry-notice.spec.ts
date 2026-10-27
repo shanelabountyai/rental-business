@@ -23,7 +23,7 @@ const noticeIds: string[] = []
 async function createStaff() {
   const unique = randomUUID().slice(0, 8)
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email: `entry-${unique}@example.test`,
       name: `Entry Test ${unique}`,
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -40,7 +40,7 @@ async function seedWorkOrder(
 ) {
   const unique = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `Entry LLC-${unique}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Entry LLC-${unique}`, type: 'LLC' },
   })
   const property = await prisma.property.create({
     data: {
@@ -66,8 +66,8 @@ async function seedWorkOrder(
     // product cannot serve them through the portal (R-210, R-228).
     data:
       options.portalReachable === false
-        ? { firstName: 'Nadia', lastName: `Entry-${unique}` }
-        : { firstName: 'Nadia', lastName: `Entry-${unique}`, phone: uniquePhone(), email: `t-${unique}@example.test` },
+        ? { orgId: 'org_0', firstName: 'Nadia', lastName: `Entry-${unique}` }
+        : { orgId: 'org_0', firstName: 'Nadia', lastName: `Entry-${unique}`, phone: uniquePhone(), email: `t-${unique}@example.test` },
   })
   tenantIds.push(tenant.id)
   const lease = await prisma.lease.create({

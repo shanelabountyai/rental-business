@@ -14,19 +14,19 @@ const templateIds: string[] = []
 beforeAll(async () => {
   const stamp = `insptemplate-${randomUUID().slice(0, 8)}`
   const staff = await prisma.staffUser.create({
-    data: { email: `${stamp}@example.test`, name: 'Checklist Author' },
+    data: { orgMemberships: { create: { orgId: 'org_0' } }, email: `${stamp}@example.test`, name: 'Checklist Author' },
   })
   staffIds.push(staff.id)
 
   const active = await prisma.inspectionTemplate.create({
-    data: {
+    data: { orgId: 'org_0',
       name: `${stamp}-active`,
       items: [{ room: 'Kitchen', item: 'Sink' }],
       createdByStaffId: staff.id,
     },
   })
   const retired = await prisma.inspectionTemplate.create({
-    data: {
+    data: { orgId: 'org_0',
       name: `${stamp}-retired`,
       items: [{ room: 'Bath', item: 'Tub' }],
       active: false,

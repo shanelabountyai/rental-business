@@ -18,7 +18,7 @@ const leaseIds: string[] = []
 
 beforeAll(async () => {
   const stamp = `duenotice-${Date.now()}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   const property = await prisma.property.create({
     data: {
@@ -54,7 +54,7 @@ async function seedPayer(args: {
   hasStripeCustomer?: boolean
 }) {
   const tenant = await prisma.tenant.create({
-    data: {
+    data: { orgId: 'org_0',
       firstName: 'Robin',
       lastName: `DueNotice-${randomUUID().slice(0, 6)}`,
       email: `duenotice-${randomUUID().slice(0, 8)}@example.test`,

@@ -30,7 +30,7 @@ let tenantId: string
 
 beforeAll(async () => {
   const stamp = `notice-${Date.now()}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   const property = await prisma.property.create({
     data: {
@@ -49,7 +49,7 @@ beforeAll(async () => {
     data: { propertyId, name: `U-${randomUUID().slice(0, 6)}`, status: 'OCCUPIED' },
   })
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Nadia', lastName: `Notice-${randomUUID().slice(0, 6)}` },
+    data: { orgId: 'org_0', firstName: 'Nadia', lastName: `Notice-${randomUUID().slice(0, 6)}` },
   })
   tenantId = tenant.id
   const lease = await prisma.lease.create({

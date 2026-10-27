@@ -77,7 +77,7 @@ function violationsOn(page: import('@playwright/test').Page): Promise<Violation[
 async function seedManager() {
   const stamp = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `CSP LLC-${stamp}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `CSP LLC-${stamp}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -96,7 +96,7 @@ async function seedManager() {
 
   const email = `csp-${randomUUID()}@example.test`
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'CSP Manager',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },

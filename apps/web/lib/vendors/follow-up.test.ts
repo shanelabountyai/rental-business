@@ -41,7 +41,7 @@ let staffId: string
 
 beforeAll(async () => {
   const stamp = `followup-${randomUUID().slice(0, 8)}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   const property = await prisma.property.create({
     data: {
@@ -61,7 +61,7 @@ beforeAll(async () => {
   })
   unitId = unit.id
   const vendor = await prisma.vendor.create({
-    data: { name: `Pipes-${randomUUID().slice(0, 6)}`, trades: ['PLUMBING'] },
+    data: { orgId: 'org_0', name: `Pipes-${randomUUID().slice(0, 6)}`, trades: ['PLUMBING'] },
   })
   vendorId = vendor.id
 
@@ -70,7 +70,7 @@ beforeAll(async () => {
   // the people told are the people who can act.
   const role = await prisma.role.findUniqueOrThrow({ where: { key: 'manager' } })
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email: `followup-${randomUUID()}@example.test`,
       name: 'Dispatch Manager',
     },

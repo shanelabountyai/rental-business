@@ -31,7 +31,7 @@ function daysFromNow(n: number): Date {
 
 async function seedProperty() {
   const stamp = randomUUID().slice(0, 8)
-  const entity = await prisma.legalEntity.create({ data: { name: `Reports LLC-${stamp}`, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: `Reports LLC-${stamp}`, type: 'LLC' } })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
     data: {
@@ -55,7 +55,7 @@ async function seedActiveLeaseExpiringSoon(propertyId: string, stamp: string) {
   })
   unitIds.push(unit.id)
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Cash', lastName: `Flow-${stamp}`, email: `cash-${stamp}@example.test` },
+    data: { orgId: 'org_0', firstName: 'Cash', lastName: `Flow-${stamp}`, email: `cash-${stamp}@example.test` },
   })
   tenantIds.push(tenant.id)
   const lease = await prisma.lease.create({
@@ -110,7 +110,7 @@ async function seedRefundAwaitingPayment(propertyId: string, stamp: string) {
 async function seedManager(propertyId: string) {
   const email = `reports-${randomUUID()}@example.test`
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Reports Manager',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },

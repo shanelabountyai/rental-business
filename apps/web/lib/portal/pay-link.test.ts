@@ -24,7 +24,7 @@ let workOrderId: string
 
 beforeAll(async () => {
   const stamp = `paylink-${randomUUID().slice(0, 8)}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   const property = await prisma.property.create({
     data: {
@@ -46,11 +46,11 @@ beforeAll(async () => {
   const tenant = await prisma.tenant.create({
     // NO EMAIL — the persona this exists for: a phone and nothing else, who
     // cannot get through an email-only portal login at all.
-    data: { firstName: 'Dana', lastName: `Pay-${randomUUID().slice(0, 6)}`, email: null },
+    data: { orgId: 'org_0', firstName: 'Dana', lastName: `Pay-${randomUUID().slice(0, 6)}`, email: null },
   })
   tenantId = tenant.id
   const other = await prisma.tenant.create({
-    data: { firstName: 'Someone', lastName: `Else-${randomUUID().slice(0, 6)}` },
+    data: { orgId: 'org_0', firstName: 'Someone', lastName: `Else-${randomUUID().slice(0, 6)}` },
   })
   otherTenantId = other.id
 
@@ -242,7 +242,7 @@ describe('issuePayLink / verifyPayLink', () => {
 
     it('refuses once the tenant is deactivated', async () => {
       const gone = await prisma.tenant.create({
-        data: { firstName: 'Gone', lastName: `Away-${randomUUID().slice(0, 6)}` },
+        data: { orgId: 'org_0', firstName: 'Gone', lastName: `Away-${randomUUID().slice(0, 6)}` },
       })
       const lease = await prisma.lease.create({
         data: {

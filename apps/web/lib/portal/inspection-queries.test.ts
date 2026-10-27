@@ -26,7 +26,7 @@ function scopeFor(leaseIds: string[]): TenantScope {
 
 beforeAll(async () => {
   const stamp = `tenantinsp-${randomUUID().slice(0, 8)}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   const property = await prisma.property.create({
     data: {
@@ -46,7 +46,7 @@ beforeAll(async () => {
   })
   unitId = unit.id
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Sam', lastName: `Review-${randomUUID().slice(0, 6)}` },
+    data: { orgId: 'org_0', firstName: 'Sam', lastName: `Review-${randomUUID().slice(0, 6)}` },
   })
   tenantId = tenant.id
   const lease = await prisma.lease.create({

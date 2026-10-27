@@ -50,7 +50,7 @@ async function createStaff(roleKey: string | null, scopedToPropertyId?: string) 
 
 async function createProperty(entityName: string, propertyName: string) {
   const entity = await prisma.legalEntity.create({
-    data: { name: `${entityName}-${randomUUID().slice(0, 8)}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `${entityName}-${randomUUID().slice(0, 8)}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({

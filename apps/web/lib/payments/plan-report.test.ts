@@ -23,7 +23,7 @@ afterAll(async () => {
 describe('planOfferPatternByTenant (R-231, review finding 10)', () => {
   it('attributes a joint lease to the PRIMARY tenant, not whichever row comes back first', async () => {
     const stamp = `plan-joint-${Date.now()}`
-    const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+    const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
     const property = await prisma.property.create({
       data: {
         legalEntityId: entity.id,
@@ -50,11 +50,11 @@ describe('planOfferPatternByTenant (R-231, review finding 10)', () => {
       },
     })
     const coTenant = await prisma.tenant.create({
-      data: { firstName: 'Zed', lastName: `CoTenant-${randomUUID().slice(0, 6)}` },
+      data: { orgId: 'org_0', firstName: 'Zed', lastName: `CoTenant-${randomUUID().slice(0, 6)}` },
     })
     coTenantId = coTenant.id
     const primaryTenant = await prisma.tenant.create({
-      data: { firstName: 'Ann', lastName: `Primary-${randomUUID().slice(0, 6)}` },
+      data: { orgId: 'org_0', firstName: 'Ann', lastName: `Primary-${randomUUID().slice(0, 6)}` },
     })
     primaryTenantId = primaryTenant.id
     // Co-tenant inserted FIRST and is not primary.

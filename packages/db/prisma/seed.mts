@@ -319,7 +319,7 @@ async function seedScreeningCriteria() {
   }
 
   await prisma.screeningCriteria.create({
-    data: {
+    data: { orgId: 'org_0',
       version: 1,
       effectiveFrom: new Date('2026-01-01'),
       // Common industry default (3x rent) - no statute sets this number,

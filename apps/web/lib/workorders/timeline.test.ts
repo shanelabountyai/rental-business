@@ -27,7 +27,7 @@ const workOrderIds: string[] = []
 
 beforeAll(async () => {
   const stamp = `timeline-${Date.now()}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   const property = await prisma.property.create({
     data: {
@@ -47,15 +47,15 @@ beforeAll(async () => {
   })
   unitId = unit.id
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Rae', lastName: `Timeline-${randomUUID().slice(0, 6)}` },
+    data: { orgId: 'org_0', firstName: 'Rae', lastName: `Timeline-${randomUUID().slice(0, 6)}` },
   })
   tenantId = tenant.id
   const vendor = await prisma.vendor.create({
-    data: { name: `Vendor-${randomUUID().slice(0, 6)}`, trades: ['plumbing'] },
+    data: { orgId: 'org_0', name: `Vendor-${randomUUID().slice(0, 6)}`, trades: ['plumbing'] },
   })
   vendorId = vendor.id
   const staff = await prisma.staffUser.create({
-    data: { email: `timeline-${randomUUID()}@example.test`, name: 'Alex' },
+    data: { orgMemberships: { create: { orgId: 'org_0' } }, email: `timeline-${randomUUID()}@example.test`, name: 'Alex' },
   })
   staffId = staff.id
 })

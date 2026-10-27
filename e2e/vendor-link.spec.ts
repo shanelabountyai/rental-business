@@ -25,7 +25,7 @@ const accessCodeIds: string[] = []
 async function createStaff(roleKey = 'owner') {
   const unique = randomUUID().slice(0, 8)
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email: `vl-${unique}@example.test`,
       name: `Vendor Link Test ${unique}`,
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -40,7 +40,7 @@ async function createStaff(roleKey = 'owner') {
 async function seedJob(options: { withAccessCode?: boolean; withTenant?: boolean } = {}) {
   const unique = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `VL LLC-${unique}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `VL LLC-${unique}`, type: 'LLC' },
   })
   const property = await prisma.property.create({
     data: {
@@ -63,7 +63,7 @@ async function seedJob(options: { withAccessCode?: boolean; withTenant?: boolean
   let tenantPhone: string | null = null
   if (options.withTenant !== false) {
     const tenant = await prisma.tenant.create({
-      data: { firstName: 'Vera', lastName: `Tenant-${unique}`, phone: uniquePhone() },
+      data: { orgId: 'org_0', firstName: 'Vera', lastName: `Tenant-${unique}`, phone: uniquePhone() },
     })
     tenantPhone = tenant.phone
     tenantIds.push(tenant.id)
@@ -94,7 +94,7 @@ async function seedJob(options: { withAccessCode?: boolean; withTenant?: boolean
   }
 
   const vendor = await prisma.vendor.create({
-    data: { name: `Vendor-${unique}`, trades: ['plumbing'], phone: uniquePhone() },
+    data: { orgId: 'org_0', name: `Vendor-${unique}`, trades: ['plumbing'], phone: uniquePhone() },
   })
   vendorIds.push(vendor.id)
 
@@ -553,7 +553,7 @@ test.describe('the link refuses', () => {
     const token = await dispatchAndCaptureToken(page, workOrder.id, workOrder.propertyId)
 
     const other = await prisma.vendor.create({
-      data: { name: `Replacement-${randomUUID().slice(0, 6)}`, trades: ['plumbing'] },
+      data: { orgId: 'org_0', name: `Replacement-${randomUUID().slice(0, 6)}`, trades: ['plumbing'] },
     })
     vendorIds.push(other.id)
     await prisma.workOrder.update({

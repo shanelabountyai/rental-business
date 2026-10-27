@@ -15,7 +15,7 @@ let coTenantId: string
 
 beforeAll(async () => {
   const stamp = `rentroll-${Date.now()}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   const property = await prisma.property.create({
     data: {
       legalEntityId: entity.id,
@@ -44,11 +44,11 @@ beforeAll(async () => {
   leaseId = lease.id
 
   const coTenant = await prisma.tenant.create({
-    data: { firstName: 'Zed', lastName: `CoTenant-${randomUUID().slice(0, 6)}` },
+    data: { orgId: 'org_0', firstName: 'Zed', lastName: `CoTenant-${randomUUID().slice(0, 6)}` },
   })
   coTenantId = coTenant.id
   const primaryTenant = await prisma.tenant.create({
-    data: { firstName: 'Ann', lastName: `Primary-${randomUUID().slice(0, 6)}` },
+    data: { orgId: 'org_0', firstName: 'Ann', lastName: `Primary-${randomUUID().slice(0, 6)}` },
   })
   primaryTenantId = primaryTenant.id
 

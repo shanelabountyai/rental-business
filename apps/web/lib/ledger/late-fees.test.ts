@@ -24,7 +24,7 @@ let leaseId: string
 
 beforeAll(async () => {
   const stamp = `latefee-${Date.now()}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   const property = await prisma.property.create({
     data: {
@@ -44,7 +44,7 @@ beforeAll(async () => {
   })
   unitId = unit.id
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Sam', lastName: `Late-${randomUUID().slice(0, 6)}` },
+    data: { orgId: 'org_0', firstName: 'Sam', lastName: `Late-${randomUUID().slice(0, 6)}` },
   })
   tenantId = tenant.id
   const lease = await prisma.lease.create({
@@ -112,7 +112,7 @@ describe('assessLateFees', () => {
     // carries it. Every other fixture here wrote the CHARGE entry itself,
     // which is the one state in which this defect cannot show.
     const tenant = await prisma.tenant.create({
-      data: { firstName: 'Mo', lastName: `Movein-${randomUUID().slice(0, 6)}` },
+      data: { orgId: 'org_0', firstName: 'Mo', lastName: `Movein-${randomUUID().slice(0, 6)}` },
     })
     const lease = await prisma.lease.create({
       data: {
@@ -277,7 +277,7 @@ describe('assessLateFees — unlinked rent (R-050b)', () => {
   async function seedUnlinkedLease() {
     const stamp = `latefee-unlinked-${randomUUID().slice(0, 8)}`
     const tenant = await prisma.tenant.create({
-      data: { firstName: 'Robin', lastName: `Unlinked-${stamp}` },
+      data: { orgId: 'org_0', firstName: 'Robin', lastName: `Unlinked-${stamp}` },
     })
     tenantIds.push(tenant.id)
     const lease = await prisma.lease.create({
@@ -526,7 +526,7 @@ describe('assessLateFees — payer selection on a two-payer lease (MONEY-06)', (
     // Own property/lease, isolated - the point of this test is row order,
     // so a shared lease would let another test's payer rows decide it.
     const stamp = `latefee-twopayer-${Date.now()}`
-    const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+    const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
     const property = await prisma.property.create({
       data: {
         legalEntityId: entity.id,
@@ -552,7 +552,7 @@ describe('assessLateFees — payer selection on a two-payer lease (MONEY-06)', (
       },
     })
     const tenant = await prisma.tenant.create({
-      data: { firstName: 'Pat', lastName: `TwoPayer-${randomUUID().slice(0, 6)}` },
+      data: { orgId: 'org_0', firstName: 'Pat', lastName: `TwoPayer-${randomUUID().slice(0, 6)}` },
     })
     await prisma.leaseTenant.create({ data: { leaseId: lease.id, tenantId: tenant.id } })
 
@@ -655,7 +655,7 @@ describe('waiverPatternByTenant (PAY-04, fair housing)', () => {
     // insertion order, so a shared lease would let the earlier test's rows
     // decide this one's outcome.
     const stamp = `waiver-joint-${Date.now()}`
-    const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+    const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
     const property = await prisma.property.create({
       data: {
         legalEntityId: entity.id,
@@ -681,10 +681,10 @@ describe('waiverPatternByTenant (PAY-04, fair housing)', () => {
       },
     })
     const coTenant = await prisma.tenant.create({
-      data: { firstName: 'Zed', lastName: `CoTenant-${randomUUID().slice(0, 6)}` },
+      data: { orgId: 'org_0', firstName: 'Zed', lastName: `CoTenant-${randomUUID().slice(0, 6)}` },
     })
     const primaryTenant = await prisma.tenant.create({
-      data: { firstName: 'Ann', lastName: `Primary-${randomUUID().slice(0, 6)}` },
+      data: { orgId: 'org_0', firstName: 'Ann', lastName: `Primary-${randomUUID().slice(0, 6)}` },
     })
     // Co-tenant inserted FIRST and is not primary.
     await prisma.leaseTenant.create({

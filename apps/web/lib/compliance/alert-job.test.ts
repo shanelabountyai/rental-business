@@ -18,7 +18,7 @@ const itemIds: string[] = []
 
 beforeAll(async () => {
   const entity = await prisma.legalEntity.create({
-    data: { name: `Compliance LLC-${Date.now()}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Compliance LLC-${Date.now()}`, type: 'LLC' },
   })
   entityId = entity.id
 })

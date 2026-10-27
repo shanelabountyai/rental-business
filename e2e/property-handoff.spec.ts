@@ -32,7 +32,7 @@ async function createStaff(roleKey: 'owner' | 'manager', legalEntityId: string) 
   const email = `handoff-${roleKey}-${unique}@example.test`
   const enrolment = createTotpEnrolment(email)
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: `${roleKey} ${unique}`,
       credential: {
@@ -57,7 +57,7 @@ async function createStaff(roleKey: 'owner' | 'manager', legalEntityId: string) 
 async function seedProperty() {
   const unique = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `Handoff LLC-${unique}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Handoff LLC-${unique}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -78,7 +78,7 @@ async function seedProperty() {
     data: { propertyId: property.id, name: `U-${unique}`, status: 'OCCUPIED' },
   })
   const tenant = await prisma.tenant.create({
-    data: {
+    data: { orgId: 'org_0',
       firstName: 'Ada',
       lastName: `Sitting-${unique}`,
       email: `ada-${unique}@example.test`,
@@ -130,7 +130,7 @@ async function seedProperty() {
     },
   })
   const vendor = await prisma.vendor.create({
-    data: { name: `Ace Plumbing-${unique}`, trades: ['PLUMBING'], serviceAreas: ['77002'] },
+    data: { orgId: 'org_0', name: `Ace Plumbing-${unique}`, trades: ['PLUMBING'], serviceAreas: ['77002'] },
   })
   vendorIds.push(vendor.id)
   await prisma.workOrder.create({

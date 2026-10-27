@@ -29,7 +29,7 @@ async function createStaff() {
   const email = `screen-${unique}@example.test`
   const { secret } = createTotpEnrolment(email)
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: `Screening Manager ${unique}`,
       credential: {
@@ -66,7 +66,7 @@ async function seedScreenedApplicant(
 ) {
   const unique = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `Screen LLC-${unique}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Screen LLC-${unique}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({

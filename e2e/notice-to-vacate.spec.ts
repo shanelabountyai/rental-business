@@ -43,7 +43,7 @@ const ruleIds: string[] = []
 async function createStaff() {
   const unique = randomUUID().slice(0, 8)
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email: `vacate-${unique}@example.test`,
       name: `Vacate Test ${unique}`,
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -75,7 +75,7 @@ async function seedJustCauseRule() {
 async function seedLease(state: string) {
   const unique = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `Vacate LLC-${unique}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Vacate LLC-${unique}`, type: 'LLC' },
   })
   const property = await prisma.property.create({
     data: {
@@ -94,7 +94,7 @@ async function seedLease(state: string) {
     data: { propertyId: property.id, name: `U-${unique}`, status: 'OCCUPIED' },
   })
   const tenant = await prisma.tenant.create({
-    data: {
+    data: { orgId: 'org_0',
       firstName: 'Morgan',
       lastName: `Vacate-${unique}`,
       email: `morgan-${unique}@example.test`,

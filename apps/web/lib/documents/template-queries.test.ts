@@ -16,12 +16,12 @@ let otherTemplateId = ''
 beforeAll(async () => {
   const stamp = `doctemplate-${randomUUID().slice(0, 8)}`
   const staff = await prisma.staffUser.create({
-    data: { email: `${stamp}@example.test`, name: 'Template Author' },
+    data: { orgMemberships: { create: { orgId: 'org_0' } }, email: `${stamp}@example.test`, name: 'Template Author' },
   })
   staffIds.push(staff.id)
 
   const active = await prisma.documentTemplate.create({
-    data: {
+    data: { orgId: 'org_0',
       name: `${stamp}-active`,
       documentType: 'LETTER',
       body: 'Dear {{recipient.name}},',
@@ -29,7 +29,7 @@ beforeAll(async () => {
     },
   })
   const retired = await prisma.documentTemplate.create({
-    data: {
+    data: { orgId: 'org_0',
       name: `${stamp}-retired`,
       documentType: 'ESTOPPEL_CERTIFICATE',
       body: 'To whom it may concern,',

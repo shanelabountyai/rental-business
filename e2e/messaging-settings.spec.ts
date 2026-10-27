@@ -18,7 +18,7 @@ let previousName: string | null = null
 
 async function seedStaff(roleKey: 'owner' | 'manager', scoped: boolean) {
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email: `msgsettings-${roleKey}-${randomUUID()}@example.test`,
       name: `Settings ${roleKey}`,
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -43,7 +43,7 @@ async function signIn(page: import('@playwright/test').Page, email: string) {
 test.beforeAll(async () => {
   previousName =
     (await prisma.messagingSettings.findUnique({ where: { orgId: 'org_0' } }))?.businessName ?? null
-  const entity = await prisma.legalEntity.create({ data: { name: `Settings LLC-${stamp}`, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: `Settings LLC-${stamp}`, type: 'LLC' } })
   entityId = entity.id
   property = await prisma.property.create({
     data: {

@@ -35,7 +35,7 @@ const at = (iso: string) => new Date(`${iso}T12:00:00.000Z`)
 async function createStaff() {
   const email = `funnel-${randomUUID()}@example.test`
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Funnel Test',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -50,7 +50,7 @@ async function createStaff() {
 async function seedProperty(label: string) {
   const stamp = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `${label} LLC-${stamp}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `${label} LLC-${stamp}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -491,7 +491,7 @@ test.describe('maintenance analytics (MAINT-10)', () => {
     const { property, unit } = await seedProperty('Reopen')
     const staff = await createStaff()
     const vendor = await prisma.vendor.create({
-      data: { name: `Rework-${randomUUID().slice(0, 6)}`, trades: ['plumbing'], w9OnFile: true },
+      data: { orgId: 'org_0', name: `Rework-${randomUUID().slice(0, 6)}`, trades: ['plumbing'], w9OnFile: true },
     })
     vendorIds.push(vendor.id)
 
@@ -544,7 +544,7 @@ test.describe('maintenance analytics (MAINT-10)', () => {
     const { property, unit } = await seedProperty('VendorCost')
     const staff = await createStaff()
     const vendor = await prisma.vendor.create({
-      data: { name: `Costly-${randomUUID().slice(0, 6)}`, trades: ['hvac'], w9OnFile: true },
+      data: { orgId: 'org_0', name: `Costly-${randomUUID().slice(0, 6)}`, trades: ['hvac'], w9OnFile: true },
     })
     vendorIds.push(vendor.id)
 
@@ -598,7 +598,7 @@ test.describe('accessibility', () => {
       'APPROVED',
     )
     const vendor = await prisma.vendor.create({
-      data: { name: `AxeVendor-${randomUUID().slice(0, 6)}`, trades: ['hvac'], w9OnFile: true },
+      data: { orgId: 'org_0', name: `AxeVendor-${randomUUID().slice(0, 6)}`, trades: ['hvac'], w9OnFile: true },
     })
     vendorIds.push(vendor.id)
     const job = await prisma.workOrder.create({

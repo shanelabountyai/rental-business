@@ -13,7 +13,7 @@ const vendorIds: string[] = []
 
 beforeAll(async () => {
   const entity = await prisma.legalEntity.create({
-    data: { name: `Turnover Query LLC-${Date.now()}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Turnover Query LLC-${Date.now()}`, type: 'LLC' },
   })
   entityId = entity.id
 })
@@ -84,7 +84,7 @@ describe('getTurnoverForUnit', () => {
       data: { propertyId: property.id, unitId: unit.id, leaseId: lease.id },
     })
     projectIds.push(project.id)
-    const vendor = await prisma.vendor.create({ data: { name: 'Ace Painting' } })
+    const vendor = await prisma.vendor.create({ data: { orgId: 'org_0', name: 'Ace Painting' } })
     vendorIds.push(vendor.id)
     await prisma.workOrder.create({
       data: {

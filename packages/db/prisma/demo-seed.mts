@@ -2818,7 +2818,7 @@ async function seedLeasing(
     }
 
     const tenant = await prisma.tenant.create({
-      data: {
+      data: { orgId: 'org_0',
         firstName: plan.envelope.tenant.firstName,
         lastName: plan.envelope.tenant.lastName,
         email: plan.envelope.tenant.email,
@@ -3966,7 +3966,7 @@ async function seedDemoData() {
   }
 
   const entities = await Promise.all(
-    ENTITY_NAMES.map((name) => prisma.legalEntity.create({ data: { name, type: 'LLC' } })),
+    ENTITY_NAMES.map((name) => prisma.legalEntity.create({ data: { orgId: 'org_0', name, type: 'LLC' } })),
   )
 
   // ---- Portfolio-level rows the per-unit story points at ----
@@ -4007,7 +4007,7 @@ async function seedDemoData() {
   ]
   const vendorRows = await Promise.all(
     vendors.map((vendor) =>
-      prisma.vendor.create({ data: { ...vendor, serviceAreas: ['Austin', 'Round Rock'] } }),
+      prisma.vendor.create({ data: { orgId: 'org_0', ...vendor, serviceAreas: ['Austin', 'Round Rock'] } }),
     ),
   )
 
@@ -4018,7 +4018,7 @@ async function seedDemoData() {
       { name: PM_TEMPLATE_NAMES[2], trade: 'plumbing', intervalMonths: 12 },
     ].map((template) =>
       prisma.preventiveMaintenanceTemplate.create({
-        data: { ...template, createdByStaffId: staff.id },
+        data: { orgId: 'org_0', ...template, createdByStaffId: staff.id },
       }),
     ),
   )
@@ -4044,7 +4044,7 @@ async function seedDemoData() {
   // never emit `lease.activated`, so nothing here exercises the consumer;
   // what it demonstrates is the configuration it needs.
   const inspectionTemplate = await prisma.inspectionTemplate.create({
-    data: {
+    data: { orgId: 'org_0',
       name: INSPECTION_TEMPLATE_NAME,
       defaultForType: 'PERIODIC',
       createdByStaffId: staff.id,
@@ -4060,7 +4060,7 @@ async function seedDemoData() {
   })
 
   await prisma.inspectionTemplate.create({
-    data: {
+    data: { orgId: 'org_0',
       name: MOVE_IN_TEMPLATE_NAME,
       defaultForType: 'MOVE_IN',
       createdByStaffId: staff.id,
@@ -4083,7 +4083,7 @@ async function seedDemoData() {
   // that is not would be refused at send time, which is exactly the failure a
   // demo template must not be carrying.
   await prisma.messageTemplate.create({
-    data: {
+    data: { orgId: 'org_0',
       name: MESSAGE_TEMPLATE_NAME,
       kind: 'ROUTINE',
       subject: MESSAGE_TEMPLATE_SUBJECT,
@@ -4157,7 +4157,7 @@ async function seedDemoData() {
       const { tenant: tenantPlan } = unitPlan
 
       const tenant = await prisma.tenant.create({
-        data: {
+        data: { orgId: 'org_0',
           firstName: tenantPlan.firstName,
           lastName: tenantPlan.lastName,
           email: tenantPlan.email,

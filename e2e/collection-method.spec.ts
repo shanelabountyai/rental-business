@@ -33,7 +33,7 @@ const tenantIds: string[] = []
 async function seedTenancy(options: { withSubscription: boolean }) {
   const stamp = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `Collection LLC-${stamp}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Collection LLC-${stamp}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -55,7 +55,7 @@ async function seedTenancy(options: { withSubscription: boolean }) {
   // AN EMAIL, deliberately: `send_invoice` is refused without one, and this
   // file's success case is about the money checks rather than that one.
   const tenant = await prisma.tenant.create({
-    data: {
+    data: { orgId: 'org_0',
       firstName: 'Robin',
       lastName: `Payer-${stamp}`,
       email: `robin-${stamp}@example.test`,
@@ -99,7 +99,7 @@ async function seedOwner() {
   const email = `collection-${randomUUID()}@example.test`
   const { secret } = createTotpEnrolment(email)
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Collection Owner',
       credential: {

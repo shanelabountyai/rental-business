@@ -21,7 +21,7 @@ const ticketIds: string[] = []
 
 async function seedTenancy(label: string) {
   const entity = await prisma.legalEntity.create({
-    data: { name: `Maint LLC-${randomUUID().slice(0, 8)}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Maint LLC-${randomUUID().slice(0, 8)}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -39,7 +39,7 @@ async function seedTenancy(label: string) {
   propertyIds.push(property.id)
 
   const tenant = await prisma.tenant.create({
-    data: {
+    data: { orgId: 'org_0',
       firstName: label,
       lastName: `Ortiz-${randomUUID().slice(0, 6)}`,
     },

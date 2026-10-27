@@ -20,7 +20,7 @@ const staffIds: string[] = []
 
 async function seedTenancy(label: string) {
   const entity = await prisma.legalEntity.create({
-    data: { name: `Portal LLC-${randomUUID().slice(0, 8)}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Portal LLC-${randomUUID().slice(0, 8)}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -38,7 +38,7 @@ async function seedTenancy(label: string) {
   propertyIds.push(property.id)
 
   const tenant = await prisma.tenant.create({
-    data: {
+    data: { orgId: 'org_0',
       firstName: label,
       lastName: `Rivera-${randomUUID().slice(0, 6)}`,
       email: `${label.toLowerCase()}-${randomUUID().slice(0, 6)}@example.test`,
@@ -114,7 +114,7 @@ const STAFF_PASSWORD = 'correct-horse-battery-staple'
 
 async function createOwnerStaff() {
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email: `portal-staff-${randomUUID()}@example.test`,
       name: 'Portal Staff Test',
       credential: {
@@ -313,7 +313,7 @@ test.describe('a tenant sees only their own papers (DOC-03)', () => {
     const mine = await seedTenancy('Ada')
     // Same property - a duplex. This is the leak that matters.
     const neighbourTenant = await prisma.tenant.create({
-      data: { firstName: 'Neighbour', lastName: `N-${randomUUID().slice(0, 6)}` },
+      data: { orgId: 'org_0', firstName: 'Neighbour', lastName: `N-${randomUUID().slice(0, 6)}` },
     })
     tenantIds.push(neighbourTenant.id)
     const neighbourUnit = await prisma.unit.create({

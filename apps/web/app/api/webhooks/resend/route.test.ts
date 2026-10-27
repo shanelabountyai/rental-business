@@ -31,7 +31,7 @@ beforeAll(async () => {
   process.env.RESEND_WEBHOOK_SECRET = SECRET
 
   const stamp = `resend-webhook-${randomUUID().slice(0, 8)}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   const property = await prisma.property.create({
     data: {
@@ -47,7 +47,7 @@ beforeAll(async () => {
   })
   propertyId = property.id
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Bounced', lastName: `Inbox-${randomUUID().slice(0, 6)}`, email: 'dead@example.test' },
+    data: { orgId: 'org_0', firstName: 'Bounced', lastName: `Inbox-${randomUUID().slice(0, 6)}`, email: 'dead@example.test' },
   })
   tenantId = tenant.id
 })

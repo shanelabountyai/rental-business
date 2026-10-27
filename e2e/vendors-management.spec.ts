@@ -18,7 +18,7 @@ const vendorIds: string[] = []
 async function seedOwner() {
   const email = `vendormgmt-${randomUUID()}@example.test`
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Vendor Test Owner',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -102,7 +102,7 @@ test('a PM adds a vendor with no W-9, sees it flagged on the list, then fixes it
 
 test('an assignment picker shows a preferred vendor first and flags a lapsed COI', async ({ page }) => {
   const stamp = randomUUID().slice(0, 8)
-  const entity = await prisma.legalEntity.create({ data: { name: `Vendor Pick LLC-${stamp}`, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: `Vendor Pick LLC-${stamp}`, type: 'LLC' } })
   const property = await prisma.property.create({
     data: {
       legalEntityId: entity.id,
@@ -117,10 +117,10 @@ test('an assignment picker shows a preferred vendor first and flags a lapsed COI
   })
   const unit = await prisma.unit.create({ data: { propertyId: property.id, name: `U-${stamp}`, status: 'OCCUPIED' } })
   const preferred = await prisma.vendor.create({
-    data: { name: `Preferred Plumber ${stamp}`, trades: ['plumbing'], preferredRank: 1, w9OnFile: true },
+    data: { orgId: 'org_0', name: `Preferred Plumber ${stamp}`, trades: ['plumbing'], preferredRank: 1, w9OnFile: true },
   })
   const lapsed = await prisma.vendor.create({
-    data: {
+    data: { orgId: 'org_0',
       name: `Lapsed Plumber ${stamp}`,
       trades: ['plumbing'],
       w9OnFile: true,

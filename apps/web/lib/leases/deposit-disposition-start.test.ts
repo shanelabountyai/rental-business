@@ -26,7 +26,7 @@ beforeAll(async () => {
   // that writes `XY` rules - the others use `XY` for properties alone.
   await prisma.jurisdictionRule.deleteMany({ where: { state: STATE } })
   const entity = await prisma.legalEntity.create({
-    data: { name: `Disposition LLC-${Date.now()}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Disposition LLC-${Date.now()}`, type: 'LLC' },
   })
   entityId = entity.id
 })

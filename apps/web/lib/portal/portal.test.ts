@@ -61,7 +61,7 @@ async function makeDocument(
 beforeAll(async () => {
   const stamp = `portal-${Date.now()}`
   const entity = await prisma.legalEntity.create({
-    data: { name: stamp, type: 'LLC' },
+    data: { orgId: 'org_0', name: stamp, type: 'LLC' },
   })
   entityId = entity.id
   const property = await prisma.property.create({
@@ -81,7 +81,7 @@ beforeAll(async () => {
 
   const makeTenancy = async (label: string) => {
     const tenant = await prisma.tenant.create({
-      data: { firstName: 'T', lastName: `${label}-${randomUUID().slice(0, 6)}` },
+      data: { orgId: 'org_0', firstName: 'T', lastName: `${label}-${randomUUID().slice(0, 6)}` },
     })
     const unit = await prisma.unit.create({
       data: {

@@ -19,7 +19,7 @@ const tenantIds: string[] = []
 
 beforeAll(async () => {
   const stamp = `mtmroll-${Date.now()}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   const property = await prisma.property.create({
     data: {
@@ -68,7 +68,7 @@ async function makeUnit(name: string) {
 
 async function makeTenant() {
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Pat', lastName: 'Renter', email: `pat-${Date.now()}-${Math.random()}@example.test` },
+    data: { orgId: 'org_0', firstName: 'Pat', lastName: 'Renter', email: `pat-${Date.now()}-${Math.random()}@example.test` },
   })
   tenantIds.push(tenant.id)
   return tenant
@@ -227,7 +227,7 @@ describe('the MTM auto-rollover job against a rent-increase cap', () => {
 
   it('rolls at the highest lawful rent and opens a task when the MTM rate is over the cap', async () => {
     const stamp = `mtmcap-${Date.now()}`
-    capEntityId = (await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })).id
+    capEntityId = (await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })).id
     capPropertyId = (
       await prisma.property.create({
         data: {

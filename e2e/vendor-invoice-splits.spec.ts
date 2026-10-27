@@ -24,7 +24,7 @@ const vendorIds: string[] = []
 async function createStaff() {
   const email = `invoice-split-${randomUUID()}@example.test`
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Invoice Split Test',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -39,7 +39,7 @@ async function createStaff() {
 async function seedEntityWithTwoHouses() {
   const stamp = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `Split LLC-${stamp}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Split LLC-${stamp}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
 
@@ -69,7 +69,7 @@ async function seedEntityWithTwoHouses() {
   }
 
   const vendor = await prisma.vendor.create({
-    data: { name: `Ace Handyman-${stamp}`, trades: ['handyman'] },
+    data: { orgId: 'org_0', name: `Ace Handyman-${stamp}`, trades: ['handyman'] },
   })
   vendorIds.push(vendor.id)
 

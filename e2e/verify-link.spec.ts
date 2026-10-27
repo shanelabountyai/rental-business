@@ -20,7 +20,7 @@ const vendorIds: string[] = []
 async function seedAnsweredJob() {
   const stamp = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `Verify LLC-${stamp}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Verify LLC-${stamp}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -41,7 +41,7 @@ async function seedAnsweredJob() {
   })
   const tenant = await prisma.tenant.create({
     // NO EMAIL, deliberately. A phone and nothing else.
-    data: {
+    data: { orgId: 'org_0',
       firstName: 'Ray',
       lastName: `NoEmail-${stamp}`,
       phone: uniquePhone(),
@@ -50,7 +50,7 @@ async function seedAnsweredJob() {
   })
   tenantIds.push(tenant.id)
   const vendor = await prisma.vendor.create({
-    data: { name: `Trade-${stamp}`, trades: ['PLUMBING'] },
+    data: { orgId: 'org_0', name: `Trade-${stamp}`, trades: ['PLUMBING'] },
   })
   vendorIds.push(vendor.id)
 

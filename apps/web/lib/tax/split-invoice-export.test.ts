@@ -51,7 +51,7 @@ async function makeProperty(name: string): Promise<string> {
 
 beforeAll(async () => {
   const stamp = `r082-${Date.now()}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   oakId = await makeProperty(`Oak-${stamp}`)
   elmId = await makeProperty(`Elm-${stamp}`)
@@ -60,10 +60,10 @@ beforeAll(async () => {
     data: { propertyId: oakId, name: `U-${stamp}`, status: 'OCCUPIED' },
   })
   unitId = unit.id
-  const vendor = await prisma.vendor.create({ data: { name: `Ace-${stamp}`, trades: ['handyman'] } })
+  const vendor = await prisma.vendor.create({ data: { orgId: 'org_0', name: `Ace-${stamp}`, trades: ['handyman'] } })
   vendorId = vendor.id
   const staff = await prisma.staffUser.create({
-    data: { email: `${stamp}@example.test`, name: 'R082 Tester' },
+    data: { orgMemberships: { create: { orgId: 'org_0' } }, email: `${stamp}@example.test`, name: 'R082 Tester' },
   })
   staffId = staff.id
 

@@ -33,7 +33,7 @@ async function createStaff(mfa: boolean) {
   const email = `esign-${unique}@example.test`
   const enrolment = mfa ? createTotpEnrolment(email) : null
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: `Esign Manager ${unique}`,
       credential: {
@@ -55,7 +55,7 @@ async function createStaff(mfa: boolean) {
 async function seedDraftLease() {
   const unique = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `Esign LLC-${unique}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Esign LLC-${unique}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -80,7 +80,7 @@ async function seedDraftLease() {
     data: { propertyId: property.id, name: `U-${unique}`, status: 'VACANT' },
   })
   const tenant = await prisma.tenant.create({
-    data: {
+    data: { orgId: 'org_0',
       firstName: 'Jordan',
       lastName: `Esign-${unique}`,
       email: `jordan-${unique}@example.test`,
@@ -154,7 +154,7 @@ test.beforeAll(async () => {
   // to (DocumentTemplate.state's own comment).
   const author = await createStaff(false)
   const template = await prisma.documentTemplate.create({
-    data: {
+    data: { orgId: 'org_0',
       name: `Esign lease template ${randomUUID().slice(0, 6)}`,
       documentType: 'LEASE',
       state: null,

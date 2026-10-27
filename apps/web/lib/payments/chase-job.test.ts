@@ -41,7 +41,7 @@ const leaseIds: string[] = []
 
 beforeAll(async () => {
   const stamp = `chasejob-${Date.now()}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   const property = await prisma.property.create({
     data: {
@@ -67,7 +67,7 @@ beforeAll(async () => {
   graceDays = rule.graceDays ?? 0
 
   const staff = await prisma.staffUser.create({
-    data: { email: `chasejob-${randomUUID()}@example.test`, name: 'Hold Placer' },
+    data: { orgMemberships: { create: { orgId: 'org_0' } }, email: `chasejob-${randomUUID()}@example.test`, name: 'Hold Placer' },
   })
   staffId = staff.id
 })
@@ -97,7 +97,7 @@ async function seedArrears(month: string) {
   })
   unitIds.push(unit.id)
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Ari', lastName: `Chase-${stamp}` },
+    data: { orgId: 'org_0', firstName: 'Ari', lastName: `Chase-${stamp}` },
   })
   tenantIds.push(tenant.id)
   const lease = await prisma.lease.create({

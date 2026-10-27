@@ -16,7 +16,7 @@ let staffId: string
 
 beforeAll(async () => {
   const stamp = `vendortotals-${Date.now()}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   const property = await prisma.property.create({
     data: {
@@ -33,10 +33,10 @@ beforeAll(async () => {
   propertyId = property.id
   const unit = await prisma.unit.create({ data: { propertyId, name: `U-${stamp}`, status: 'OCCUPIED' } })
   unitId = unit.id
-  const vendor = await prisma.vendor.create({ data: { name: `Vendor-${stamp}`, trades: ['plumbing'] } })
+  const vendor = await prisma.vendor.create({ data: { orgId: 'org_0', name: `Vendor-${stamp}`, trades: ['plumbing'] } })
   vendorId = vendor.id
   const staff = await prisma.staffUser.create({
-    data: { email: `${stamp}@example.test`, name: 'Vendor Totals Test' },
+    data: { orgMemberships: { create: { orgId: 'org_0' } }, email: `${stamp}@example.test`, name: 'Vendor Totals Test' },
   })
   staffId = staff.id
 })

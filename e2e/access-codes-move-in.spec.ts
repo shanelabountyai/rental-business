@@ -31,7 +31,7 @@ const leaseIds: string[] = []
 async function seedProperty() {
   const unique = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `Keys LLC-${unique}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Keys LLC-${unique}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -57,7 +57,7 @@ async function seedProperty() {
 async function seedLease(propertyId: string, unitId: string) {
   const unique = randomUUID().slice(0, 8)
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Pat', lastName: `MoveIn-${unique}`, email: `pat-${unique}@example.test` },
+    data: { orgId: 'org_0', firstName: 'Pat', lastName: `MoveIn-${unique}`, email: `pat-${unique}@example.test` },
   })
   tenantIds.push(tenant.id)
   const lease = await prisma.lease.create({
@@ -79,7 +79,7 @@ async function seedLease(propertyId: string, unitId: string) {
 async function createMfaVerifiedOwner(page: import('@playwright/test').Page) {
   const email = `keys-owner-${randomUUID()}@example.test`
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Keys Test Owner',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },

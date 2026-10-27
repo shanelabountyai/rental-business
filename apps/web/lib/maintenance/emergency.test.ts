@@ -16,7 +16,7 @@ const documentIds: string[] = []
 beforeAll(async () => {
   const stamp = `emergency-${Date.now()}`
   const entity = await prisma.legalEntity.create({
-    data: { name: stamp, type: 'LLC' },
+    data: { orgId: 'org_0', name: stamp, type: 'LLC' },
   })
   entityId = entity.id
   const property = await prisma.property.create({
@@ -69,7 +69,7 @@ afterAll(async () => {
 
 async function makeStaff(roleKey: string, scope: { propertyId?: string; legalEntityId?: string } = {}) {
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email: `emergency-${randomUUID()}@example.test`,
       name: 'Emergency Test',
       phone: '+15125550100',

@@ -33,11 +33,11 @@ async function archivedReport() {
 
 beforeAll(async () => {
   const entity = await prisma.legalEntity.create({
-    data: { name: `Settlement Record LLC-${randomUUID().slice(0, 8)}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Settlement Record LLC-${randomUUID().slice(0, 8)}`, type: 'LLC' },
   })
   entityId = entity.id
   const staff = await prisma.staffUser.create({
-    data: { email: `settlement-record-${randomUUID()}@example.test`, name: 'Settlement Record' },
+    data: { orgMemberships: { create: { orgId: 'org_0' } }, email: `settlement-record-${randomUUID()}@example.test`, name: 'Settlement Record' },
   })
   staffId = staff.id
   const document = await archivedReport()

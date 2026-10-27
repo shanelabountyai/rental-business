@@ -112,7 +112,7 @@ async function seedPropertyWithTenancies(
 ) {
   const stamp = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `Roll LLC-${stamp}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Roll LLC-${stamp}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -139,7 +139,7 @@ async function seedPropertyWithTenancies(
     })
     unitIds.push(unit.id)
     const tenant = await prisma.tenant.create({
-      data: {
+      data: { orgId: 'org_0',
         // STAMPED, so the name cannot collide with the screen's own words.
         // Naming them "Within" and "Past" made `getByRole('row', {name})`
         // match every row on the page, because each one renders "still within
@@ -233,7 +233,7 @@ async function seedPropertyWithTenancies(
     })
     unitIds.push(unit.id)
     const tenant = await prisma.tenant.create({
-      data: { firstName: `${label}${stamp}`, lastName: `Roll-${stamp}`, phone: uniquePhone() },
+      data: { orgId: 'org_0', firstName: `${label}${stamp}`, lastName: `Roll-${stamp}`, phone: uniquePhone() },
     })
     tenantIds.push(tenant.id)
     const dueDate = daysAgo(dueDaysAgo)
@@ -351,7 +351,7 @@ async function seedPropertyWithTenancies(
     })
     unitIds.push(unit.id)
     const tenant = await prisma.tenant.create({
-      data: { firstName: `${label}${stamp}`, lastName: `Roll-${stamp}`, phone: uniquePhone() },
+      data: { orgId: 'org_0', firstName: `${label}${stamp}`, lastName: `Roll-${stamp}`, phone: uniquePhone() },
     })
     tenantIds.push(tenant.id)
     const newest = daysAgo(newestDaysAgo)
@@ -427,7 +427,7 @@ async function seedPropertyWithTenancies(
   // chase took `leaseTenants.find(t => t.active)` and stopped.
   const roommate = options.includeExtraParties
     ? await prisma.tenant.create({
-        data: {
+        data: { orgId: 'org_0',
           firstName: `Room${stamp}`,
           lastName: `Roll-${stamp}`,
           email: `room-${stamp}@example.test`,
@@ -496,7 +496,7 @@ async function seedPropertyWithTenancies(
 async function seedScopedManager(propertyId: string) {
   const email = `roll-${randomUUID()}@example.test`
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Rent Roll Manager',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -512,7 +512,7 @@ async function seedScopedManager(propertyId: string) {
 
 async function seedTemplate(staffId: string) {
   const template = await prisma.messageTemplate.create({
-    data: {
+    data: { orgId: 'org_0',
       name: `Rent reminder ${randomUUID().slice(0, 6)}`,
       kind: 'ROUTINE',
       subject: 'Rent is overdue at {{property.address}}',

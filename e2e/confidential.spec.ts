@@ -32,7 +32,7 @@ async function createStaff(roleKey: 'owner' | 'manager', legalEntityId: string) 
   const email = `conf-${roleKey}-${unique}@example.test`
   const enrolment = createTotpEnrolment(email)
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: `${roleKey} ${unique}`,
       credential: {
@@ -55,7 +55,7 @@ async function createStaff(roleKey: 'owner' | 'manager', legalEntityId: string) 
 async function seedLease({ withCoTenant = false } = {}) {
   const unique = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `Conf LLC-${unique}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Conf LLC-${unique}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -76,7 +76,7 @@ async function seedLease({ withCoTenant = false } = {}) {
     data: { propertyId: property.id, name: `U-${unique}`, status: 'OCCUPIED' },
   })
   const tenant = await prisma.tenant.create({
-    data: {
+    data: { orgId: 'org_0',
       firstName: 'Jane',
       lastName: `Survivor-${unique}`,
       email: `jane-${unique}@example.test`,
@@ -107,7 +107,7 @@ async function seedLease({ withCoTenant = false } = {}) {
   let coTenant: { id: string; firstName: string; lastName: string } | null = null
   if (withCoTenant) {
     coTenant = await prisma.tenant.create({
-      data: {
+      data: { orgId: 'org_0',
         firstName: 'Sam',
         lastName: `Ex-${unique}`,
         email: `sam-${unique}@example.test`,

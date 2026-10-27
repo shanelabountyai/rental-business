@@ -34,7 +34,7 @@ let vendorId: string
 
 beforeAll(async () => {
   const stamp = `wo-gate-${Date.now()}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   const property = await prisma.property.create({
     data: {
@@ -55,11 +55,11 @@ beforeAll(async () => {
   unitId = unit.id
   // No email and no phone: the dispatch is the status write under test, and
   // a vendor with no address keeps this file out of the notification queue.
-  const vendor = await prisma.vendor.create({ data: { name: `${stamp} Roofing` } })
+  const vendor = await prisma.vendor.create({ data: { orgId: 'org_0', name: `${stamp} Roofing` } })
   vendorId = vendor.id
 
   const staff = await prisma.staffUser.create({
-    data: { email: `wo-gate-${randomUUID()}@example.test`, name: 'Priya Owner' },
+    data: { orgMemberships: { create: { orgId: 'org_0' } }, email: `wo-gate-${randomUUID()}@example.test`, name: 'Priya Owner' },
   })
   session.staffId = staff.id
   const owner = await prisma.role.findUniqueOrThrow({ where: { key: 'owner' } })

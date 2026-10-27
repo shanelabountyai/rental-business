@@ -79,11 +79,11 @@ async function seedProperty(state: string, unitSpecs: { name: string; squareFeet
 
 beforeAll(async () => {
   const entity = await prisma.legalEntity.create({
-    data: { name: `rubs-${Date.now()}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `rubs-${Date.now()}`, type: 'LLC' },
   })
   entityId = entity.id
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Sam', lastName: `Meter-${randomUUID().slice(0, 6)}` },
+    data: { orgId: 'org_0', firstName: 'Sam', lastName: `Meter-${randomUUID().slice(0, 6)}` },
   })
   tenantId = tenant.id
 

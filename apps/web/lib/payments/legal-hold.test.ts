@@ -28,7 +28,7 @@ let staffId: string
 
 beforeAll(async () => {
   const stamp = `hold-${Date.now()}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   const property = await prisma.property.create({
     data: {
@@ -48,7 +48,7 @@ beforeAll(async () => {
   })
   unitId = unit.id
   const staff = await prisma.staffUser.create({
-    data: { email: `hold-${randomUUID()}@example.test`, name: 'Hold Setter' },
+    data: { orgMemberships: { create: { orgId: 'org_0' } }, email: `hold-${randomUUID()}@example.test`, name: 'Hold Setter' },
   })
   staffId = staff.id
 })
@@ -64,7 +64,7 @@ afterAll(async () => {
 /// to actually pause.
 async function seedProvisionedPayer() {
   const tenant = await prisma.tenant.create({
-    data: {
+    data: { orgId: 'org_0',
       firstName: 'Alex',
       lastName: `Held-${randomUUID().slice(0, 6)}`,
       email: `held-${randomUUID().slice(0, 8)}@example.test`,

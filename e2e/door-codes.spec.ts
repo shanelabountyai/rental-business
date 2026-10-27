@@ -24,7 +24,7 @@ async function createStaff(legalEntityId: string) {
   const email = `doorcode-${unique}@example.test`
   const enrolment = createTotpEnrolment(email)
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: `Door Owner ${unique}`,
       credential: {
@@ -47,7 +47,7 @@ async function createStaff(legalEntityId: string) {
 async function seedTenancy({ withLock }: { withLock: boolean }) {
   const unique = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `DoorCode LLC-${unique}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `DoorCode LLC-${unique}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -73,7 +73,7 @@ async function seedTenancy({ withLock }: { withLock: boolean }) {
     })
   }
   const tenant = await prisma.tenant.create({
-    data: {
+    data: { orgId: 'org_0',
       firstName: 'Ada',
       lastName: `Resident-${unique}`,
       email: `ada-${unique}@example.test`,

@@ -22,11 +22,11 @@ const inspectionIds: string[] = []
 
 beforeAll(async () => {
   const entity = await prisma.legalEntity.create({
-    data: { name: `Periodic LLC-${Date.now()}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Periodic LLC-${Date.now()}`, type: 'LLC' },
   })
   entityId = entity.id
   const staff = await prisma.staffUser.create({
-    data: { email: `periodic-job-${Date.now()}@example.test`, name: 'Checklist Author' },
+    data: { orgMemberships: { create: { orgId: 'org_0' } }, email: `periodic-job-${Date.now()}@example.test`, name: 'Checklist Author' },
   })
   staffId = staff.id
 })
@@ -81,7 +81,7 @@ async function seedUnit(propertyId: string) {
 
 async function seedDefaultTemplate(type: 'PERIODIC' | 'SEASONAL' | 'DRIVE_BY') {
   const template = await prisma.inspectionTemplate.create({
-    data: {
+    data: { orgId: 'org_0',
       name: `${type} checklist`,
       items: [{ room: 'Exterior', item: 'Roof' }],
       defaultForType: type,

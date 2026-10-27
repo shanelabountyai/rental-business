@@ -23,7 +23,7 @@ const workOrderIds: string[] = []
 async function createStaff(roleKey: string, scope?: { legalEntityId?: string }) {
   const email = `tax-export-${randomUUID()}@example.test`
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Tax Export Test',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -40,7 +40,7 @@ async function createStaff(roleKey: string, scope?: { legalEntityId?: string }) 
 async function seedEntity(label: string) {
   const stamp = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `${label} LLC-${stamp}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `${label} LLC-${stamp}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({

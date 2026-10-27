@@ -28,7 +28,7 @@ const YEAR = 2026
 async function createStaff(roleKey: string) {
   const email = `operating-${randomUUID()}@example.test`
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Operating Report Test',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -43,7 +43,7 @@ async function createStaff(roleKey: string) {
 async function seedEntity(label: string) {
   const stamp = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `${label} LLC-${stamp}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `${label} LLC-${stamp}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   return { entity, stamp }
@@ -83,7 +83,7 @@ async function seedTenancy(
   movedOutOn: string | null,
 ) {
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Op', lastName: `Test-${stamp}`, email: `op-${stamp}@example.test` },
+    data: { orgId: 'org_0', firstName: 'Op', lastName: `Test-${stamp}`, email: `op-${stamp}@example.test` },
   })
   tenantIds.push(tenant.id)
   const lease = await prisma.lease.create({

@@ -21,7 +21,7 @@ const vendorIds: string[] = []
 
 beforeAll(async () => {
   const stamp = `vlink-${randomUUID().slice(0, 8)}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   const property = await prisma.property.create({
     data: {
       legalEntityId: entity.id,
@@ -41,8 +41,8 @@ beforeAll(async () => {
   })
   unitId = unit.id
 
-  const a = await prisma.vendor.create({ data: { name: `${stamp}-A`, trades: ['plumbing'] } })
-  const b = await prisma.vendor.create({ data: { name: `${stamp}-B`, trades: ['plumbing'] } })
+  const a = await prisma.vendor.create({ data: { orgId: 'org_0', name: `${stamp}-A`, trades: ['plumbing'] } })
+  const b = await prisma.vendor.create({ data: { orgId: 'org_0', name: `${stamp}-B`, trades: ['plumbing'] } })
   vendorAId = a.id
   vendorBId = b.id
   vendorIds.push(a.id, b.id)

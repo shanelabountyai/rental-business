@@ -24,7 +24,7 @@ async function createStaff(
   const unique = randomUUID().slice(0, 8)
   const email = `wo-${unique}@example.test`
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       // Unique per call, not a fixed string - the "assign to staff" picker
       // is portfolio-wide for an owner, and two staff sharing one display
@@ -49,7 +49,7 @@ async function createStaff(
 
 async function seedPropertyAndUnit(propertyName = 'WO House') {
   const entity = await prisma.legalEntity.create({
-    data: { name: `WO LLC-${randomUUID().slice(0, 8)}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `WO LLC-${randomUUID().slice(0, 8)}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -73,7 +73,7 @@ async function seedPropertyAndUnit(propertyName = 'WO House') {
 
 async function seedConvertedTicket(propertyId: string, unitId: string, category = 'HVAC') {
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Wo', lastName: `Tenant-${randomUUID().slice(0, 6)}`, phone: uniquePhone() },
+    data: { orgId: 'org_0', firstName: 'Wo', lastName: `Tenant-${randomUUID().slice(0, 6)}`, phone: uniquePhone() },
   })
   tenantIds.push(tenant.id)
   const lease = await prisma.lease.create({
@@ -344,7 +344,7 @@ test.describe('assigning a work order', () => {
   }) => {
     const { property, unit } = await seedPropertyAndUnit()
     const vendor = await prisma.vendor.create({
-      data: { name: `Cool Air Co-${randomUUID().slice(0, 6)}`, trades: ['hvac'], active: true },
+      data: { orgId: 'org_0', name: `Cool Air Co-${randomUUID().slice(0, 6)}`, trades: ['hvac'], active: true },
     })
     vendorIds.push(vendor.id)
 

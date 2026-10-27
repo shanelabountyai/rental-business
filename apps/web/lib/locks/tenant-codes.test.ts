@@ -28,7 +28,7 @@ const tenantIds: string[] = []
 
 beforeAll(async () => {
   const stamp = `doorcode-${randomUUID().slice(0, 8)}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   const property = await prisma.property.create({
     data: {
@@ -54,7 +54,7 @@ beforeAll(async () => {
   })
   smartLockId = lock.id
   const staff = await prisma.staffUser.create({
-    data: { email: `${stamp}@example.test`, name: 'Door Code Staff' },
+    data: { orgMemberships: { create: { orgId: 'org_0' } }, email: `${stamp}@example.test`, name: 'Door Code Staff' },
   })
   staffId = staff.id
 })
@@ -86,7 +86,7 @@ async function tenancy(names: readonly string[]) {
   const people = []
   for (const [index, name] of names.entries()) {
     const tenant = await prisma.tenant.create({
-      data: {
+      data: { orgId: 'org_0',
         firstName: name,
         lastName: `Door-${randomUUID().slice(0, 6)}`,
         email: `${randomUUID().slice(0, 8)}@example.test`,
@@ -147,7 +147,7 @@ describe('issuing', () => {
   it('refuses somebody who is not on the tenancy', async () => {
     const { lease } = await tenancy(['Ada'])
     const stranger = await prisma.tenant.create({
-      data: { firstName: 'Not', lastName: `Here-${randomUUID().slice(0, 6)}` },
+      data: { orgId: 'org_0', firstName: 'Not', lastName: `Here-${randomUUID().slice(0, 6)}` },
     })
     tenantIds.push(stranger.id)
     const result = await issueTenantLockCodeFor({

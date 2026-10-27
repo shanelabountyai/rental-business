@@ -36,7 +36,7 @@ const vendorIds: string[] = []
 async function seed() {
   const stamp = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `Chg LLC-${stamp}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Chg LLC-${stamp}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -58,7 +58,7 @@ async function seed() {
   unitIds.push(unit.id)
 
   const tenant = await prisma.tenant.create({
-    data: {
+    data: { orgId: 'org_0',
       firstName: 'Dana',
       lastName: `Chargeback-${stamp}`,
       email: `dana-${stamp}@example.test`,
@@ -106,7 +106,7 @@ async function seed() {
   ticketIds.push(ticket.id)
 
   const vendor = await prisma.vendor.create({
-    data: { name: `Chg Plumbing-${stamp}`, trades: ['plumbing'], phone: uniquePhone() },
+    data: { orgId: 'org_0', name: `Chg Plumbing-${stamp}`, trades: ['plumbing'], phone: uniquePhone() },
   })
   vendorIds.push(vendor.id)
 
@@ -142,7 +142,7 @@ async function seedOwner() {
   const email = `chg-owner-${randomUUID()}@example.test`
   const { secret } = createTotpEnrolment(email)
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Chargeback Owner',
       credential: {
@@ -166,7 +166,7 @@ async function seedOwner() {
 /// because nothing they are allowed to do here is privileged.
 async function seedManager() {
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email: `chg-mgr-${randomUUID()}@example.test`,
       name: 'Chargeback Manager',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },

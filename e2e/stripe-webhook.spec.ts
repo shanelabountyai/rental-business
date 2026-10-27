@@ -53,7 +53,7 @@ async function post(
 async function seedProvisionedLease() {
   const unique = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `Stripe LLC-${unique}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Stripe LLC-${unique}`, type: 'LLC' },
   })
   const property = await prisma.property.create({
     data: {
@@ -72,7 +72,7 @@ async function seedProvisionedLease() {
     data: { propertyId: property.id, name: `U-${unique}`, status: 'OCCUPIED' },
   })
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Wes', lastName: `Webhook-${unique}` },
+    data: { orgId: 'org_0', firstName: 'Wes', lastName: `Webhook-${unique}` },
   })
   tenantIds.push(tenant.id)
   const lease = await prisma.lease.create({

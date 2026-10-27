@@ -14,7 +14,7 @@ let entityId: string
 let propertyId: string
 
 beforeAll(async () => {
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   const property = await prisma.property.create({
     data: {
@@ -44,7 +44,7 @@ afterAll(async () => {
 
 async function makeVendor(label: string, coiExpiresOn: string | null, serviceAreas = [postalCode]) {
   return prisma.vendor.create({
-    data: {
+    data: { orgId: 'org_0',
       name: `${stamp} ${label}`,
       trades: ['roofing'],
       serviceAreas,

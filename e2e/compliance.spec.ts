@@ -17,7 +17,7 @@ const entityIds: string[] = []
 
 async function seedProperty() {
   const stamp = randomUUID().slice(0, 8)
-  const entity = await prisma.legalEntity.create({ data: { name: `Compliance LLC-${stamp}`, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: `Compliance LLC-${stamp}`, type: 'LLC' } })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
     data: {
@@ -38,7 +38,7 @@ async function seedProperty() {
 async function seedManager(propertyId: string) {
   const email = `compliance-${randomUUID()}@example.test`
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Compliance Manager',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },

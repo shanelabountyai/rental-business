@@ -26,7 +26,7 @@ const tenantIds: string[] = []
 
 beforeAll(async () => {
   const stamp = `cutover-${randomUUID().slice(0, 8)}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   const property = await prisma.property.create({
     data: {
@@ -42,11 +42,11 @@ beforeAll(async () => {
   })
   propertyId = property.id
   const staff = await prisma.staffUser.create({
-    data: { email: `${stamp}@example.test`, name: 'Test Staff' },
+    data: { orgMemberships: { create: { orgId: 'org_0' } }, email: `${stamp}@example.test`, name: 'Test Staff' },
   })
   staffId = staff.id
   const template = await prisma.documentTemplate.create({
-    data: { name: stamp, documentType: 'LEASE', body: 'x', createdByStaffId: staffId },
+    data: { orgId: 'org_0', name: stamp, documentType: 'LEASE', body: 'x', createdByStaffId: staffId },
   })
   templateId = template.id
 })
@@ -120,7 +120,7 @@ async function makeRenewalPair(unitId: string, opts: { successorStartsOn: string
     },
   })
   leaseIds.push(successor.id)
-  const tenant = await prisma.tenant.create({ data: { firstName: 'Pat', lastName: 'Renter' } })
+  const tenant = await prisma.tenant.create({ data: { orgId: 'org_0', firstName: 'Pat', lastName: 'Renter' } })
   tenantIds.push(tenant.id)
   await prisma.leaseTenant.create({ data: { leaseId: successor.id, tenantId: tenant.id, isPrimary: true } })
 

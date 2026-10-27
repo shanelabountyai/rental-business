@@ -29,7 +29,7 @@ const optOutPhones: string[] = []
 async function createOwner() {
   const email = `reader-screens-${randomUUID()}@example.test`
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Reader Screens Test',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -45,7 +45,7 @@ async function createOwner() {
 
 async function seedProperty() {
   const entity = await prisma.legalEntity.create({
-    data: { name: `Reader LLC-${randomUUID().slice(0, 8)}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Reader LLC-${randomUUID().slice(0, 8)}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -234,7 +234,7 @@ test('the lease page says a tenant has opted out of texts', async ({ page }) => 
   })
   const phone = uniquePhone()
   const tenant = await prisma.tenant.create({
-    data: {
+    data: { orgId: 'org_0',
       firstName: 'Opted',
       lastName: `Out-${randomUUID().slice(0, 6)}`,
       email: `opted-${randomUUID().slice(0, 6)}@example.test`,

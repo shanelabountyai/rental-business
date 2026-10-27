@@ -48,7 +48,7 @@ const propertyIds: string[] = []
 async function createOwner() {
   const email = `import-${randomUUID()}@example.test`
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Import Test',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -63,7 +63,7 @@ async function createOwner() {
 async function createManager(scope: { propertyId?: string; legalEntityId?: string }) {
   const email = `import-manager-${randomUUID()}@example.test`
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Import Manager',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -242,7 +242,7 @@ test.describe('bulk import (R-168)', () => {
   })
 
   test('a property-scoped manager cannot reach the import page', async ({ page }) => {
-    const entity = await prisma.legalEntity.create({ data: { name: `Scope LLC ${randomUUID()}`, type: 'LLC' } })
+    const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: `Scope LLC ${randomUUID()}`, type: 'LLC' } })
     entityIds.push(entity.id)
     const property = await prisma.property.create({
       data: {
@@ -323,7 +323,7 @@ test.describe('opening balances (R-168a)', () => {
 
 test.describe('bulk document upload (R-168)', () => {
   test('uploads a file matched to an existing property by address', async ({ page }) => {
-    const entity = await prisma.legalEntity.create({ data: { name: `Docs LLC ${randomUUID()}`, type: 'LLC' } })
+    const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: `Docs LLC ${randomUUID()}`, type: 'LLC' } })
     entityIds.push(entity.id)
     const line1 = `${randomUUID().slice(0, 8)} Manifest Rd`
     const property = await prisma.property.create({

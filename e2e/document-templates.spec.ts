@@ -24,7 +24,7 @@ async function createStaff() {
   // password sign-in is the real, correct fixture here.
   const unique = randomUUID().slice(0, 8)
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email: `doctemplate-${unique}@example.test`,
       name: `Template Author ${unique}`,
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -39,7 +39,7 @@ async function createStaff() {
 async function seedProperty() {
   const unique = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `Doctemplate LLC-${unique}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Doctemplate LLC-${unique}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -129,7 +129,7 @@ test('generating a document renders every merge field and archives an accessible
   const staff = await createStaff()
   const { property } = await seedProperty()
   const template = await prisma.documentTemplate.create({
-    data: {
+    data: { orgId: 'org_0',
       name: `Letter-${randomUUID().slice(0, 6)}`,
       documentType: 'LETTER',
       body: 'Dear {{recipient.name}}, {{property.name}} at {{property.address}} is owned by {{entity.name}}. Generated {{today}} by {{staff.name}}.',
@@ -170,7 +170,7 @@ test('generating a document renders every merge field and archives an accessible
 test('retiring a template hides its generate form', async ({ page }) => {
   const staff = await createStaff()
   const template = await prisma.documentTemplate.create({
-    data: {
+    data: { orgId: 'org_0',
       name: `Retire me-${randomUUID().slice(0, 6)}`,
       documentType: 'LETTER',
       body: 'Dear {{recipient.name}},',

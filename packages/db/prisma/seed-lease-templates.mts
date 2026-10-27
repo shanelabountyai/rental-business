@@ -121,7 +121,7 @@ async function main() {
   })
   if (!existingLease) {
     await prisma.documentTemplate.create({
-      data: {
+      data: { orgId: 'org_0',
         name: 'Residential lease (placeholder — unreviewed)',
         documentType: 'LEASE',
         state: null,
@@ -138,7 +138,7 @@ async function main() {
     })
     if (existing) continue
     await prisma.documentTemplate.create({
-      data: {
+      data: { orgId: 'org_0',
         name: `${key.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())} addendum (placeholder — unreviewed)`,
         documentType: 'ADDENDUM',
         addendumKey: key,

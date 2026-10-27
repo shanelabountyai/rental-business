@@ -42,7 +42,7 @@ test.afterAll(async () => {
 
 async function seedTenant() {
   const tenant = await prisma.tenant.create({
-    data: {
+    data: { orgId: 'org_0',
       firstName: 'Lost',
       lastName: `Link-${randomUUID().slice(0, 6)}`,
       phone: uniquePhone(),
@@ -65,7 +65,7 @@ async function seedTenant() {
 
 async function seedStaff() {
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email: `boundary-${randomUUID().slice(0, 8)}@example.test`,
       name: 'Boundary Staff',
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
@@ -86,7 +86,7 @@ async function seedStaff() {
   // scoped to its own throwaway property reaches the same 404 and reaches
   // nothing else.
   const entity = await prisma.legalEntity.create({
-    data: { name: `Boundary LLC-${randomUUID().slice(0, 8)}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Boundary LLC-${randomUUID().slice(0, 8)}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({

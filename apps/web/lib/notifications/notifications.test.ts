@@ -74,7 +74,7 @@ beforeAll(async () => {
   await retireStaleDeliveries()
   const stamp = `notif-${Date.now()}`
   const entity = await prisma.legalEntity.create({
-    data: { name: stamp, type: 'LLC' },
+    data: { orgId: 'org_0', name: stamp, type: 'LLC' },
   })
   entityId = entity.id
   const property = await prisma.property.create({
@@ -222,7 +222,7 @@ describe('preferences', () => {
   it('records a suppressed row rather than silently sending nothing', async () => {
     const who = recipient()
     await prisma.notificationPreference.create({
-      data: {
+      data: { orgId: 'org_0',
         recipientType: 'STAFF',
         recipientId: who.id,
         category: 'unit_make_ready',

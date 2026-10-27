@@ -36,7 +36,7 @@ async function createStaff(roleKey: 'owner' | 'manager', legalEntityId: string) 
   const email = `gp3-${roleKey}-${unique}@example.test`
   const enrolment = createTotpEnrolment(email)
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: `${roleKey} ${unique}`,
       credential: {
@@ -91,7 +91,7 @@ test('Golden Path 3: what the other surfaces show', async ({ page, browser }) =>
 
   const unique = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `GP3 LLC-${unique}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `GP3 LLC-${unique}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -116,7 +116,7 @@ test('Golden Path 3: what the other surfaces show', async ({ page, browser }) =>
   })
 
   const survivor = await prisma.tenant.create({
-    data: {
+    data: { orgId: 'org_0',
       firstName: 'Jane',
       lastName: `Survivor-${unique}`,
       email: `jane-${unique}@example.test`,
@@ -124,7 +124,7 @@ test('Golden Path 3: what the other surfaces show', async ({ page, browser }) =>
     },
   })
   const restricted = await prisma.tenant.create({
-    data: {
+    data: { orgId: 'org_0',
       firstName: 'Sam',
       lastName: `Ex-${unique}`,
       email: `sam-${unique}@example.test`,

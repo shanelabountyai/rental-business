@@ -25,7 +25,7 @@ const tenantIds: string[] = []
 async function seed() {
   const stamp = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
-    data: { name: `Meter LLC-${stamp}`, type: 'LLC' },
+    data: { orgId: 'org_0', name: `Meter LLC-${stamp}`, type: 'LLC' },
   })
   entityIds.push(entity.id)
   const property = await prisma.property.create({
@@ -54,7 +54,7 @@ async function seed() {
       data: { propertyId: property.id, name: `${name}-${stamp}`, squareFeet, status: 'OCCUPIED' },
     })
     const tenant = await prisma.tenant.create({
-      data: { firstName: 'Kit', lastName: `${name}-${stamp}`, phone: uniquePhone() },
+      data: { orgId: 'org_0', firstName: 'Kit', lastName: `${name}-${stamp}`, phone: uniquePhone() },
     })
     tenantIds.push(tenant.id)
     const lease = await prisma.lease.create({
@@ -92,7 +92,7 @@ async function seed() {
   const email = `rubs-${randomUUID()}@example.test`
   const { secret } = createTotpEnrolment(email)
   const staff = await prisma.staffUser.create({
-    data: {
+    data: { orgMemberships: { create: { orgId: 'org_0' } },
       email,
       name: 'Meter Owner',
       credential: {

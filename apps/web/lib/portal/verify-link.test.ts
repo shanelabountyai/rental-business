@@ -22,7 +22,7 @@ let vendorId: string
 
 beforeAll(async () => {
   const stamp = `vlink-${randomUUID().slice(0, 8)}`
-  const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+  const entity = await prisma.legalEntity.create({ data: { orgId: 'org_0', name: stamp, type: 'LLC' } })
   entityId = entity.id
   const property = await prisma.property.create({
     data: {
@@ -44,15 +44,15 @@ beforeAll(async () => {
   const tenant = await prisma.tenant.create({
     // NO EMAIL. The persona this item exists for: a phone and nothing else,
     // who could not have answered through the portal at all.
-    data: { firstName: 'Dana', lastName: `Phone-${randomUUID().slice(0, 6)}`, email: null },
+    data: { orgId: 'org_0', firstName: 'Dana', lastName: `Phone-${randomUUID().slice(0, 6)}`, email: null },
   })
   tenantId = tenant.id
   const other = await prisma.tenant.create({
-    data: { firstName: 'Someone', lastName: `Else-${randomUUID().slice(0, 6)}` },
+    data: { orgId: 'org_0', firstName: 'Someone', lastName: `Else-${randomUUID().slice(0, 6)}` },
   })
   otherTenantId = other.id
   const vendor = await prisma.vendor.create({
-    data: { name: `Fix-${randomUUID().slice(0, 6)}`, trades: ['PLUMBING'] },
+    data: { orgId: 'org_0', name: `Fix-${randomUUID().slice(0, 6)}`, trades: ['PLUMBING'] },
   })
   vendorId = vendor.id
 })
