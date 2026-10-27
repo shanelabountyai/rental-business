@@ -21,6 +21,8 @@ export interface OutboundMessage {
   /// inbound address and routes by From:, which is a graceful degradation
   /// rather than a failure.
   replyTo?: string
+  /// R-275: whose provider credentials send it.
+  orgId: string
 }
 
 export interface SendResult {
@@ -47,6 +49,7 @@ export interface ChannelAdapter {
   /// Which channels this adapter can deliver. The engine records
   /// `unsupported_channel` rather than throwing when a channel is not covered
   /// - a missing SMS provider must not stop the email going out.
-  supports(channel: NotificationChannel): boolean
+  /// Per org (R-275): one org may have a sender where another has none.
+  supports(channel: NotificationChannel, orgId: string): Promise<boolean>
   send(message: OutboundMessage): Promise<SendResult>
 }

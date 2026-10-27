@@ -11,6 +11,7 @@ import { detectHabitabilityLanguage, suggestTicketPriority } from '@rental/core/
 import { prisma } from '@rental/db'
 // From system.ts, not index.ts: index pulls in Auth.js, and a webhook has no
 // session by definition. See system.ts's own comment.
+import { DEFAULT_ORG_ID } from '@/lib/auth/org.ts'
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { emitEvent } from '@/lib/jobs/outbox.ts'
 import { notificationAdapter } from '@/lib/notifications/provider.ts'
@@ -283,7 +284,9 @@ async function replyToKeyword(
   const body = optOutReply(keyword, BUSINESS_NAME)
   if (!body) return
   try {
-    await notificationAdapter.send({ channel: 'SMS', to, body })
+    // ponytail: org #0's sender. Inbound does not know its org until R-292
+    // routes by `To`; it then passes that org here.
+    await notificationAdapter.send({ channel: 'SMS', to, body, orgId: DEFAULT_ORG_ID })
   } catch (error) {
     console.error(`[sms] could not answer ${keyword} from ${to}`, error)
   }

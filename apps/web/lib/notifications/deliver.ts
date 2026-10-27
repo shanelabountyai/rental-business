@@ -84,7 +84,7 @@ export async function deliverOverChannel(args: {
   if (!config.enabled || !(await orgNotificationsEnabled(args.orgId))) {
     return { status: 'SUPPRESSED', suppressedReason: 'kill_switch' }
   }
-  if (!notificationAdapter.supports(args.channel)) {
+  if (!(await notificationAdapter.supports(args.channel, args.orgId))) {
     return { status: 'SUPPRESSED', suppressedReason: 'unsupported_channel' }
   }
   if (args.channel === 'SMS' && (await isOptedOut(args.to))) {
@@ -102,6 +102,7 @@ export async function deliverOverChannel(args: {
       subject: args.subject,
       body,
       replyTo: args.replyTo,
+      orgId: args.orgId,
     })
     return { status: 'SENT', externalId: result.externalId }
   } catch (error) {

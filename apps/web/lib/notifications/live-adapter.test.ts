@@ -1,4 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { prisma } from '@rental/db'
+import { saveOrgIntegration } from '@/lib/integrations/store.ts'
 import { ChannelSendError } from './adapter.ts'
 import { sandboxAddressFor } from './config.ts'
 import { LiveChannelAdapter } from './live-adapter.ts'
@@ -58,6 +60,7 @@ describe('the Resend driver', () => {
       subject: 'Rent is due',
       body: 'Your rent of $1,650.00 is due on the 1st.',
       replyTo: 'hello+abc@inbound.example.test',
+      orgId: 'org_0',
     })
 
     expect(result.externalId).toBe('a1b2')
@@ -75,7 +78,7 @@ describe('the Resend driver', () => {
 
   it('sends a subject for a thread reply, which carries none', async () => {
     const fetchMock = stubFetch(response(200, { id: 'a1b2' }))
-    await adapter.send({ channel: 'EMAIL', to: 'tenant@example.test', body: 'On my way.' })
+    await adapter.send({ channel: 'EMAIL', to: 'tenant@example.test', body: 'On my way.', orgId: 'org_0' })
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
     expect(JSON.parse(String(init.body)).subject).toBeTruthy()
   })
@@ -83,14 +86,14 @@ describe('the Resend driver', () => {
   it("raises Resend's own error name as the failure code", async () => {
     stubFetch(response(422, { name: 'validation_error', message: 'Invalid `to` field.' }))
     await expect(
-      adapter.send({ channel: 'EMAIL', to: 'nonsense', subject: 's', body: 'b' }),
+      adapter.send({ channel: 'EMAIL', to: 'nonsense', subject: 's', body: 'b', orgId: 'org_0' }),
     ).rejects.toMatchObject({ name: 'ChannelSendError', code: 'validation_error' })
   })
 
   it('refuses an accepted email with no id rather than recording an unreconcilable send', async () => {
     stubFetch(response(200, {}))
     await expect(
-      adapter.send({ channel: 'EMAIL', to: 'tenant@example.test', subject: 's', body: 'b' }),
+      adapter.send({ channel: 'EMAIL', to: 'tenant@example.test', subject: 's', body: 'b', orgId: 'org_0' }),
     ).rejects.toBeInstanceOf(ChannelSendError)
   })
 })
@@ -103,6 +106,7 @@ describe('the Twilio driver', () => {
       channel: 'SMS',
       to: '+15125550123',
       body: 'Entry notice: Thursday, 9am.',
+      orgId: 'org_0',
     })
 
     expect(result.externalId).toBe('SM123')
@@ -126,7 +130,7 @@ describe('the Twilio driver', () => {
     // reads on the status callback, so the two paths record it identically.
     stubFetch(response(400, { code: 21610, message: 'Unsubscribed recipient' }))
     await expect(
-      adapter.send({ channel: 'SMS', to: '+15125550123', body: 'b' }),
+      adapter.send({ channel: 'SMS', to: '+15125550123', body: 'b', orgId: 'org_0' }),
     ).rejects.toMatchObject({ code: '21610' })
   })
 })
@@ -141,22 +145,83 @@ describe('an unconfigured provider', () => {
       to: 'tenant@example.test',
       subject: 's',
       body: 'b',
+      orgId: 'org_0',
     })
 
     expect(fetchMock).not.toHaveBeenCalled()
     expect(result.externalId).toMatch(/^log_/)
-    expect(adapter.supports('EMAIL')).toBe(true)
+    expect(await adapter.supports('EMAIL', 'org_0')).toBe(true)
   })
 
-  it('is an unsupported channel ON a production deployment, never a logged lie', () => {
+  it('is an unsupported channel ON a production deployment, never a logged lie', async () => {
     vi.stubEnv('VERCEL_ENV', 'production')
     vi.stubEnv('TWILIO_MESSAGING_SERVICE_SID', '')
 
-    expect(adapter.supports('SMS')).toBe(false)
+    expect(await adapter.supports('SMS', 'org_0')).toBe(false)
     // The other channel still goes out - the reason `supports` is per-channel.
-    expect(adapter.supports('EMAIL')).toBe(true)
+    expect(await adapter.supports('EMAIL', 'org_0')).toBe(true)
     // PORTAL has no provider anywhere and is always deliverable.
-    expect(adapter.supports('PORTAL')).toBe(true)
+    expect(await adapter.supports('PORTAL', 'org_0')).toBe(true)
+  })
+})
+
+describe("an org's own credentials (R-275)", () => {
+  const stamp = `integ-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  let orgA = ''
+  let orgB = ''
+
+  beforeAll(async () => {
+    orgA = (await prisma.organization.create({ data: { slug: `${stamp}-a`, name: `${stamp} A` } })).id
+    orgB = (await prisma.organization.create({ data: { slug: `${stamp}-b`, name: `${stamp} B` } })).id
+  })
+
+  afterAll(async () => {
+    await prisma.orgIntegration.deleteMany({ where: { orgId: { in: [orgA, orgB] } } })
+    await prisma.organization.deleteMany({ where: { id: { in: [orgA, orgB] } } })
+  })
+
+  it("never lends org #0's env credentials to another org in production", async () => {
+    vi.stubEnv('VERCEL_ENV', 'production')
+    expect(await adapter.supports('SMS', orgB)).toBe(false)
+    expect(await adapter.supports('EMAIL', orgB)).toBe(false)
+    expect(await adapter.supports('SMS', 'org_0')).toBe(true)
+  })
+
+  it("sends on the org's own subaccount and token, not the env's", async () => {
+    await saveOrgIntegration(orgA, 'TWILIO', {
+      config: { accountSid: 'AC_org_a', messagingServiceSid: 'MG_org_a' },
+      secret: 'org_a_token',
+    })
+    const fetchMock = stubFetch(response(201, { sid: 'SM_A' }))
+
+    await adapter.send({ channel: 'SMS', to: '+15125550123', body: 'b', orgId: orgA })
+
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(url).toBe('https://api.twilio.com/2010-04-01/Accounts/AC_org_a/Messages.json')
+    expect(new URLSearchParams(String(init.body)).get('MessagingServiceSid')).toBe('MG_org_a')
+    expect((init.headers as Record<string, string>).authorization).toBe(
+      `Basic ${Buffer.from('AC_org_a:org_a_token').toString('base64')}`,
+    )
+  })
+
+  it('stores the secret sealed, never as plaintext', async () => {
+    const row = await prisma.orgIntegration.findUniqueOrThrow({
+      where: { orgId_provider: { orgId: orgA, provider: 'TWILIO' } },
+    })
+    expect(row.secret).toBeTruthy()
+    expect(row.secret).not.toContain('org_a_token')
+    expect(JSON.stringify(row.config)).not.toContain('org_a_token')
+  })
+
+  it("does not open org A's sealed token copied into org B's row", async () => {
+    vi.stubEnv('VERCEL_ENV', 'production')
+    const a = await prisma.orgIntegration.findUniqueOrThrow({
+      where: { orgId_provider: { orgId: orgA, provider: 'TWILIO' } },
+    })
+    await prisma.orgIntegration.create({
+      data: { orgId: orgB, provider: 'TWILIO', config: a.config ?? {}, secret: a.secret },
+    })
+    expect(await adapter.supports('SMS', orgB)).toBe(false)
   })
 })
 

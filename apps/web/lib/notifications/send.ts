@@ -185,7 +185,7 @@ export async function notify(
       : input.eventId
         ? { outboxEvents: { some: { id: input.eventId } } }
         : { id: 'org_0' },
-    select: { notificationsEnabled: true },
+    select: { id: true, notificationsEnabled: true },
   })
   const orgEnabled = org?.notificationsEnabled === true
 
@@ -352,7 +352,7 @@ export async function notify(
     } else if (!config.enabled || !orgEnabled) {
       status = 'SUPPRESSED'
       reason = 'kill_switch'
-    } else if (!notificationAdapter.supports(channel)) {
+    } else if (!org || !(await notificationAdapter.supports(channel, org.id))) {
       status = 'SUPPRESSED'
       reason = 'unsupported_channel'
     } else if (deferUntil) {

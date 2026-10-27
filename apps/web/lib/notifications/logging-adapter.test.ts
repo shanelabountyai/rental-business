@@ -9,6 +9,7 @@ const message = {
   to: 'derrick.holt@example.test',
   subject: 'Notice to vacate',
   body: 'You owe $1,850.00. Sign in: https://app.example.test/portal/verify?token=secret',
+  orgId: 'org_0',
 }
 
 afterEach(() => {

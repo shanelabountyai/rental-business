@@ -609,6 +609,37 @@ model Organization {
   messagingSettingses            MessagingSettings[]
   applicantInfoRequests          ApplicantInfoRequest[]
   applicantNotes                 ApplicantNote[]
+  integrations                   OrgIntegration[]
+}
+
+enum IntegrationProvider {
+  STRIPE
+  TWILIO
+  RESEND
+  QUICKBOOKS
+  ESIGN
+}
+
+/// R-275 (PRD 10 §1.2): one row per org per provider. `config` holds only what
+/// may be shown (account ids, numbers, domains, a from address); `secret` is
+/// sealed by lib/integrations/store.ts with a key bound to (orgId, provider),
+/// so a ciphertext copied into another org's row does not open. `status` is
+/// provider-specific (R-277, R-292, R-293 own the values); `statusReason` is
+/// the provider's own words. Org #0 with no row sends on the env credentials.
+model OrgIntegration {
+  id           String              @id @default(cuid())
+  /// Immutable once written (trigger), no default: names its org or fails.
+  orgId        String
+  organization Organization        @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  provider     IntegrationProvider
+  status       String              @default("NOT_STARTED")
+  statusReason String?
+  config       Json                @default("{}")
+  secret       String?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@unique([orgId, provider])
 }
 
 model LegalEntity {

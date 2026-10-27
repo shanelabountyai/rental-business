@@ -4,6 +4,8 @@ import type { NotificationChannel } from '@rental/core/notifications'
 import { ChannelSendError } from './adapter.ts'
 import type { ChannelAdapter, OutboundMessage, SendResult } from './adapter.ts'
 import { LoggingChannelAdapter } from './logging-adapter.ts'
+import { DEFAULT_ORG_ID } from '@/lib/auth/org.ts'
+import { orgIntegration } from '@/lib/integrations/store.ts'
 
 // The real drivers (R-104, closing D-15's seam). Resend for email, Twilio for
 // SMS, behind the one `ChannelAdapter` interface `deliverOverChannel` already
@@ -42,16 +44,45 @@ function env(name: string): string | undefined {
   return value ? value : undefined
 }
 
-/// Read per call, never captured at module load - the same reason
-/// `notificationConfig()` is: a key added in the dashboard should take effect
-/// on the next send, not the next cold start.
-function resendConfig(): { apiKey: string; from: string } | null {
+// WHOSE CREDENTIALS (R-275). An org's own `OrgIntegration` row first. Org #0
+// with no row sends on the env vars, which are its credentials and nobody
+// else's: any other org with no row has no sender, so org #1 can never text
+// from org #0's number. Read per call, never captured at module load - the
+// same reason `notificationConfig()` is: a key added in the dashboard (or a
+// row provisioned by R-292/R-293) takes effect on the next send.
+//
+// ponytail: a row is used whatever its `status`. R-292 adds the 10DLC
+// campaign gate and R-293 the domain-verified gate on top of this.
+type ResendConfig = { apiKey: string; from: string }
+type TwilioConfig = { accountSid: string; authToken: string; serviceSid: string }
+
+function configString(config: Record<string, unknown>, key: string): string | undefined {
+  const value = config[key]
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+async function resendConfig(orgId: string): Promise<ResendConfig | null> {
+  const row = await orgIntegration(orgId, 'RESEND')
+  if (row) {
+    const from = configString(row.config, 'from')
+    return row.secret && from ? { apiKey: row.secret, from } : null
+  }
+  if (orgId !== DEFAULT_ORG_ID) return null
   const apiKey = env('RESEND_API_KEY')
   const from = env('RESEND_FROM')
   return apiKey && from ? { apiKey, from } : null
 }
 
-function twilioConfig(): { accountSid: string; authToken: string; serviceSid: string } | null {
+async function twilioConfig(orgId: string): Promise<TwilioConfig | null> {
+  const row = await orgIntegration(orgId, 'TWILIO')
+  if (row) {
+    const accountSid = configString(row.config, 'accountSid')
+    const serviceSid = configString(row.config, 'messagingServiceSid')
+    return row.secret && accountSid && serviceSid
+      ? { accountSid, authToken: row.secret, serviceSid }
+      : null
+  }
+  if (orgId !== DEFAULT_ORG_ID) return null
   const accountSid = env('TWILIO_ACCOUNT_SID')
   const authToken = env('TWILIO_AUTH_TOKEN')
   const serviceSid = env('TWILIO_MESSAGING_SERVICE_SID')
@@ -77,7 +108,7 @@ function str(payload: Record<string, unknown> | null, key: string): string | und
 
 async function sendEmail(
   message: OutboundMessage,
-  config: { apiKey: string; from: string },
+  config: ResendConfig,
 ): Promise<SendResult> {
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -119,7 +150,7 @@ async function sendEmail(
 
 async function sendSms(
   message: OutboundMessage,
-  config: { accountSid: string; authToken: string; serviceSid: string },
+  config: TwilioConfig,
 ): Promise<SendResult> {
   const form = new URLSearchParams({
     MessagingServiceSid: config.serviceSid,
@@ -166,21 +197,23 @@ async function sendSms(
 }
 
 export class LiveChannelAdapter implements ChannelAdapter {
-  supports(channel: NotificationChannel): boolean {
+  async supports(channel: NotificationChannel, orgId: string): Promise<boolean> {
     // PORTAL has no provider: the notification IS the delivery, read in the
     // portal off the same log (R-018), so it is always supported.
     if (channel === 'PORTAL') return true
     if (!isProductionDeployment()) return true
-    return channel === 'EMAIL' ? resendConfig() !== null : twilioConfig() !== null
+    return channel === 'EMAIL'
+      ? (await resendConfig(orgId)) !== null
+      : (await twilioConfig(orgId)) !== null
   }
 
   async send(message: OutboundMessage): Promise<SendResult> {
     if (message.channel === 'EMAIL') {
-      const config = resendConfig()
+      const config = await resendConfig(message.orgId)
       return config ? sendEmail(message, config) : logging.send(message)
     }
     if (message.channel === 'SMS') {
-      const config = twilioConfig()
+      const config = await twilioConfig(message.orgId)
       return config ? sendSms(message, config) : logging.send(message)
     }
     return logging.send(message)

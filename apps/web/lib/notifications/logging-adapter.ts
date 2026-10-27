@@ -18,7 +18,7 @@ import type { ChannelAdapter, OutboundMessage, SendResult } from './adapter.ts'
 // resolution, quiet-hours deferral, the kill switch, the sandbox redirect,
 // failure recording, and the append-only log.
 export class LoggingChannelAdapter implements ChannelAdapter {
-  supports(): boolean {
+  async supports(): Promise<boolean> {
     return true
   }
 
