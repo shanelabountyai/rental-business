@@ -400,7 +400,7 @@ describe('a synchronous carrier rejection', () => {
       new ChannelSendError('21610', 'The message From/To pair violates a blacklist rule.'),
     )
 
-    const outcome = await deliverOverChannel({ channel: 'SMS', to: phone, body: 'hello' })
+    const outcome = await deliverOverChannel({ channel: 'SMS', to: phone, body: 'hello', orgId: 'org_0' })
 
     // Still FAILED, not SUPPRESSED: this send did fail, and the row has to say
     // so. What changed is that the NEXT one will be suppressed before it is
@@ -419,7 +419,7 @@ describe('a synchronous carrier rejection', () => {
       new ChannelSendError('30003', 'Unreachable destination handset'),
     )
 
-    const outcome = await deliverOverChannel({ channel: 'SMS', to: phone, body: 'hello' })
+    const outcome = await deliverOverChannel({ channel: 'SMS', to: phone, body: 'hello', orgId: 'org_0' })
     expect(outcome.status).toBe('FAILED')
     expect(await isOptedOut(phone)).toBe(false)
   })

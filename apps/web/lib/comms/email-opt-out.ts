@@ -98,13 +98,14 @@ export async function honourEmailOptOut(
     // not a category anybody has a preference about, and routing it through
     // the preference engine would mean the message telling somebody their
     // preferences changed could be suppressed by the change it is announcing.
-    // The kill switch and the sandbox redirect still apply, because they live
+    // The kill switches and the sandbox redirect still apply, because they live
     // in `deliverOverChannel` and cover everything.
     await deliverOverChannel({
       channel: 'EMAIL',
       to: toAddress,
       subject: message.subject,
       body: message.body,
+      orgId,
     }).catch((error) => {
       console.error(`[email-opt-out] could not confirm to ${recipientType} ${recipientId}`, error)
     })

@@ -29,7 +29,7 @@ describe('deliverOverChannel and the shared SMS opt-out list', () => {
     phones.push(phone)
     await recordOptOut({ phone, source: 'INBOUND_KEYWORD', reason: 'STOP' })
 
-    const outcome = await deliverOverChannel({ channel: 'SMS', to: phone, body: 'hello' })
+    const outcome = await deliverOverChannel({ channel: 'SMS', to: phone, body: 'hello', orgId: 'org_0' })
     expect(outcome).toEqual({ status: 'SUPPRESSED', suppressedReason: 'sms_opt_out' })
   })
 
@@ -39,7 +39,7 @@ describe('deliverOverChannel and the shared SMS opt-out list', () => {
     await recordOptOut({ phone, source: 'INBOUND_KEYWORD', reason: 'STOP' })
     await recordOptIn({ phone, reason: 'START' })
 
-    const outcome = await deliverOverChannel({ channel: 'SMS', to: phone, body: 'hello' })
+    const outcome = await deliverOverChannel({ channel: 'SMS', to: phone, body: 'hello', orgId: 'org_0' })
     expect(outcome.status).toBe('SENT')
   })
 
@@ -52,6 +52,7 @@ describe('deliverOverChannel and the shared SMS opt-out list', () => {
       to: 'someone@example.test',
       subject: 'hi',
       body: 'hello',
+      orgId: 'org_0',
     })
     expect(outcome.status).toBe('SENT')
   })

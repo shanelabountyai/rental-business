@@ -175,6 +175,19 @@ export async function notify(
 
   const now = input.now ?? new Date()
   const config = notificationConfig()
+  // R-290b. The org the `org_scope` trigger will stamp on the row: the
+  // property's, else the event's, else org #0. Asked here, before the row
+  // exists, so a switched-off org records `kill_switch` exactly as the global
+  // switch does rather than queueing rows that sit until it is switched on.
+  const org = await db.organization.findFirst({
+    where: input.propertyId
+      ? { properties: { some: { id: input.propertyId } } }
+      : input.eventId
+        ? { outboxEvents: { some: { id: input.eventId } } }
+        : { id: 'org_0' },
+    select: { notificationsEnabled: true },
+  })
+  const orgEnabled = org?.notificationsEnabled === true
 
   // Preferences are only meaningful for a channel we could actually reach
   // them on, so resolution runs over the addressable subset - but the LOOP
@@ -336,7 +349,7 @@ export async function notify(
       // "batched" for a message that was never going out at all.
       status = 'SUPPRESSED'
       reason = 'digest_batched'
-    } else if (!config.enabled) {
+    } else if (!config.enabled || !orgEnabled) {
       status = 'SUPPRESSED'
       reason = 'kill_switch'
     } else if (!notificationAdapter.supports(channel)) {
@@ -655,6 +668,9 @@ export async function dispatchPendingNotifications(
   const claimExpired = new Date(Date.now() - CLAIM_STALE_MS)
   const dueWhere = {
     ...('orgId' in scope ? { orgId: scope.orgId } : { id: { in: [...scope.deliveryIds] } }),
+    // R-290b: a switched-off org's queue is left exactly as the global switch
+    // leaves everyone's - untouched, not claimed and not suppressed.
+    organization: { notificationsEnabled: true },
     OR: [
       { status: 'QUEUED' as const, attempts: 0 },
       { status: 'QUEUED' as const, updatedAt: { lt: claimExpired } },
@@ -694,6 +710,7 @@ export async function dispatchPendingNotifications(
       to: notification.toAddress,
       subject: notification.subject ?? undefined,
       body: notification.body,
+      orgId: delivery.orgId,
     })
 
     if (outcome.status === 'SENT') {

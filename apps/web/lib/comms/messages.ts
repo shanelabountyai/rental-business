@@ -147,6 +147,7 @@ export async function sendThreadMessage(args: {
     to: args.toAddress,
     body: args.body,
     replyTo,
+    orgId: message.orgId,
   })
 
   await prisma.messageDelivery.updateMany({

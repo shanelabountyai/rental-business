@@ -3,6 +3,7 @@ import { prisma } from '@rental/db'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { ChannelSendError } from './adapter.ts'
 import { notificationAdapter } from './provider.ts'
+import { deliverOverChannel } from './deliver.ts'
 import { dispatchPendingNotifications, notify } from './send.ts'
 
 // The engine's guarantees against a real database. None of these can be
@@ -740,6 +741,93 @@ describe('the kill switch', () => {
       if (previous === undefined) delete process.env.NOTIFICATIONS_ENABLED
       else process.env.NOTIFICATIONS_ENABLED = previous
     }
+  })
+})
+
+// R-290b. One org's switch, beside the global one. Org B is this file's own,
+// so flipping it cannot touch a spec running against org #0; the property
+// is deactivated in afterAll like the file's other one, and the org stays
+// because append-only Notification rows reference it.
+describe("the per-org kill switch", () => {
+  let orgB: string
+  let propertyB: string
+
+  beforeAll(async () => {
+    const stamp = `notif-org-${Date.now()}`
+    orgB = (await prisma.organization.create({ data: { slug: stamp, name: stamp } })).id
+    const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC', orgId: orgB } })
+    propertyB = (
+      await prisma.property.create({
+        data: {
+          legalEntityId: entity.id,
+          name: `${stamp}-house`,
+          addressLine1: '1 Test St',
+          city: 'Houston',
+          state: 'TX',
+          postalCode: '77002',
+          timezone: CHICAGO,
+          propertyType: 'SINGLE_FAMILY',
+        },
+      })
+    ).id
+  })
+
+  afterAll(async () => {
+    await prisma.property.updateMany({ where: { id: propertyB }, data: { active: false } })
+  })
+
+  const setOrgB = (notificationsEnabled: boolean) =>
+    prisma.organization.update({ where: { id: orgB }, data: { notificationsEnabled } })
+
+  async function deliveriesFor(key: string) {
+    const rows = await prisma.notification.findMany({
+      where: { idempotencyKey: { startsWith: key } },
+      include: { delivery: true },
+    })
+    notificationIds.push(...rows.map((r) => r.id))
+    return rows.map((r) => r.delivery!)
+  }
+
+  it("suppresses that org's notifications and nobody else's", async () => {
+    await setOrgB(false)
+    const theirs = `test:${randomUUID()}`
+    const ours = `test:${randomUUID()}`
+    await notifyOnce({ idempotencyKey: theirs, propertyId: propertyB })
+    await notifyOnce({ idempotencyKey: ours })
+
+    const off = await deliveriesFor(theirs)
+    expect(off.length).toBeGreaterThan(0)
+    for (const d of off) expect([d.status, d.suppressedReason]).toEqual(['SUPPRESSED', 'kill_switch'])
+    // Control: the same call against org #0 is not touched by org B's switch.
+    for (const d of await deliveriesFor(ours)) expect(d.suppressedReason).not.toBe('kill_switch')
+  })
+
+  it('leaves an already-queued row alone while off, and sends it once back on', async () => {
+    await setOrgB(true)
+    const key = `test:${randomUUID()}`
+    await notifyOnce({ idempotencyKey: key, propertyId: propertyB, channels: ['EMAIL'] })
+    const [queued] = await deliveriesFor(key)
+    expect(queued.status).toBe('QUEUED')
+
+    await setOrgB(false)
+    await dispatchPendingNotifications(new Date(), 100, { deliveryIds: [queued.id] })
+    const held = await prisma.notificationDelivery.findUniqueOrThrow({ where: { id: queued.id } })
+    expect([held.status, held.attempts]).toEqual(['QUEUED', 0])
+
+    await setOrgB(true)
+    await dispatchPendingNotifications(new Date(), 100, { deliveryIds: [queued.id] })
+    const sent = await prisma.notificationDelivery.findUniqueOrThrow({ where: { id: queued.id } })
+    expect(sent.status).toBe('SENT')
+  })
+
+  it('stops a direct send for that org, which is how thread replies go out', async () => {
+    await setOrgB(false)
+    const message = { channel: 'EMAIL' as const, to: 'ops@example.test', body: 'hello' }
+    expect(await deliverOverChannel({ ...message, orgId: orgB })).toEqual({
+      status: 'SUPPRESSED',
+      suppressedReason: 'kill_switch',
+    })
+    expect((await deliverOverChannel({ ...message, orgId: 'org_0' })).status).toBe('SENT')
   })
 })
 

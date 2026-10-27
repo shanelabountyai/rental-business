@@ -2,6 +2,7 @@ import 'server-only'
 
 import type { NotificationChannel } from '@rental/core/notifications'
 import { isOptOutErrorCode } from '@rental/core/comms'
+import { prisma } from '@rental/db'
 import { isOptedOut, recordOptOut } from '@/lib/comms/opt-out-store.ts'
 import { notificationConfig, sandboxAddressFor } from './config.ts'
 import { notificationAdapter } from './provider.ts'
@@ -47,6 +48,19 @@ export interface DeliveryOutcome {
 }
 
 /**
+ * The per-org kill switch (R-290b). Read per call, like the env var, so a
+ * flip takes effect on the next send. An unknown org reads as OFF: there is
+ * nobody whose messages those could be.
+ */
+export async function orgNotificationsEnabled(orgId: string): Promise<boolean> {
+  const org = await prisma.organization.findUnique({
+    where: { id: orgId },
+    select: { notificationsEnabled: true },
+  })
+  return org?.notificationsEnabled === true
+}
+
+/**
  * Sends one message, honouring the kill switch and the sandbox redirect.
  *
  * Never throws for a provider failure: the caller has already written the
@@ -63,9 +77,11 @@ export async function deliverOverChannel(args: {
   body: string
   /// R-097a: only ever set for a message that belongs to a thread.
   replyTo?: string
+  /// R-290b: whose kill switch applies. Required, so no caller can skip it.
+  orgId: string
 }): Promise<DeliveryOutcome> {
   const config = notificationConfig()
-  if (!config.enabled) {
+  if (!config.enabled || !(await orgNotificationsEnabled(args.orgId))) {
     return { status: 'SUPPRESSED', suppressedReason: 'kill_switch' }
   }
   if (!notificationAdapter.supports(args.channel)) {
