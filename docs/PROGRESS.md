@@ -14917,7 +14917,7 @@ R-285b's CI run (`40013225946`) failed 8 e2e tests across three files; none had 
 **Gate.** lint (16 baseline warnings, 0 errors), typecheck, `db:drift`, `check:ship-deps`, `npm test`: 3,629 passed + 4 skipped of 3,633. ORG-08 is 4 tests in 2.5s. Its control was checked by removing `orgId` from the delist sweep's `where`: it went red naming `ListingSyndication`. e2e `cron.spec.ts` on `desktop-chrome` against the production build: 5 of 5. That spec is the one test of the real HTTP fan-out, which reached `rental_test`'s 212 orgs in 7.6s. No page or control changed except `/money`'s two reads, so the full sweep and `mobile-chrome` are left to CI.
 
 ## R-290b — per-org notification kill switch
-**Commit:** `<pending>`  ·  **Date:** 2026-10-27
+**Commit:** `d7a9cf9`  ·  **Date:** 2026-10-27
 
 **What it built.** `Organization.notificationsEnabled` (default true; migration `20261027100000_org_notifications_enabled`). `deliverOverChannel` takes a required `orgId` and suppresses with `kill_switch` when the org is off, beside the global env var; `orgNotificationsEnabled(orgId)` in `deliver.ts` is the read. Its three callers pass the org: the drain (`delivery.orgId`), `sendThreadMessage` (the message's own `orgId`) and the email opt-out confirmation. `notify()` reads the org's switch before deciding and records `SUPPRESSED`/`kill_switch`. `dispatchPendingNotifications` only picks up rows of orgs that are on.
 
