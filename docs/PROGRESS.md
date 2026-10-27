@@ -14939,7 +14939,7 @@ R-285b's CI run (`40013225946`) failed 8 e2e tests across three files; none had 
 **Gate.** lint, typecheck, `db:drift`, `db:ci` (from scratch plus seed plus drift), `check:ship-deps`: all clean. `npm test`: 3,637 passed + 4 skipped of 3,641. Demo chain on a local `rental_demo`: `db:migrate:demo`, `db:seed:demo -- --reset` and `db:seed:demo-access` all clean. e2e on `desktop-chrome` against the production build, `staff`, `auth`, `shell`, `scra` and `leases`: 85 passed + 1 skipped of 86. The codemod touched about 130 specs, so the full sweep and `mobile-chrome` are left to CI.
 
 ## R-275 — per-organisation integration credentials
-**Commit:** `SHA_PENDING`  ·  **Date:** 2026-10-27
+**Commit:** `948ae12`  ·  **Date:** 2026-10-27
 
 **What it built.** Migration `20261027180000_org_integration` adds `OrgIntegration` (`orgId`, `provider` enum STRIPE/TWILIO/RESEND/QUICKBOOKS/ESIGN, `status`, `statusReason`, `config` Json, `secret` sealed text, `@@unique([orgId, provider])`). It has no org default (D-348), and `org_scope()` makes `orgId` immutable. `lib/integrations/store.ts` is the only reader and writer of `secret`: `orgIntegration()` opens it, and `saveOrgIntegration()` upserts and seals it. `ChannelAdapter.supports(channel, orgId)` is now async, and `OutboundMessage` carries `orgId`. `LiveChannelAdapter` resolves Resend and Twilio credentials per org. `deliverOverChannel` and `send.ts` pass the org they already had. Four new tests in `live-adapter.test.ts`: another org never gets org #0's env credentials in production; an org sends on its own subaccount, service and token; the stored secret is not plaintext; a sealed token copied into another org's row does not open. Control: with the org taken out of the HKDF purpose, the copy test fails.
 
