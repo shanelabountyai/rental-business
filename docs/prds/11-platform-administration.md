@@ -3,7 +3,7 @@
 
 | | |
 |---|---|
-| **Document status** | Draft v0.1 — reviewed against the code (every "today" claim cites a file), **nothing in it is built**, STOPPED for Shane's review |
+| **Document status** | v1.0 — D-349–D-357 accepted as proposed by Shane on 2026-10-27; OQ-27–OQ-30 answered as D-358–D-361. R-294a (the audit half of §5.4) is built |
 | **Date** | October 27, 2026 |
 | **Prepared by** | Shane LaBounty (brief) · Claude (code audit and spec) |
 | **Source** | Shane's brief of 2026-10-27: "Since we have built it where it can white-label for multiple different companies, build out the platform super-user permissions and screens if we haven't created them already, to run at the platform level — create full PRDs first." |
