@@ -15049,7 +15049,7 @@ R-294a's CI run (`40595369728`) failed one e2e test on both projects: `ops-visib
 - e2e against the production build, both projects, `platform-orgs` + `platform-admins` + `platform-auth`: 36 passed of 36 listed, none flaky.
 - CI run 40773091103 (`d145761`) is green on both jobs, including e2e on both projects.
 
-## R-303b — org console, read side: audit, jobs and settings (`PENDING`)
+## R-303b — org console, read side: audit, jobs and settings (`0f7c31b`)
 
 **What it built.** Three console pages, all reachable from the `/platform` nav, which shows each link only to admins holding the page's permission:
 - `/platform/jobs` (`org.read`): every org from `OrgHealth` alone, worst first (no or stale health, then failed children, then failed runs in 7 days, then dead letters). Each child shows its last outcome and age. A row has "Re-run" only for `job.rerun` holders, through `components/platform/rerun-button.tsx`. Each button's accessible name starts "Re-run" and names the job and the org.
