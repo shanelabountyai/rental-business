@@ -42,7 +42,7 @@ const GUARD_CALLS = [
   // choosing between the staff and tenant rules, which is the same assertion
   // made by hand.
   '!session?.principal',
-  // The platform console's guard (R-294b); R-302 adds its permission.
+  // The platform console's guard (R-294b), with its permission (R-302a).
   'requirePlatform(',
 ]
 

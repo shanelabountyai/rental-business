@@ -4559,6 +4559,39 @@ model PlatformAdmin {
   createdBy  PlatformAdmin?      @relation("PlatformAdminCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   created    PlatformAdmin[]     @relation("PlatformAdminCreatedBy")
   credential PlatformCredential?
+  roles      PlatformRoleAssignment[] @relation("PlatformRoleHolder")
+  granted    PlatformRoleAssignment[] @relation("PlatformRoleGrantedBy")
+  revoked    PlatformRoleAssignment[] @relation("PlatformRoleRevokedBy")
+}
+
+/// A platform role (PRD 11 §3.2, R-302a). Rows, seeded from
+/// PLATFORM_ROLE_DEFINITIONS; `permissions` are PlatformPermission keys.
+model PlatformRole {
+  key         String   @id
+  name        String
+  permissions String[]
+
+  assignments PlatformRoleAssignment[]
+}
+
+/// A platform grant. Revoked by setting revokedAt once, never deleted, and
+/// the last live owner on an active admin cannot be revoked or deactivated
+/// (deferred trigger). One live grant per (admin, role), by expression index.
+model PlatformRoleAssignment {
+  id              String    @id @default(cuid())
+  platformAdminId String
+  roleKey         String
+  grantedById     String?
+  grantedAt       DateTime  @default(now())
+  revokedAt       DateTime?
+  revokedById     String?
+
+  platformAdmin PlatformAdmin  @relation("PlatformRoleHolder", fields: [platformAdminId], references: [id], onDelete: Restrict)
+  role          PlatformRole   @relation(fields: [roleKey], references: [key], onDelete: Restrict)
+  grantedBy     PlatformAdmin? @relation("PlatformRoleGrantedBy", fields: [grantedById], references: [id], onDelete: Restrict)
+  revokedBy     PlatformAdmin? @relation("PlatformRoleRevokedBy", fields: [revokedById], references: [id], onDelete: Restrict)
+
+  @@index([platformAdminId, revokedAt])
 }
 
 /// StaffCredential's shape for a platform admin. The TOTP seed is sealed under

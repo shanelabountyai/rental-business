@@ -428,7 +428,7 @@ describe('orgId on every org-owned table (R-285a)', () => {
     'Organization', 'OrgMembership', 'StaffUser', 'StaffCredential', 'Role',
     'JurisdictionRule', 'RateLimitCounter', 'AuthToken', 'DecisionReason',
     // R-294b: a platform admin is inside no org (PRD 11 §2.1).
-    'PlatformAdmin', 'PlatformCredential',
+    'PlatformAdmin', 'PlatformCredential', 'PlatformRole', 'PlatformRoleAssignment',
   ]
 
   it('every model but the org-less list has orgId and an org_scope trigger', async () => {
@@ -515,5 +515,91 @@ describe('orgId on every org-owned table (R-285a)', () => {
     await expect(
       prisma.$executeRaw`INSERT INTO "LegalEntity" ("id", "name", "type", "updatedAt") VALUES (${`r301-${Date.now()}`}, 'No org', 'LLC', now())`,
     ).rejects.toThrow(/23502/)
+  })
+})
+
+describe('platform roles (R-302a, PLAT-08)', () => {
+  // Inside a transaction that never commits: these rows cannot be deleted.
+  // `SET CONSTRAINTS ALL IMMEDIATE` runs the deferred last-owner check at
+  // that line rather than at a commit that never comes.
+  async function owner(tx: Tx, tag: string) {
+    const admin = await tx.platformAdmin.create({
+      data: { email: `${tag}-${Date.now()}-${Math.random()}@example.test`.toLowerCase(), name: tag },
+    })
+    const grant = await tx.platformRoleAssignment.create({
+      data: { platformAdminId: admin.id, roleKey: 'platform_owner' },
+    })
+    return { admin, grant }
+  }
+
+  it('refuses deleting a grant, and changing anything but its revocation, once', async () => {
+    await expect(
+      prisma.$transaction(async (tx) => {
+        const { grant } = await owner(tx, 'plat08-del')
+        await tx.platformRoleAssignment.delete({ where: { id: grant.id } })
+      }),
+    ).rejects.toThrow(/never deleted/)
+    await expect(
+      prisma.$transaction(async (tx) => {
+        const { grant } = await owner(tx, 'plat08-edit')
+        await tx.platformRoleAssignment.update({ where: { id: grant.id }, data: { roleKey: 'platform_viewer' } })
+      }),
+    ).rejects.toThrow(/may only be revoked/)
+    await expect(
+      prisma.$transaction(async (tx) => {
+        await owner(tx, 'plat08-keep')
+        const { grant } = await owner(tx, 'plat08-twice')
+        await tx.platformRoleAssignment.update({ where: { id: grant.id }, data: { revokedAt: new Date() } })
+        await tx.platformRoleAssignment.update({ where: { id: grant.id }, data: { revokedAt: new Date() } })
+      }),
+    ).rejects.toThrow(/revoked platform grant cannot change/)
+  })
+
+  it('refuses a second live grant of the same role to the same admin', async () => {
+    await expect(
+      prisma.$transaction(async (tx) => {
+        const { admin } = await owner(tx, 'plat08-dup')
+        await tx.platformRoleAssignment.create({ data: { platformAdminId: admin.id, roleKey: 'platform_owner' } })
+      }),
+    ).rejects.toThrow(/PlatformRoleAssignment_one_live_grant|Unique constraint/)
+  })
+
+  it('refuses revoking every live owner, and deactivating every admin who holds one', async () => {
+    // Deployment-wide, but safe against the shared database: it revokes ALL
+    // live owners, so it holds whatever other files have left behind, and it
+    // never commits.
+    await expect(
+      prisma.$transaction(async (tx) => {
+        await owner(tx, 'plat08-last')
+        await tx.$executeRaw`UPDATE "PlatformRoleAssignment" SET "revokedAt" = now() WHERE "roleKey" = 'platform_owner' AND "revokedAt" IS NULL`
+        await tx.$executeRaw`SET CONSTRAINTS ALL IMMEDIATE`
+      }),
+    ).rejects.toThrow(/last platform owner/)
+    await expect(
+      prisma.$transaction(async (tx) => {
+        await owner(tx, 'plat08-deact')
+        await tx.$executeRaw`UPDATE "PlatformAdmin" SET "active" = false WHERE "id" IN (SELECT "platformAdminId" FROM "PlatformRoleAssignment" WHERE "roleKey" = 'platform_owner' AND "revokedAt" IS NULL)`
+        await tx.$executeRaw`SET CONSTRAINTS ALL IMMEDIATE`
+      }),
+    ).rejects.toThrow(/last platform owner/)
+  })
+
+  it('allows revoking an owner while another stays live (control)', async () => {
+    await expect(
+      prisma.$transaction(async (tx) => {
+        await owner(tx, 'plat08-stays')
+        const { grant } = await owner(tx, 'plat08-goes')
+        await tx.platformRoleAssignment.update({ where: { id: grant.id }, data: { revokedAt: new Date() } })
+        await tx.$executeRaw`SET CONSTRAINTS ALL IMMEDIATE`
+        throw new Rollback()
+      }),
+    ).rejects.toThrow(Rollback)
+  })
+
+  it('seeds roles whose permissions are all platform permissions', async () => {
+    const { isPlatformPermission } = await import('../core/rbac/platform.ts')
+    const roles = await prisma.platformRole.findMany()
+    expect(roles.map((r) => r.key).sort()).toEqual(['platform_owner', 'platform_support', 'platform_viewer'])
+    expect(roles.flatMap((r) => r.permissions).filter((p) => !isPlatformPermission(p))).toEqual([])
   })
 })

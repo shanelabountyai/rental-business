@@ -2,6 +2,7 @@ import { globSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { type Found, NavSignal, WEB, call, discover, keyOfFound, unguardedEntrypoints } from './harness.ts'
+import { PLATFORM_PERMISSIONS } from '@rental/core/rbac'
 import { type PlatformEntry, platformManifest } from './platform.manifest.ts'
 
 // PLAT-02 (PRD 11 §7.1, R-294c): every console page, layout and route handler
@@ -16,14 +17,23 @@ import { type PlatformEntry, platformManifest } from './platform.manifest.ts'
 const HOST = 'platform.localhost'
 vi.stubEnv('PLATFORM_HOST', HOST)
 
-const platform: { principal: { id: string; kind: 'platform'; email: string; name: string; mfaVerifiedAt: number } | null } = {
-  principal: null,
-}
+const platform: {
+  principal: { id: string; kind: 'platform'; email: string; name: string; mfaVerifiedAt: number } | null
+  /// What the guard's assignment read answers: the admin's live roles.
+  roles: { roleKey: string; role: { permissions: string[] } }[]
+} = { principal: null, roles: [] }
 
 vi.mock('@rental/db', async (importOriginal) => {
   const db = await importOriginal<typeof import('@rental/db')>()
   const { withWriteSpy } = await import('./write-spy.ts')
-  return { ...db, prisma: withWriteSpy(db.prisma) }
+  const spied = withWriteSpy(db.prisma)
+  // The admin is a fake id, so its roles come from the test rather than from
+  // rows that, being undeletable, would outlive it.
+  const prisma = new Proxy(spied, {
+    get: (target, key) =>
+      key === 'platformRoleAssignment' ? { findMany: async () => platform.roles } : Reflect.get(target, key),
+  })
+  return { ...db, prisma }
 })
 vi.mock('@/auth.ts', () => ({
   auth: async () => ({
@@ -68,6 +78,8 @@ vi.mock('next/cache', () => ({ revalidatePath: () => {}, revalidateTag: () => {}
 
 const STRANGER_WRITES = /^RateLimitCounter\./
 const STALE = () => Date.now() - 11 * 60_000
+const ADMIN = { id: 'plat-02-admin', kind: 'platform' as const, email: 'a@example.test', name: 'a' }
+const EVERYTHING = [{ roleKey: 'platform_owner', role: { permissions: [...PLATFORM_PERMISSIONS] } }]
 
 function manifestFindings(found: Found[], entries: Record<string, PlatformEntry>): string[] {
   const keys = new Set(found.map(keyOfFound))
@@ -94,16 +106,31 @@ async function runPlatform(found: Found[], entries: Record<string, PlatformEntry
       out.push(`${action}: an org session was not refused first (${asStaff.kind} ${String(asStaff.detail)}, ${asStaff.ops.length} queries)`)
     }
 
-    // A platform session whose last code is eleven minutes old.
+    // A platform session holding every role, whose last code is eleven
+    // minutes old: refused for want of a code, not a permission.
     if ('guard' in entry && entry.guard === 'step-up') {
-      platform.principal = { id: 'plat-02-admin', kind: 'platform', email: 'a@example.test', name: 'a', mfaVerifiedAt: STALE() }
+      platform.principal = { ...ADMIN, mfaVerifiedAt: STALE() }
+      platform.roles = EVERYTHING
       const stale = await drive()
       if (!String(stale.detail).startsWith('/platform/step-up?next=') || stale.ops.length) {
         out.push(`${action}: a stale code was not sent to step-up first (${stale.kind} ${String(stale.detail)}, ${stale.ops.length} queries)`)
       }
     }
+
+    // A fresh session holding no role: refused for want of the permission,
+    // having written nothing.
+    if ('guard' in entry && entry.permission) {
+      platform.principal = { ...ADMIN, mfaVerifiedAt: Date.now() }
+      platform.roles = []
+      const bare = await drive()
+      const wroteBare = bare.ops.filter((op) => op.write && !STRANGER_WRITES.test(op.name))
+      if (bare.detail !== `/platform/no-access?permission=${encodeURIComponent(entry.permission)}` || wroteBare.length) {
+        out.push(`${action}: an admin without ${entry.permission} was not refused (${bare.kind} ${String(bare.detail)}, ${wroteBare.length} writes)`)
+      }
+    }
   }
   platform.principal = null
+  platform.roles = []
   return out
 }
 
@@ -155,7 +182,7 @@ describe('PLAT-02 controls', () => {
     ])
   })
 
-  it('flags a query before the guard, the org guard, and a missing step-up', async () => {
+  it('flags a query before the guard, the org guard, a missing step-up and a missing permission', async () => {
     const found = await discover('platform-actions.ts', controls)
     const findings = await runPlatform(found, {
       'platform-actions.ts#queriesFirst': { guard: 'session' },
@@ -163,8 +190,12 @@ describe('PLAT-02 controls', () => {
       'platform-actions.ts#noStepUp': { guard: 'step-up' },
       'platform-actions.ts#guarded': { guard: 'session' },
       'platform-actions.ts#steppedUp': { guard: 'step-up' },
+      'platform-actions.ts#noPermission': { guard: 'session', permission: 'org.read' },
+      'platform-actions.ts#permissioned': { guard: 'session', permission: 'org.read' },
+      'platform-actions.ts#stepUpPermission': { guard: 'step-up', permission: 'platformAdmin.manage' },
     })
     expect(findings.map((f) => f.split(':')[0]).sort()).toEqual([
+      'platform-actions.ts#noPermission',
       'platform-actions.ts#noStepUp',
       'platform-actions.ts#queriesFirst',
       'platform-actions.ts#staffGuarded',

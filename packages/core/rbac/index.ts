@@ -10,3 +10,4 @@
 export * from './authority.ts'
 export * from './can.ts'
 export * from './permissions.ts'
+export * from './platform.ts'

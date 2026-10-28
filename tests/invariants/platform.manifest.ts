@@ -2,10 +2,16 @@
 // lib/platform, keyed `<path under apps/web>#<export>`, with what it demands.
 // `public` is a sign-in step that exists before any session, with the reason;
 // `session` is `requirePlatform()`; `step-up` is `requirePlatform({ stepUp })`.
-// R-302 adds each action's platform permission here. The suite fails on an
+// `permission` (R-302a) is what `requirePlatform({ permission })` must demand:
+// the suite drives the action as an admin holding no role and wants a refusal.
+// An entry without one is an admin's own-account act. The suite fails on an
 // export with no entry and an entry with no export.
 
-export type PlatformEntry = { public: string } | { guard: 'session' | 'step-up' }
+import type { PlatformPermission } from '@rental/core/rbac'
+
+export type PlatformEntry =
+  | { public: string }
+  | { guard: 'session' | 'step-up'; permission?: PlatformPermission }
 
 export const platformManifest: Record<string, PlatformEntry> = {
   'lib/platform/auth-actions.ts#startPlatformSignIn': { public: 'the platform sign-in form' },

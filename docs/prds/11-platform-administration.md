@@ -113,18 +113,18 @@ A `PlatformAdmin` row (§5.1), with its own credential, **no `StaffUser` row, no
 | `grant.breakGlass` | Open a break-glass grant (§4.7) | ✓ |
 | `job.rerun` | Re-trigger one org's cron child (D-356) | — |
 | `jurisdiction.publish` | Publish a `JurisdictionRule` version (D-355) | ✓ |
-| `audit.read` | Read the platform audit log | — |
+| `platformAudit.read` | Read the platform audit log | — |
 | `platformAdmin.manage` | Invite, deactivate, reset MFA of, and assign roles to platform admins | ✓ |
 
-Closed vocabulary, typed like `PERMISSIONS`; `isPlatformPermission()` mirrors `isPermission()` (`permissions.ts:175`). **The two sets share no string**, enforced by a unit test, so `can(actor, 'audit.read')` and `canPlatform(admin, 'audit.read')` can never be confused by a type that widened to `string`; the platform one is spelled `audit.read` only inside `PlatformPermission`.
+Closed vocabulary, typed like `PERMISSIONS`; `isPlatformPermission()` mirrors `isPermission()` (`permissions.ts:175`). **The two sets share no string**, enforced by a unit test, so an org grant can never satisfy a platform check through a type that widened to `string`. *(2026-10-28, D-366: this paragraph first said the platform audit permission was `audit.read`, which the org catalogue already holds. The test failed on its first run, and the permission is `platformAudit.read`.)*
 
 ### 3.2 Roles (rows, seeded, D-351)
 
 | Role | Permissions | Who |
 |---|---|---|
 | `platform_owner` | all of §3.1 | Shane |
-| `platform_support` | `org.read`, `integration.provision`, `grant.request`, `grant.breakGlass`, `job.rerun`, `audit.read` | a support hire, later |
-| `platform_viewer` | `org.read`, `audit.read` | a bookkeeper or investor; no writes |
+| `platform_support` | `org.read`, `integration.provision`, `grant.request`, `grant.breakGlass`, `job.rerun`, `platformAudit.read` | a support hire, later |
+| `platform_viewer` | `org.read`, `platformAudit.read` | a bookkeeper or investor; no writes |
 
 Money (`org.feeSet`), lifecycle (`org.freeze`, `org.offboard`), access (`platformAdmin.manage`) and law (`jurisdiction.publish`) are owner-only by construction, the same way `confidential.read` is owner-only on the org side (`permissions.ts:127-131`): by not being on another role's list, not by a role-name test.
 
@@ -226,7 +226,7 @@ Refusals name the missing permission (same `/no-access` pattern as `guard.ts:104
 
 ### 4.9 Platform audit log — `/platform/audit`
 
-- **Who:** `audit.read`.
+- **Who:** `platformAudit.read`.
 - **Shows:** every `AuditLog` row with `actorType = PLATFORM` (any org, or none) and every org-less row: when, admin, action, org (link), grant (link), reason. Filters: admin, org, action, date range; CSV export of the filtered set.
 - **Does not show:** org rows written by org staff. The one exception is rows written **under a grant**, which carry `supportGrantId` and are the platform's own acts.
 

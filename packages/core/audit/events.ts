@@ -98,7 +98,7 @@ export const AUDIT_ACTIONS = [
   /// R-294c: an admin replaced their own recovery codes, under step-up.
   'auth.recovery_codes_regenerated',
   /// R-294b: a platform admin created. By the bootstrap script for the first;
-  /// by another admin in the console from R-302.
+  /// by another admin in the console from R-302b.
   'platform_admin.created',
 
   // Permission changes (ROLE-03)

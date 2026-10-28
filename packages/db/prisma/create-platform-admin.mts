@@ -4,9 +4,9 @@
 //   npm run db:create-platform-admin -- --email you@example.com --name "You" --target <host>/<db>
 //   npm run db:create-platform-admin -- --reset-mfa --email you@example.com --target <host>/<db>
 //
-// The first form REFUSES once any active admin exists, with no --force: after
-// the first, admins are added in the console, where a human is the actor (R-302).
-// Until R-302 gives admins roles, "the last owner" is the last active admin.
+// The first form REFUSES once any active platform owner exists, with no
+// --force: after the first, admins are added in the console, where a human is
+// the actor (R-302b). It grants `platform_owner` (R-302a).
 //
 // It checks the database it is ACTUALLY POINTED AT, not NODE_ENV, as
 // refuseUnlessDemoDatabase does: never `rental_test` or `rental_ci`, whose
@@ -71,14 +71,18 @@ async function main() {
     process.exit(1)
   }
   const actor = { type: 'PLATFORM' as const, ref: 'db:create-platform-admin' }
-  const activeAdmins = await prisma.platformAdmin.findMany({ where: { active: true }, select: { id: true, email: true } })
+  // Live owner grants on active admins: who can still get in and manage.
+  const owners = await prisma.platformRoleAssignment.findMany({
+    where: { roleKey: 'platform_owner', revokedAt: null, platformAdmin: { active: true } },
+    select: { platformAdmin: { select: { id: true, email: true } } },
+  })
 
   if (resetMfa) {
     // The console covers every other case (PADM-03); this is for the last
-    // admin, who has no one to ask.
-    const admin = activeAdmins.find((a) => a.email === email)
-    if (!admin || activeAdmins.length !== 1) {
-      console.error('Only the last active admin can be reset here. Ask another admin to reset you in the console.')
+    // owner, who has no one to ask.
+    const admin = owners[0]?.platformAdmin
+    if (!admin || admin.email !== email || owners.some((o) => o.platformAdmin.id !== admin.id)) {
+      console.error('Only the last platform owner can be reset here. Ask another owner to reset you in the console.')
       process.exit(1)
     }
     await prisma.$transaction(async (tx) => {
@@ -102,9 +106,9 @@ async function main() {
     return
   }
 
-  if (activeAdmins.length > 0) {
+  if (owners.length > 0) {
     console.error(
-      'A platform admin already exists. Add the next one in the console, where it is audited\n' +
+      'A platform owner already exists. Add the next one in the console, where it is audited\n' +
         'against the admin who did it rather than against a script. There is no --force.',
     )
     process.exit(1)
@@ -119,6 +123,7 @@ async function main() {
         email,
         name: name!,
         credential: { create: { passwordHash: await hashPassword(randomBytes(32).toString('base64url')) } },
+        roles: { create: { roleKey: 'platform_owner' } },
       },
     })
     await tx.authToken.create({
@@ -136,7 +141,7 @@ async function main() {
       entityType: 'PlatformAdmin',
       entityId: created.id,
       orgId: null,
-      after: { email, bootstrapped: true },
+      after: { email, bootstrapped: true, roles: ['platform_owner'] },
     })
     return created
   })

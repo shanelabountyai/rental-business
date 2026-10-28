@@ -97,6 +97,8 @@ const ORG_LESS: Record<string, string> = {
   DecisionReason: 'global placeholder list until R-297 makes it per org',
   PlatformAdmin: 'a platform admin is inside no org (PRD 11 §2.1)',
   PlatformCredential: "a PlatformAdmin's password and MFA, as org-less as the admin",
+  PlatformRole: 'a console role (R-302a); its permissions are platform permissions, which name no org',
+  PlatformRoleAssignment: 'a PlatformAdmin holding a console role, as org-less as the admin',
 }
 
 describe('ORG-06: every org-owned model', () => {

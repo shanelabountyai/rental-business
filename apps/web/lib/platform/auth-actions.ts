@@ -113,7 +113,7 @@ export async function startPlatformSignIn(
       data: { failedLoginCount, lockedUntil },
     })
     // Crossing into lockout is recorded once, as staff's is. The notice to the
-    // other platform owners (§2.5) needs R-302's roles to know who they are.
+    // other platform owners (§2.5) is R-302b's: the roles now say who they are, and delivery to an org-less admin is the open part.
     if (lockedUntil && !credential.lockedUntil) {
       await recordAudit(prisma, {
         actor: { type: 'PLATFORM', ref: admin.id, ipAddress: ip },

@@ -4,6 +4,7 @@
 // separate script - demo-seed.mts, run with `npm run db:seed:demo`.
 
 import { ROLE_DEFINITIONS } from '../../core/rbac/permissions.ts'
+import { PLATFORM_ROLE_DEFINITIONS } from '../../core/rbac/platform.ts'
 import { prisma } from '../index.ts'
 
 /**
@@ -44,6 +45,19 @@ async function seedRoles() {
   }
 
   console.info(`Seeded ${Object.keys(ROLE_DEFINITIONS).length} roles.`)
+}
+
+/// The console's roles (PRD 11 §3.2, R-302a), on the same terms as the org
+/// roles above: upserted by key, permissions rewritten from code.
+async function seedPlatformRoles() {
+  for (const [key, { name, permissions }] of Object.entries(PLATFORM_ROLE_DEFINITIONS)) {
+    await prisma.platformRole.upsert({
+      where: { key },
+      create: { key, name, permissions: [...permissions] },
+      update: { name, permissions: [...permissions] },
+    })
+  }
+  console.info(`Seeded ${Object.keys(PLATFORM_ROLE_DEFINITIONS).length} platform roles.`)
 }
 
 /**
@@ -351,6 +365,7 @@ async function seedScreeningCriteria() {
 
 async function main() {
   await seedRoles()
+  await seedPlatformRoles()
   await seedJurisdictionRules()
   await seedScreeningCriteria()
 }
