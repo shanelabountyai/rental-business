@@ -14,7 +14,7 @@ export const metadata = { title: 'Organisation' }
 // Read side only. Not here yet, each with the row that builds it: status and
 // its history (R-300), the checklist (R-291), grants and "Request access"
 // (R-295), the fee (R-296), pending invites (R-304), the kill-switch toggle
-// (R-306) and "Re-run" (R-303b).
+// (R-306). "Re-run" is on /platform/jobs (R-303b, PRD 11 §4.10).
 export default async function PlatformOrgPage({ params }: { params: Promise<{ slug: string }> }) {
   await requirePlatform({ permission: 'org.read' })
   const { slug } = await params

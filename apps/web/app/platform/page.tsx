@@ -18,6 +18,7 @@ export const metadata = { title: 'Platform console' }
 export default async function PlatformHomePage() {
   const admin = await requirePlatform()
   const canRead = (await platformDecision(admin, 'org.read')).allowed
+  const canAudit = (await platformDecision(admin, 'platformAudit.read')).allowed
   const orgs = canRead ? await prisma.organization.findMany({ select: ORG_SUMMARY_SELECT, orderBy: { name: 'asc' } }) : []
   const now = new Date()
   const attention = orgs
@@ -35,6 +36,21 @@ export default async function PlatformHomePage() {
           {canRead && (
             <Link href="/platform/orgs" className="underline underline-offset-4">
               Organisations
+            </Link>
+          )}
+          {canRead && (
+            <Link href="/platform/jobs" className="underline underline-offset-4">
+              Jobs
+            </Link>
+          )}
+          {canAudit && (
+            <Link href="/platform/audit" className="underline underline-offset-4">
+              Audit log
+            </Link>
+          )}
+          {canRead && (
+            <Link href="/platform/settings" className="underline underline-offset-4">
+              Settings
             </Link>
           )}
           <Link href="/platform/admins" className="underline underline-offset-4">

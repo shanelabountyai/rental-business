@@ -65,6 +65,9 @@ export const manifest: Record<string, Entry> = {
   // `value` - no org owns them to cross. PLAT-02 refuses an org session first.
   'lib/platform/admin-actions.ts#invitePlatformAdmin': {},
   'lib/platform/admin-actions.ts#managePlatformAdmin': { 'form.adminId': 'value', 'form.assignmentId': 'value' },
+  // lib/platform/job-actions.ts (R-303b): the console names any org by design
+  // (D-356), so its id is a `value`, not a row this caller's org must own.
+  'lib/platform/job-actions.ts#rerunCronChild': { 'form.orgId': 'value', 'form.child': '=daily' },
   // lib/billing/actions.ts
   'lib/billing/actions.ts#resyncPayer': { 'form.leasePayerId': 'leasePayer' },
   'lib/billing/actions.ts#resyncLease': { 'form.leaseId': 'lease' },

@@ -15048,3 +15048,28 @@ R-294a's CI run (`40595369728`) failed one e2e test on both projects: `ops-visib
 - `db:ci`: migrations from scratch, seed, no drift.
 - e2e against the production build, both projects, `platform-orgs` + `platform-admins` + `platform-auth`: 36 passed of 36 listed, none flaky.
 - CI run 40773091103 (`d145761`) is green on both jobs, including e2e on both projects.
+
+## R-303b — org console, read side: audit, jobs and settings (`PENDING`)
+
+**What it built.** Three console pages, all reachable from the `/platform` nav, which shows each link only to admins holding the page's permission:
+- `/platform/jobs` (`org.read`): every org from `OrgHealth` alone, worst first (no or stale health, then failed children, then failed runs in 7 days, then dead letters). Each child shows its last outcome and age. A row has "Re-run" only for `job.rerun` holders, through `components/platform/rerun-button.tsx`. Each button's accessible name starts "Re-run" and names the job and the org.
+- `lib/platform/job-actions.ts#rerunCronChild`: audited `job.child_retriggered` in the org, then fetches the child at `AUTH_URL` with `CRON_SECRET`.
+- `/platform/audit` (`platformAudit.read`): `lib/platform/audit.ts` with GET filters for admin, org (or "no organisation"), action, and a UTC date range. It shows the latest 200, and `/platform/audit/export` returns the same filtered set as CSV through `toCsv`, capped at 50k.
+- `/platform/settings` (`org.read`): `lib/platform/settings.ts#platformSettings(env)` renders PRD 11 §4.12's list as on/off/set/unset. The hostnames, `VERCEL_ENV` and a 7-character SHA are the only raw values, and Stripe is shown only by its mode.
+
+Tests: `lib/platform/settings.test.ts` (no secret value in the output, the kill switch read as the sender reads it). `e2e/platform-ops.spec.ts` (serial, its own org): support re-runs the notification child, health updates, the audit row and CSV are checked, a viewer gets no Re-run and no secret, and a bare admin is refused. Both manifests have the new action. PLAT-02 and PLAT-03 covered the new pages without changes.
+
+**What it decided (D-369).** The re-run reads back only the HTTP status and the claim, never the body, which can carry exception text. It lives on `/platform/jobs` only. The audit filter is `actorType = PLATFORM` alone, because D-352's CHECK makes every org-less row a PLATFORM row. `job.child_retriggered` is a new audit action, separate from org staff's `job.rerun`.
+
+**Real bugs found.** One, in the new spec, caught by `mobile-chrome`: **`page.reload()` after a form press re-sends the press if it landed before hydration.** On the slower project the click went out as a native POST navigation, and reloading it re-ran the job, which wrote two audit rows. The spec now navigates with `goto`. In a browser, a person reloading that page would get the resubmit prompt.
+
+**What it left behind.**
+- The grant column and grant filter on `/platform/audit` wait for R-295's `supportGrantId`.
+- The e2e org is never deleted. The re-run's audit row references it, and `AuditLog` is append-only with a Restrict FK. It has no properties or staff. Each run leaves one such org behind until R-300 offboarding gives orgs a retire path.
+- A re-run waits for the child's response, up to its 60 seconds.
+
+**Gate.**
+- lint: 0 errors. typecheck, `check:ship-deps` and the build (inside `test:e2e`) are clean.
+- `npm test`: 3,710 passed, 4 skipped, 0 failed (274 files).
+- e2e against the production build, both projects, `platform-ops` + `platform-orgs` + `platform-admins` + `platform-auth`: 41 passed, 1 flaky of 42 listed. The flaky test was the reload bug above. After the fix, `platform-ops` passed 18 of 18 with `--repeat-each=3 --retries=0`.
+- No schema change, so `db:ci` was not re-run.

@@ -355,6 +355,10 @@ export const AUDIT_ACTIONS = [
   /// Tuesday's billing sweep again, and what happened" is the question a
   /// support conversation opens with, and `job.failed` cannot answer it.
   'job.rerun',
+  /// R-303b (D-356): a platform admin re-triggered one org's cron child from
+  /// `/platform/jobs` - the request Vercel Cron makes, never a `JobRun`
+  /// re-run. `after` is the child and the HTTP status, never its body.
+  'job.child_retriggered',
 
   // Compliance overrides
   'entry_notice.overridden',
