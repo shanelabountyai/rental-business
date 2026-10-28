@@ -427,6 +427,8 @@ describe('orgId on every org-owned table (R-285a)', () => {
   const ORGLESS = [
     'Organization', 'OrgMembership', 'StaffUser', 'StaffCredential', 'Role',
     'JurisdictionRule', 'RateLimitCounter', 'AuthToken', 'DecisionReason',
+    // R-294b: a platform admin is inside no org (PRD 11 §2.1).
+    'PlatformAdmin', 'PlatformCredential',
   ]
 
   it('every model but the org-less list has orgId and an org_scope trigger', async () => {

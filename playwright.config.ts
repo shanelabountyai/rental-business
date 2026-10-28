@@ -202,6 +202,9 @@ export default defineConfig({
     env: {
       PORT: port,
       AUTH_URL: baseURL,
+      // The platform console's host (R-294b, D-350). `*.localhost` resolves to
+      // loopback in Chromium, so this same server answers it on this port.
+      PLATFORM_HOST: 'platform.localhost',
       // Same rule as vitest.config.ts: the e2e suite runs against the
       // SIMULATOR whatever is in .env.local. `npm run dev` would otherwise
       // pick up a real test key and every billing assertion would depend on

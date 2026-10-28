@@ -26,6 +26,20 @@ vi.mock('@/auth.ts', async () => {
     handlers: {},
   }
 })
+vi.mock('@/platform-auth.ts', () => ({
+  // The console's Auth.js instance (R-294b). No harness caller is on
+  // PLATFORM_HOST - the mocked headers carry no host - so every platform
+  // action refuses before reaching these.
+  platformAuth: async () => null,
+  platformSignIn: async () => {
+    throw new Error('platformSignIn reached by a harness call')
+  },
+  platformSignOut: async () => {},
+  platformHandlers: {},
+  currentPlatformPrincipal: async () => null,
+  peekPlatformChallenge: async () => null,
+  PLATFORM_MFA_PURPOSE: 'platform-mfa',
+}))
 vi.mock('next/navigation', async (importOriginal) => ({
   ...(await importOriginal<typeof import('next/navigation')>()),
   redirect: (to: string) => {

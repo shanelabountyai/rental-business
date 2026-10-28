@@ -26,6 +26,15 @@ export const PUBLIC_ROUTES: Record<string, string> = {
   'portal/guarantor/verify/redeem/route.ts':
     'POST-only redemption of a guarantor magic link (R-165, K1). Same shape as portal/verify/redeem/route.ts.',
   'api/auth/[...nextauth]/route.ts': 'Auth.js owns its own endpoints.',
+  'platform/api/auth/[...nextauth]/route.ts':
+    "The platform console's Auth.js endpoints (R-294b), same reason as the org instance's. Served on PLATFORM_HOST only (proxy.ts).",
+  'platform/login/page.tsx': 'Platform sign-in (R-294b). Guarding it would be a redirect loop.',
+  'platform/login/mfa/page.tsx':
+    'The platform second factor (R-294b). Before a session exists; the challenge cookie is the credential.',
+  'platform/enrol-mfa/page.tsx':
+    'Platform MFA enrolment (PADM-02), between the password and the first code, before any session exists. Both its actions need the challenge cookie and refuse an already-enrolled admin.',
+  'platform/set-password/page.tsx':
+    "The first password from db:create-platform-admin's link. The single-use token is the credential.",
   'api/cron/route.ts':
     'Authorized by a constant-time CRON_SECRET bearer check rather than a session - no human is signed in.',
   'api/cron/escalations/route.ts':

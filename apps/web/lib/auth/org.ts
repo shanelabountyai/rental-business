@@ -1,5 +1,6 @@
 import { prisma } from '@rental/db'
 import { headers } from 'next/headers'
+import { isPlatformHost } from './platform-host.ts'
 
 // Which organisation a request is for, and whether a signed-in principal still
 // belongs to it (R-288, PRD 10 §1.4).
@@ -36,7 +37,11 @@ export function orgSlugFromHost(
 
 /// The org this request's host names, or null for none.
 export async function hostOrgId(): Promise<string | null> {
-  const slug = orgSlugFromHost((await headers()).get('host'))
+  const host = (await headers()).get('host')
+  // The console's host is no org (PRD 11 §2.2), even in dev where it is not
+  // under ORG_BASE_DOMAIN and would otherwise fall through to org #0.
+  if (isPlatformHost(host)) return null
+  const slug = orgSlugFromHost(host)
   if (slug === undefined) return DEFAULT_ORG_ID
   if (slug === null) return null
   const org = await prisma.organization.findUnique({ where: { slug }, select: { id: true } })

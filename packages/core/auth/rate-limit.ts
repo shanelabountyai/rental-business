@@ -32,6 +32,9 @@ export const RATE_LIMITS = {
   /// Per IP. Generous enough for a shared office NAT, tight enough that
   /// spraying a password list from one host stalls quickly.
   login: { limit: 10, windowMs: 5 * 60_000 },
+  /// Per IP, platform console only (PRD 11 §2.5). Tighter than staff: a
+  /// handful of people sign in here, and none of them from a shared office.
+  platformLogin: { limit: 5, windowMs: 15 * 60_000 },
   /// Per IP. Requesting magic links is unauthenticated and sends messages.
   magicLinkRequest: { limit: 5, windowMs: 15 * 60_000 },
   passwordResetRequest: { limit: 5, windowMs: 15 * 60_000 },

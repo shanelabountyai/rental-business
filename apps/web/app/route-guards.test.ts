@@ -42,6 +42,8 @@ const GUARD_CALLS = [
   // choosing between the staff and tenant rules, which is the same assertion
   // made by hand.
   '!session?.principal',
+  // The platform console's guard (R-294b); R-302 adds its permission.
+  'requirePlatform(',
 ]
 
 function walk(dir: string, prefix = ''): string[] {

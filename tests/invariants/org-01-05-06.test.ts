@@ -23,6 +23,20 @@ vi.mock('@/auth.ts', () => ({
   MfaRateLimited: class MfaRateLimited extends Error {},
   handlers: {},
 }))
+vi.mock('@/platform-auth.ts', () => ({
+  // The console's Auth.js instance (R-294b). No harness caller is on
+  // PLATFORM_HOST - the mocked headers carry no host - so every platform
+  // action refuses before reaching these.
+  platformAuth: async () => null,
+  platformSignIn: async () => {
+    throw new Error('platformSignIn reached by a harness call')
+  },
+  platformSignOut: async () => {},
+  platformHandlers: {},
+  currentPlatformPrincipal: async () => null,
+  peekPlatformChallenge: async () => null,
+  PLATFORM_MFA_PURPOSE: 'platform-mfa',
+}))
 vi.mock('next/navigation', async (importOriginal) => ({
   ...(await importOriginal<typeof import('next/navigation')>()),
   redirect: (to: string) => {
@@ -81,6 +95,8 @@ const ORG_LESS: Record<string, string> = {
   RateLimitCounter: 'keys gain an org component instead (R-288)',
   AuthToken: 'points at a subject that has an org',
   DecisionReason: 'global placeholder list until R-297 makes it per org',
+  PlatformAdmin: 'a platform admin is inside no org (PRD 11 §2.1)',
+  PlatformCredential: "a PlatformAdmin's password and MFA, as org-less as the admin",
 }
 
 describe('ORG-06: every org-owned model', () => {

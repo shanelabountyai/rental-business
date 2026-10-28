@@ -34,6 +34,13 @@ const PUBLIC_BY_DESIGN: Record<string, string> = {
   'lib/auth/actions.ts#completePasswordReset': 'reset token (redeemToken)',
   'lib/auth/actions.ts#requestTenantMagicLink': 'sign-in flow, rate-limited',
   'lib/auth/actions.ts#requestGuarantorMagicLink': 'sign-in flow, rate-limited',
+  // R-294b: the platform console's sign-in. Every one refuses off PLATFORM_HOST.
+  'lib/platform/auth-actions.ts#startPlatformSignIn': 'platform sign-in flow, rate-limited',
+  'lib/platform/auth-actions.ts#completePlatformMfa': 'platform challenge cookie (peekPlatformChallenge)',
+  'lib/platform/auth-actions.ts#beginPlatformMfaEnrolment': 'platform challenge cookie; refuses an enrolled admin',
+  'lib/platform/auth-actions.ts#confirmPlatformMfaEnrolment': 'platform challenge cookie; refuses an enrolled admin',
+  'lib/platform/auth-actions.ts#setPlatformPassword': 'setup token (redeemToken)',
+  'lib/platform/auth-actions.ts#signOutOfPlatform': 'ends only the caller’s own platform session',
   'lib/showings/access-actions.ts#verifyIdentityForShowing': 'showing-access token',
   'lib/showings/actions.ts#bookShowing': 'showing-booking token',
   'lib/scope/actions.ts#selectScope': 'a preference cookie, intersected with RBAC on read',

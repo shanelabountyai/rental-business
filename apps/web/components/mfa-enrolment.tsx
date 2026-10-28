@@ -18,8 +18,12 @@ export function MfaEnrolment({
   enrolled,
   begin,
   confirm,
+  continueHref,
 }: {
   enrolled: boolean
+  /// Where to go once the codes are saved. The platform console enrols
+  /// mid-sign-in and has nowhere else to send the admin (R-294b).
+  continueHref?: string
   begin: () => Promise<EnrolmentState>
   confirm: (state: ConfirmState, formData: FormData) => Promise<ConfirmState>
 }) {
@@ -71,6 +75,11 @@ export function MfaEnrolment({
             <li key={code}>{code}</li>
           ))}
         </ul>
+        {continueHref && (
+          <a href={continueHref} className="text-sm underline underline-offset-4">
+            I&apos;ve stored these — continue
+          </a>
+        )}
       </div>
     )
   }

@@ -4379,6 +4379,13 @@ enum AuthTokenPurpose {
   /// hidden form field waiting to be autofilled or screenshotted. Lives in an
   /// httpOnly cookie, never in a URL.
   STAFF_MFA_CHALLENGE
+  /// R-294b: the same two-step shape for a platform admin (PRD 11 §2.3). A
+  /// separate purpose so a staff challenge can never finish a platform
+  /// sign-in, and the reverse.
+  PLATFORM_MFA_CHALLENGE
+  /// R-294b: the first password, from `db:create-platform-admin`. The admin
+  /// is created with an unusable random password, as `db:create-owner` does.
+  PLATFORM_PASSWORD_SETUP
   /// D-6: a vendor gets a signed, expiring, scoped work-order link and never
   /// an account. R-025 built the dispatch flow on top of this purpose - it
   /// does NOT invent a parallel VendorLink token table.
@@ -4531,6 +4538,46 @@ model StaffCredential {
   updatedAt         DateTime  @updatedAt
 
   staffUser StaffUser @relation(fields: [staffUserId], references: [id])
+}
+
+/// A platform administrator (PRD 11 §2.1, R-294b). A separate identity from
+/// StaffUser on purpose: no membership, no grant, so signing in here can never
+/// reach an org and an org sign-in can never reach the console. Never deleted
+/// (trigger) - audit rows name it; `active = false` is how one leaves.
+model PlatformAdmin {
+  id                String    @id @default(cuid())
+  /// Stored lower-case, enforced by CHECK, so @unique is case-insensitive.
+  email             String    @unique
+  name              String
+  active            Boolean   @default(true)
+  /// Same watermark as StaffUser: a session issued before it is dead.
+  sessionsValidFrom DateTime  @default(now())
+  createdAt         DateTime  @default(now())
+  createdById       String?
+  deactivatedAt     DateTime?
+
+  createdBy  PlatformAdmin?      @relation("PlatformAdminCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  created    PlatformAdmin[]     @relation("PlatformAdminCreatedBy")
+  credential PlatformCredential?
+}
+
+/// StaffCredential's shape for a platform admin. The TOTP seed is sealed under
+/// its own HKDF purpose, `platform-mfa`, never staff's `mfa-secret`.
+model PlatformCredential {
+  id                String    @id @default(cuid())
+  platformAdminId   String    @unique
+  passwordHash      String
+  passwordUpdatedAt DateTime  @default(now())
+  mfaSecret         String?
+  mfaEnrolledAt     DateTime?
+  mfaRecoveryCodes  String[]
+  failedLoginCount  Int       @default(0)
+  lockedUntil       DateTime?
+  lastLoginAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  platformAdmin PlatformAdmin @relation(fields: [platformAdminId], references: [id], onDelete: Restrict)
 }
 
 /// A tenant's password is optional by design (ROLE-05): magic link is the
@@ -7309,7 +7356,7 @@ model JurisdictionRule {
 /// tenant, a vendor on a magic link and a nightly job are all legitimate
 /// authors of an audit row and none of them is a StaffUser.
 model AuditLog {
-  id           String       @id @default(cuid())
+  id           String        @id @default(cuid())
   /// Derived from the property by trigger and immutable (D-339); with no
   /// property the writer names it. No default (D-352): null only for a
   /// PLATFORM act about the platform itself, by CHECK.
@@ -7331,7 +7378,7 @@ model AuditLog {
   reason       String?
   ipAddress    String?
   userAgent    String?
-  occurredAt   DateTime     @default(now())
+  occurredAt   DateTime      @default(now())
 
   property   Property?  @relation(fields: [propertyId], references: [id])
   actorStaff StaffUser? @relation("AuditLogActor", fields: [actorStaffId], references: [id])

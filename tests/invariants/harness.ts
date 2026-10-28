@@ -62,6 +62,7 @@ export const GUARDS = [
   'requireTenantWithScope',
   'requireGuarantor',
   'requireGuarantorWithScope',
+  'requirePlatform',
 ]
 const HANDLER =
   /^export\s+(?:default\s+)?(?:async\s+)?function\b|^export\s+const\s+(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s*=/gm

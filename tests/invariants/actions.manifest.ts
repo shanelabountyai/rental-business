@@ -51,6 +51,13 @@ export const manifest: Record<string, Entry> = {
   'lib/auth/actions.ts#completePasswordReset': { public: 'gated by the reset token in the form' },
   'lib/auth/actions.ts#requestTenantMagicLink': { public: 'the tenant sign-in form; same answer whether or not the address is on a lease' },
   'lib/auth/actions.ts#requestGuarantorMagicLink': { public: 'the guarantor sign-in form; same answer whether or not the address is on a guarantee' },
+  // lib/platform/auth-actions.ts (R-294b): every one refuses off PLATFORM_HOST
+  'lib/platform/auth-actions.ts#startPlatformSignIn': { public: 'the platform sign-in form' },
+  'lib/platform/auth-actions.ts#completePlatformMfa': { public: 'second step of platform sign-in, gated by the challenge cookie' },
+  'lib/platform/auth-actions.ts#beginPlatformMfaEnrolment': { public: 'enrolment before any session exists, gated by the challenge cookie' },
+  'lib/platform/auth-actions.ts#confirmPlatformMfaEnrolment': { public: 'enrolment before any session exists, gated by the challenge cookie' },
+  'lib/platform/auth-actions.ts#setPlatformPassword': { 'form.token': 'token', public: 'gated by the setup token in the form' },
+  'lib/platform/auth-actions.ts#signOutOfPlatform': {  },
   // lib/billing/actions.ts
   'lib/billing/actions.ts#resyncPayer': { 'form.leasePayerId': 'leasePayer' },
   'lib/billing/actions.ts#resyncLease': { 'form.leaseId': 'lease' },

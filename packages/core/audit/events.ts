@@ -90,6 +90,12 @@ export const AUDIT_ACTIONS = [
   'auth.password_reset',
   'auth.mfa_enrolled',
   'auth.sessions_revoked',
+  /// R-294b: a platform admin's MFA cleared by `db:create-platform-admin
+  /// --reset-mfa` (the last admin only; the console resets the others).
+  'auth.mfa_reset',
+  /// R-294b: a platform admin created. By the bootstrap script for the first;
+  /// by another admin in the console from R-302.
+  'platform_admin.created',
 
   // Permission changes (ROLE-03)
   'staff.assignment_granted',

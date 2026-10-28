@@ -21,9 +21,9 @@ describe('proxy', () => {
   it.each<Record<string, string>>([
     { 'next-router-prefetch': '1' },
     { purpose: 'prefetch' },
-  ])('still demands the gate password on a prefetch-shaped request %o', (headers) => {
+  ])('still demands the gate password on a prefetch-shaped request %o', async (headers) => {
     process.env.DEMO_ACCESS_PASSWORD = 'gate-check-9137'
-    const res = proxy(new NextRequest('https://example.com/login', { headers }))
+    const res = await proxy(new NextRequest('https://example.com/login', { headers }))
     expect(res.status).toBe(401)
   })
 })

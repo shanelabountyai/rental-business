@@ -1,5 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 
+import { isPlatformHost, platformRouteRefused } from '@/lib/auth/platform-host.ts'
+import { rollPlatformSession } from '@/lib/auth/platform-session.ts'
 import { demoGate } from '@/lib/demo-gate'
 
 // The Content-Security-Policy (security review follow-on to D-137).
@@ -87,7 +89,19 @@ function policy(nonce: string): string {
 // the export with it: the build reads `mod.proxy || mod.default` for a proxy
 // file. Everything below - the matcher, the nonce, the request header Next
 // stamps its inline scripts from - is unchanged by the rename.
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
+  // First, and for EVERY path the matcher lets in, `api/` included: the
+  // console exists only on PLATFORM_HOST, and that host serves nothing else
+  // (PRD 11 §2.2, R-294b). A bare 404, so neither host admits the other's
+  // pages exist.
+  if (platformRouteRefused(request.headers.get('host'), request.nextUrl.pathname)) {
+    return new NextResponse('Not Found', { status: 404 })
+  }
+  // The paths the matcher used to exclude outright. They reach the proxy only
+  // for the host check above, and leave before the demo gate and the policy,
+  // exactly as before - see `config` for why each must not get a page policy.
+  if (NO_PAGE_POLICY.test(request.nextUrl.pathname)) return NextResponse.next()
+
   // Before the nonce work: a visitor who is not past the demo gate should cost
   // a 401 and nothing else, not a minted nonce and a policy they never see.
   // Only active when DEMO_ACCESS_PASSWORD is set, so local dev, CI and the e2e
@@ -120,6 +134,7 @@ export function proxy(request: NextRequest) {
 
   const response = NextResponse.next({ request: { headers } })
   response.headers.set('Content-Security-Policy', csp)
+  if (isPlatformHost(request.headers.get('host'))) await rollPlatformSession(request, response)
   return response
 }
 
@@ -143,9 +158,11 @@ export const config = {
      * entry that had excluded a file this app never had - which is why every
      * page load logged a 404 to the console until R-132 added the icon.
      */
-    {
-      source:
-        '/((?!api/|_next/static|_next/image|icon.svg|listings/[^/]+/photos/|sign/[^/]+/document|vendor/[^/]+/documents/).*)',
-    },
+    // R-294b: these used to be excluded here. They now enter the proxy for
+    // the platform-host check and leave through `NO_PAGE_POLICY` untouched.
+    { source: '/((?!_next/static|_next/image|icon.svg).*)' },
   ],
 }
+
+const NO_PAGE_POLICY =
+  /^\/(api\/|platform\/api\/|listings\/[^/]+\/photos\/|sign\/[^/]+\/document|vendor\/[^/]+\/documents\/)/

@@ -38,6 +38,12 @@ export const TOKEN_TTL_MINUTES = {
   /// Long enough to fetch a phone from another room, short enough that a
   /// stolen challenge is worthless by the time anyone notices it.
   STAFF_MFA_CHALLENGE: 5,
+  /// R-294b. Ten minutes rather than five because a first sign-in enrols
+  /// MFA on this same challenge, and installing an authenticator app takes
+  /// longer than typing a code. Lapsing costs a re-typed password.
+  PLATFORM_MFA_CHALLENGE: 10,
+  /// R-294b: the bootstrap script's first-password link. As STAFF_PASSWORD_RESET.
+  PLATFORM_PASSWORD_SETUP: 30,
   /// Longer because a vendor may not look at their phone for hours, and an
   /// expired dispatch link means a phone call instead of a plumber. Still far
   /// short of the work order's own lifetime - R-025 reissues rather than
