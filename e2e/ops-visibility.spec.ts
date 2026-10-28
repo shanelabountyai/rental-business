@@ -122,6 +122,7 @@ test.describe('the money screen ops panels', () => {
     const driftDetail = `e2e drift ${randomUUID()}`
     await prisma.auditLog.create({
       data: {
+        orgId: 'org_0',
         actorType: 'SYSTEM',
         actorRef: 'ledger.reconcile',
         entityType: 'LedgerEntry',
@@ -148,6 +149,7 @@ test.describe('the money screen ops panels', () => {
     const bigRunDetail = `e2e drift big ${randomUUID()}`
     await prisma.auditLog.create({
       data: {
+        orgId: 'org_0',
         actorType: 'SYSTEM',
         actorRef: 'ledger.reconcile',
         entityType: 'LedgerEntry',

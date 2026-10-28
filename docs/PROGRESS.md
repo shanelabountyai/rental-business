@@ -14961,3 +14961,9 @@ R-285b's CI run (`40013225946`) failed 8 e2e tests across three files; none had 
 **What it left behind.** `audit()` casts its filled input, so an `audit()` call on a host that names no org is caught by the CHECK at runtime, not by the type. That host does not exist yet; R-294b's `PLATFORM_HOST` is the first, and platform code audits through its own branch. The platform branch of `currentAuditActor` belongs to R-294b. Production is not migrated (auto-deploy off, D-277).
 
 **Gate.** lint, typecheck, `db:drift`, `db:ci` (from scratch plus seed plus drift) and `check:ship-deps` are all clean. `npm test`: 3,643 passed + 4 skipped of 3,647, which is R-275's 3,645 plus the two new tests. e2e against the production build on `desktop-chrome`, `applications`, `auth`, `portal-guarantor`, `self-showing`, `showings` and `staff` (sign-in plus the anonymous public forms that take the host-org fallback): 65 passed of 65. No UI changed, so `mobile-chrome` is left to CI.
+
+### R-294a fix — CI red on the R-294a push (2026-10-27)
+
+R-294a's CI run (`40595369728`) failed one e2e test on both projects: `ops-visibility.spec.ts` › *a portfolio owner sees drift and the Stripe event log*. Its fixture writes a `ledger.drift_detected` row with `prisma.auditLog.create` and named no org, so `AuditLog_org_named_check` refused it. The CHECK was right. R-294a's typecheck sweep could not catch this writer, because a raw Prisma create does not go through `AuditInput`. Both creates in the spec now name `org_0`, which is the owner's org and the org that `latestDrift` filters on. No other spec writes `AuditLog` directly.
+
+**Gate.** lint and typecheck clean. e2e on both projects, `ops-visibility`: 8 passed of 8.
