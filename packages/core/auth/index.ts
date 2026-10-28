@@ -9,5 +9,6 @@
 export * from './password.ts'
 export * from './rate-limit.ts'
 export * from './secret-box.ts'
+export * from './step-up.ts'
 export * from './tokens.ts'
 export * from './totp.ts'

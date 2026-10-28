@@ -18,7 +18,7 @@ import type { Org } from './fixture.ts'
 import { type Op, ops, session } from './write-spy.ts'
 
 export type Finding = { inv: 'ORG-01' | 'HARNESS'; action: string; detail: string }
-type Found = { file: string; name: string; fn: unknown }
+export type Found = { file: string; name: string; fn: unknown }
 
 const USE_SERVER = /^(?:\s|\/\/[^\n]*\n|\/\*[\s\S]*?\*\/)*(['"])use server\1/
 export const WEB = path.resolve(import.meta.dirname, '../../apps/web')
@@ -71,6 +71,7 @@ export function unguardedEntrypoints(
   pattern = 'app/**/{page,layout,template,default,route}.{ts,tsx}',
   cwd = WEB,
   exempt: Record<string, string> = PUBLIC_ROUTES,
+  guards: string[] = GUARDS,
 ): string[] {
   const out: string[] = []
   for (const rel of globSync(pattern, { cwd }).sort()) {
@@ -85,7 +86,7 @@ export function unguardedEntrypoints(
       const first = [...body.matchAll(/\bawait\s+(?=([\s\S]{1,120}))/g)].map((m) => m[1]!).find((a) => !URL_ONLY.test(a))
       // `await Promise.all([requireStaff(), …])` guards first too.
       const callee = (first?.match(/^Promise\.all\(\[\s*([\w$.]+)\(/)?.[1]) ?? first?.match(/^[\w$.]+/)?.[0]
-      if (!GUARDS.includes(callee ?? '')) out.push(`${rel}: first await is ${callee ?? 'none'}, not a guard`)
+      if (!guards.includes(callee ?? '')) out.push(`${rel}: first await is ${callee ?? 'none'}, not a guard`)
     })
   }
   return out
@@ -193,6 +194,7 @@ const LOGINS = ['/login', '/portal/login', '/portal/guarantor/login']
 export type Outcome = { kind: 'guard' | 'redirect' | 'notFound' | 'returned' | 'threw'; detail?: unknown; ops: Op[] }
 
 export const NONEXISTENT = 'org-harness-nonexistent'
+export const keyOfFound = keyOf
 
 /** Calls an export the way a form post does: positional ids, then previous state, then FormData. */
 export async function call(f: Found, pick: (tag: Tag, path: string) => string, entries: Record<string, Entry> = manifest): Promise<Outcome> {

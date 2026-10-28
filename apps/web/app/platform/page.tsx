@@ -16,6 +16,9 @@ export default async function PlatformHomePage() {
         <p className="text-muted-foreground text-sm break-words">
           Signed in as {admin.name} ({admin.email}).
         </p>
+        <a href="/platform/account" className="text-sm underline underline-offset-4">
+          Your account
+        </a>
       </header>
       <form action={signOutOfPlatform}>
         <button type="submit" className={`${SUBMIT_BUTTON_CLASSES} min-h-11 px-4 py-2 text-base`}>

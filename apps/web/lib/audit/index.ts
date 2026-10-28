@@ -11,6 +11,7 @@ import type { Session } from 'next-auth'
 import { headers } from 'next/headers'
 import { auth } from '@/auth.ts'
 import { hostOrgId } from '@/lib/auth/org.ts'
+import { isPlatformHost } from '@/lib/auth/platform-host.ts'
 
 // Request-aware wrapper around the shared audit service.
 //
@@ -29,14 +30,29 @@ export async function currentAuditActor(): Promise<AuditActor> {
 /// principal from the database every time it is called.
 async function requestAuditContext(): Promise<{ actor: AuditActor; orgId?: string }> {
   const [session, headerList] = await Promise.all([auth(), headers()])
+  // The console's session is a different cookie read by a different Auth.js
+  // instance, so the org `auth()` above sees nobody there (PRD 11 §5.4,
+  // R-294c). Only on the console's host, so no org request pays the lookup,
+  // and imported there only: a static import loads a second Auth.js into
+  // every module that audits, which unit tests mocking `@/auth.ts` cannot.
+  if (!session?.principal && isPlatformHost(headerList.get('host'))) {
+    const { currentPlatformPrincipal } = await import('@/platform-auth.ts')
+    const admin = await currentPlatformPrincipal()
+    if (admin) return { actor: { ...requestMeta(headerList), type: 'PLATFORM', ref: admin.id } }
+  }
   const orgId = session?.principal?.orgId || undefined
   return { actor: actorFor(session, headerList), orgId }
 }
 
+function requestMeta(headerList: Pick<Headers, 'get'>) {
+  return {
+    ipAddress: headerList.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null,
+    userAgent: headerList.get('user-agent'),
+  }
+}
+
 function actorFor(session: Session | null, headerList: Pick<Headers, 'get'>): AuditActor {
-  const ipAddress =
-    headerList.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null
-  const userAgent = headerList.get('user-agent')
+  const { ipAddress, userAgent } = requestMeta(headerList)
 
   if (!session?.principal) {
     return { type: 'SYSTEM', ref: 'anonymous', ipAddress, userAgent }

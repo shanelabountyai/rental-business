@@ -36,7 +36,7 @@ export interface PlatformPrincipal {
   kind: 'platform'
   email: string
   name: string
-  /// When a TOTP or recovery code was last proved. Step-up (R-294c) reads it.
+  /// When a TOTP or recovery code was last proved, at sign-in or by step-up.
   mfaVerifiedAt: number
 }
 
@@ -47,6 +47,7 @@ export const {
   auth: platformAuth,
   signIn: platformSignIn,
   signOut: platformSignOut,
+  unstable_update: platformUpdate,
 } = NextAuth({
   basePath: '/platform/api/auth',
   trustHost: true,
@@ -132,7 +133,7 @@ export const {
       return pathname.startsWith('/platform') ? `${pathname}${search}` : '/platform'
     },
 
-    jwt: async ({ token, user }) => {
+    jwt: async ({ token, user, trigger, session }) => {
       if (user) {
         token.kind = 'platform'
         token.authenticatedAt = Date.now()
@@ -140,13 +141,21 @@ export const {
       }
       // Every request: still on the console's host, still active, not
       // revoked by the watermark, inside the absolute lifetime.
-      return (await platformSessionIsStillValid(
+      const valid = await platformSessionIsStillValid(
         token.sub,
         token.kind,
         token.authenticatedAt as number | undefined,
-      ))
-        ? token
-        : null
+      )
+      if (!valid) return null
+      // Step-up (§2.4). The update payload is NOT trusted: a client can POST
+      // anything to /platform/api/auth/session, which runs this same branch.
+      // So the payload carries the code itself, and only a code that verifies
+      // here moves `mfaVerifiedAt` - a POST is exactly as hard as the form.
+      if (trigger === 'update') {
+        const stepUpCode = asString((session as { stepUpCode?: unknown } | undefined)?.stepUpCode)
+        if (stepUpCode && (await verifyStepUp(token.sub!, stepUpCode))) token.mfaVerifiedAt = Date.now()
+      }
+      return token
     },
 
     session: ({ session, token }) => {
@@ -196,6 +205,26 @@ export async function peekPlatformChallenge(rawToken: string): Promise<string | 
     subjectType: 'PlatformAdmin',
   })
   return verdict.ok ? stored!.subjectId : null
+}
+
+/// One code for a signed-in admin, rate limited per admin (a session cannot
+/// spend another's budget), and recorded org-less when it verifies.
+async function verifyStepUp(adminId: string, code: string): Promise<boolean> {
+  const limit = await consumeRateLimit(`mfa:platform-step-up:${adminId}`, RATE_LIMITS.mfaVerify)
+  if (!limit.allowed) return false
+  const credential = await prisma.platformCredential.findUnique({ where: { platformAdminId: adminId } })
+  if (!credential?.mfaEnrolledAt || !credential.mfaSecret) return false
+  const { id, mfaSecret, mfaRecoveryCodes } = credential
+  if (!(await verifyPlatformFactor({ id, mfaSecret, mfaRecoveryCodes }, code))) return false
+  await recordAudit(prisma, {
+    actor: { type: 'PLATFORM', ref: adminId },
+    action: 'auth.step_up',
+    entityType: 'PlatformAdmin',
+    entityId: adminId,
+    orgId: null,
+    after: { verified: true },
+  })
+  return true
 }
 
 /// A TOTP code under the `platform-mfa` key, or a recovery code, struck once used.

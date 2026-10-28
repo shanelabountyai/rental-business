@@ -10,6 +10,8 @@ import {
   needsRehash,
   openSecret,
   sealSecret,
+  stepUpIsFresh,
+  stepUpReturnPath,
   validatePassword,
   verifyPassword,
   verifyTotp,
@@ -24,7 +26,9 @@ import {
   peekPlatformChallenge,
   platformSignIn,
   platformSignOut,
+  platformUpdate,
 } from '@/platform-auth.ts'
+import { requirePlatform } from '@/lib/platform/guard.ts'
 import { isPlatformHost } from '@/lib/auth/platform-host.ts'
 import { consumeRateLimit, issueToken, redeemToken } from '@/lib/auth/store.ts'
 
@@ -282,5 +286,68 @@ export async function setPlatformPassword(
 }
 
 export async function signOutOfPlatform(): Promise<void> {
+  await platformSignOut({ redirectTo: '/platform/login' })
+}
+
+// ---------------------------------------------------------------------------
+// Step-up and the admin's own account (PRD 11 §2.4, §4.1, R-294c)
+// ---------------------------------------------------------------------------
+
+/// One code, proved inside the session's own jwt callback (platform-auth.ts),
+/// then back to the page that asked.
+export async function completePlatformStepUp(
+  _previous: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  await requirePlatform()
+  const code = String(formData.get('code') ?? '').trim()
+  if (!code) return { error: 'Enter the code from your authenticator app.' }
+  const session = (await platformUpdate({ stepUpCode: code } as never)) as unknown as {
+    principal?: { mfaVerifiedAt?: number }
+  } | null
+  if (!stepUpIsFresh(session?.principal?.mfaVerifiedAt)) {
+    return { error: 'That code was not right. Check your authenticator app.' }
+  }
+  redirect(stepUpReturnPath(formData.get('next'), '/platform'))
+}
+
+/// Ten new codes, shown once; the old ones stop working in the same write.
+export async function regeneratePlatformRecoveryCodes(
+  _previous: FormState & { recoveryCodes?: string[] },
+): Promise<FormState & { recoveryCodes?: string[] }> {
+  const admin = await requirePlatform({ stepUp: true, next: '/platform/account' })
+  const recovery = mintRecoveryCodes()
+  await prisma.$transaction(async (tx) => {
+    await tx.platformCredential.update({
+      where: { platformAdminId: admin.id },
+      data: { mfaRecoveryCodes: recovery.hashes },
+    })
+    await recordAudit(tx, {
+      actor: { type: 'PLATFORM', ref: admin.id, ipAddress: await clientIp() },
+      action: 'auth.recovery_codes_regenerated',
+      entityType: 'PlatformAdmin',
+      entityId: admin.id,
+      orgId: null,
+      after: { recoveryCodesIssued: recovery.codes.length },
+    })
+  })
+  return { notice: 'New recovery codes. The old ones no longer work.', recoveryCodes: recovery.codes }
+}
+
+/// The watermark (§2.7's mechanism): every session this admin holds, on any
+/// device, fails `platformSessionIsStillValid` on its next request.
+export async function signOutOfPlatformEverywhere(): Promise<void> {
+  const admin = await requirePlatform()
+  await prisma.$transaction(async (tx) => {
+    await tx.platformAdmin.update({ where: { id: admin.id }, data: { sessionsValidFrom: new Date() } })
+    await recordAudit(tx, {
+      actor: { type: 'PLATFORM', ref: admin.id, ipAddress: await clientIp() },
+      action: 'auth.sessions_revoked',
+      entityType: 'PlatformAdmin',
+      entityId: admin.id,
+      orgId: null,
+      after: { allDevices: true },
+    })
+  })
   await platformSignOut({ redirectTo: '/platform/login' })
 }

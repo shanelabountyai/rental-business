@@ -58,6 +58,9 @@ export const manifest: Record<string, Entry> = {
   'lib/platform/auth-actions.ts#confirmPlatformMfaEnrolment': { public: 'enrolment before any session exists, gated by the challenge cookie' },
   'lib/platform/auth-actions.ts#setPlatformPassword': { 'form.token': 'token', public: 'gated by the setup token in the form' },
   'lib/platform/auth-actions.ts#signOutOfPlatform': {  },
+  'lib/platform/auth-actions.ts#completePlatformStepUp': {},
+  'lib/platform/auth-actions.ts#regeneratePlatformRecoveryCodes': {},
+  'lib/platform/auth-actions.ts#signOutOfPlatformEverywhere': {},
   // lib/billing/actions.ts
   'lib/billing/actions.ts#resyncPayer': { 'form.leasePayerId': 'leasePayer' },
   'lib/billing/actions.ts#resyncLease': { 'form.leaseId': 'lease' },

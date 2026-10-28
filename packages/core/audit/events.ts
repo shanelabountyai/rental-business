@@ -93,6 +93,10 @@ export const AUDIT_ACTIONS = [
   /// R-294b: a platform admin's MFA cleared by `db:create-platform-admin
   /// --reset-mfa` (the last admin only; the console resets the others).
   'auth.mfa_reset',
+  /// R-294c: a fresh code proved for a sensitive act (PRD 11 §2.4).
+  'auth.step_up',
+  /// R-294c: an admin replaced their own recovery codes, under step-up.
+  'auth.recovery_codes_regenerated',
   /// R-294b: a platform admin created. By the bootstrap script for the first;
   /// by another admin in the console from R-302.
   'platform_admin.created',
