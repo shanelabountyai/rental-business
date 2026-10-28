@@ -9,7 +9,9 @@ import {
   isPlatformPermission,
   platformDeactivationRefusal,
   platformGrantRefusal,
+  platformMfaResetRefusal,
   platformRevokeRefusal,
+  platformSetupLinkRefusal,
 } from './platform.ts'
 
 const NOW = 1_800_000_000_000
@@ -118,5 +120,20 @@ describe('the last platform owner (§3.3), as lists', () => {
   it('refuses granting to yourself', () => {
     expect(platformGrantRefusal('shane', 'shane')).toMatch(/your own roles/)
     expect(platformGrantRefusal('kim', 'shane')).toBeNull()
+  })
+
+  it('resets only another, active, enrolled admin', () => {
+    const kim = { id: 'kim', name: 'Kim', active: true, mfaEnrolledAt: new Date() }
+    expect(platformMfaResetRefusal(kim, 'shane')).toBeNull()
+    expect(platformMfaResetRefusal(kim, 'kim')).toMatch(/your own two-factor/)
+    expect(platformMfaResetRefusal({ ...kim, active: false }, 'shane')).toMatch(/deactivated/)
+    expect(platformMfaResetRefusal({ ...kim, mfaEnrolledAt: null }, 'shane')).toMatch(/nothing to reset/)
+  })
+
+  it('sends a fresh setup link only before the admin has enrolled', () => {
+    const kim = { id: 'kim', name: 'Kim', active: true, mfaEnrolledAt: null }
+    expect(platformSetupLinkRefusal(kim)).toBeNull()
+    expect(platformSetupLinkRefusal({ ...kim, mfaEnrolledAt: new Date() })).toMatch(/already finished/)
+    expect(platformSetupLinkRefusal({ ...kim, active: false })).toMatch(/deactivated/)
   })
 })

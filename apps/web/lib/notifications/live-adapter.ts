@@ -61,19 +61,23 @@ function configString(config: Record<string, unknown>, key: string): string | un
   return typeof value === 'string' && value.trim() ? value.trim() : undefined
 }
 
-async function resendConfig(orgId: string): Promise<ResendConfig | null> {
-  const row = await orgIntegration(orgId, 'RESEND')
+// THE PLATFORM (orgId null, R-302b) sends on the env vars too: they are the
+// operator's account. ponytail: it shares org #0's `from`; add a
+// PLATFORM_RESEND_FROM when org #0 stops being the operator's own business.
+async function resendConfig(orgId: string | null): Promise<ResendConfig | null> {
+  const row = orgId === null ? null : await orgIntegration(orgId, 'RESEND')
   if (row) {
     const from = configString(row.config, 'from')
     return row.secret && from ? { apiKey: row.secret, from } : null
   }
-  if (orgId !== DEFAULT_ORG_ID) return null
+  if (orgId !== null && orgId !== DEFAULT_ORG_ID) return null
   const apiKey = env('RESEND_API_KEY')
   const from = env('RESEND_FROM')
   return apiKey && from ? { apiKey, from } : null
 }
 
-async function twilioConfig(orgId: string): Promise<TwilioConfig | null> {
+async function twilioConfig(orgId: string | null): Promise<TwilioConfig | null> {
+  if (orgId === null) return null
   const row = await orgIntegration(orgId, 'TWILIO')
   if (row) {
     const accountSid = configString(row.config, 'accountSid')
@@ -197,7 +201,7 @@ async function sendSms(
 }
 
 export class LiveChannelAdapter implements ChannelAdapter {
-  async supports(channel: NotificationChannel, orgId: string): Promise<boolean> {
+  async supports(channel: NotificationChannel, orgId: string | null): Promise<boolean> {
     // PORTAL has no provider: the notification IS the delivery, read in the
     // portal off the same log (R-018), so it is always supported.
     if (channel === 'PORTAL') return true

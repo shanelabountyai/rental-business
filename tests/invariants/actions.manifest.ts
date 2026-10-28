@@ -61,6 +61,9 @@ export const manifest: Record<string, Entry> = {
   'lib/platform/auth-actions.ts#completePlatformStepUp': {},
   'lib/platform/auth-actions.ts#regeneratePlatformRecoveryCodes': {},
   'lib/platform/auth-actions.ts#signOutOfPlatformEverywhere': {},
+  // lib/platform/admin-actions.ts (R-302b): platform rows, refused to an org session by PLAT-02
+  'lib/platform/admin-actions.ts#invitePlatformAdmin': {},
+  'lib/platform/admin-actions.ts#managePlatformAdmin': { 'form.adminId': 'platformAdmin', 'form.assignmentId': 'platformRoleAssignment' },
   // lib/billing/actions.ts
   'lib/billing/actions.ts#resyncPayer': { 'form.leasePayerId': 'leasePayer' },
   'lib/billing/actions.ts#resyncLease': { 'form.leaseId': 'lease' },

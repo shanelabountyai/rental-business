@@ -223,6 +223,7 @@ Refusals name the missing permission (same `/no-access` pattern as `guard.ts:104
 - **Shows:** name, email, roles, MFA enrolled, last sign-in, active; per admin, their assignment history (granted by, when, revoked by, when).
 - **Actions (step-up):** invite (creates `PlatformAdmin` + `PLATFORM_PASSWORD_SETUP` link by email); assign / revoke role; reset MFA; deactivate. The last-owner refusal is shown as a sentence before the press, and enforced on the press.
 - **Errors:** "This is the last platform owner. Add another owner before removing this one." Duplicate email refused.
+- **Built (R-302b, D-367):** the invite link is emailed through `deliverOverChannel({ orgId: null })` and also shown to the inviter. Reading the three pages needs the permission and not a fresh code (`view: true`); every act asks for one. "Send a new setup link" is offered only before the admin enrols, and an MFA reset only for another admin.
 
 ### 4.9 Platform audit log — `/platform/audit`
 

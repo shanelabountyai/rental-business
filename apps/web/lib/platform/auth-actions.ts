@@ -20,6 +20,7 @@ import { recordAudit } from '@rental/core/audit'
 import { prisma } from '@rental/db'
 import { cookies, headers } from 'next/headers'
 import { redirect, unstable_rethrow } from 'next/navigation'
+import { after } from 'next/server'
 import { MfaRateLimited } from '@/auth.ts'
 import {
   PLATFORM_MFA_PURPOSE,
@@ -29,6 +30,7 @@ import {
   platformUpdate,
 } from '@/platform-auth.ts'
 import { requirePlatform } from '@/lib/platform/guard.ts'
+import { notifyOwnersOfLockout } from '@/lib/platform/mail.ts'
 import { isPlatformHost } from '@/lib/auth/platform-host.ts'
 import { consumeRateLimit, issueToken, redeemToken } from '@/lib/auth/store.ts'
 
@@ -112,8 +114,10 @@ export async function startPlatformSignIn(
       where: { id: credential.id },
       data: { failedLoginCount, lockedUntil },
     })
-    // Crossing into lockout is recorded once, as staff's is. The notice to the
-    // other platform owners (§2.5) is R-302b's: the roles now say who they are, and delivery to an org-less admin is the open part.
+    // Crossing into lockout is recorded once, as staff's is, and the other
+    // platform owners are told (§2.5, R-302b). AFTER the response: sending
+    // inside it would make the locking attempt measurably slower than every
+    // other wrong password, which says the address is an account.
     if (lockedUntil && !credential.lockedUntil) {
       await recordAudit(prisma, {
         actor: { type: 'PLATFORM', ref: admin.id, ipAddress: ip },
@@ -123,6 +127,7 @@ export async function startPlatformSignIn(
         orgId: null,
         after: { failedLoginCount, lockedUntil },
       })
+      after(() => notifyOwnersOfLockout(admin, ip))
     }
     return { error: GENERIC_SIGN_IN_ERROR }
   }

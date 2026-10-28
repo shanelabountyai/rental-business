@@ -78,11 +78,17 @@ export async function deliverOverChannel(args: {
   /// R-097a: only ever set for a message that belongs to a thread.
   replyTo?: string
   /// R-290b: whose kill switch applies. Required, so no caller can skip it.
-  orgId: string
+  /// `null` is the platform itself (R-302b, D-367): a console admin belongs
+  /// to no org, so only the global switch applies, the platform's own sender
+  /// sends, and only by EMAIL - an admin has no phone on file.
+  orgId: string | null
 }): Promise<DeliveryOutcome> {
   const config = notificationConfig()
-  if (!config.enabled || !(await orgNotificationsEnabled(args.orgId))) {
+  if (!config.enabled || (args.orgId !== null && !(await orgNotificationsEnabled(args.orgId)))) {
     return { status: 'SUPPRESSED', suppressedReason: 'kill_switch' }
+  }
+  if (args.orgId === null && args.channel !== 'EMAIL') {
+    return { status: 'SUPPRESSED', suppressedReason: 'unsupported_channel' }
   }
   if (!(await notificationAdapter.supports(args.channel, args.orgId))) {
     return { status: 'SUPPRESSED', suppressedReason: 'unsupported_channel' }

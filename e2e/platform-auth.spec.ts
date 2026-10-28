@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto'
-import { createTotpEnrolment, hashPassword, mintToken, sealSecret } from '@rental/core/auth'
+import { hashPassword, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
-import { type BrowserContext, type Page, expect, test } from '@playwright/test'
+import { type BrowserContext, expect, test } from '@playwright/test'
 import { decode, encode } from 'next-auth/jwt'
-import { Secret, TOTP } from 'otpauth'
 import { uniqueClientHeaders } from './fixtures.ts'
+import { CONSOLE, PASSWORD, code, createAdmin as fixtureAdmin, retireAdmins, signIn, submitPassword } from './platform-fixtures.ts'
 
 // The platform console's sign-in (PRD 11 §2, R-294b). PLATFORM_HOST is
 // `platform.localhost` for the e2e server (playwright.config.ts); Chromium
@@ -14,52 +14,12 @@ import { uniqueClientHeaders } from './fixtures.ts'
 // Admins cannot be deleted (trigger), so each test makes its own and
 // deactivates it afterwards.
 
-const PORT = process.env.PORT ?? '3100'
-const CONSOLE = `http://platform.localhost:${PORT}`
-const ORG = `http://localhost:${PORT}`
-const PASSWORD = 'correct-horse-battery-staple'
+const ORG = `http://localhost:${process.env.PORT ?? '3100'}`
 const created: string[] = []
-
-async function createAdmin(enrolled: boolean) {
-  const email = `platform-${randomUUID()}@example.test`
-  const { secret } = createTotpEnrolment(email)
-  const admin = await prisma.platformAdmin.create({
-    data: {
-      email,
-      name: 'Platform Tester',
-      credential: {
-        create: {
-          passwordHash: await hashPassword(PASSWORD),
-          ...(enrolled && {
-            mfaSecret: sealSecret(secret, 'platform-mfa'),
-            mfaEnrolledAt: new Date(),
-          }),
-        },
-      },
-    },
-  })
-  created.push(admin.id)
-  return { ...admin, secret }
-}
-
-const code = (secret: string) => new TOTP({ secret: Secret.fromBase32(secret) }).generate()
-
-async function submitPassword(page: Page, email: string) {
-  await page.goto(`${CONSOLE}/platform/login`)
-  await page.getByLabel('Email').fill(email)
-  await page.getByLabel('Password').fill(PASSWORD)
-  await page.getByRole('button', { name: 'Sign in' }).click()
-}
+const createAdmin = (enrolled: boolean) => fixtureAdmin(enrolled, created)
 
 const PLATFORM_COOKIE = '__Host-platform.session-token'
 const ORG_COOKIE = 'authjs.session-token'
-
-async function signIn(page: Page, admin: { email: string; secret: string }) {
-  await submitPassword(page, admin.email)
-  await page.getByLabel(/code/i).fill(code(admin.secret))
-  await page.getByRole('button', { name: 'Verify' }).click()
-  await expect(page.getByRole('heading', { name: 'Platform console' })).toBeVisible()
-}
 
 async function sessionCookie(context: BrowserContext) {
   return (await context.cookies(CONSOLE)).find((c) => c.name === PLATFORM_COOKIE)!
@@ -81,10 +41,7 @@ test.beforeEach(async ({ page }) => {
 })
 
 test.afterAll(async () => {
-  await prisma.platformAdmin.updateMany({
-    where: { id: { in: created } },
-    data: { active: false, deactivatedAt: new Date() },
-  })
+  await retireAdmins(created)
 })
 
 test('signs in with password and code, in a __Host- cookie, and dies with the admin', async ({

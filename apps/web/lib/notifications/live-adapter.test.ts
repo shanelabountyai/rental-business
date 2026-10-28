@@ -244,3 +244,21 @@ describe('the sandbox redirect, once the drivers are real', () => {
     expect(sandboxAddressFor('EMAIL', [])).toBeNull()
   })
 })
+
+// R-302b: the platform (orgId null) sends on the operator's env credentials,
+// email only, and on a production deployment says so rather than logging.
+describe('the platform sender', () => {
+  it('sends platform mail on the env Resend key', async () => {
+    const fetchMock = stubFetch(response(200, { id: 'p1' }))
+    await adapter.send({ channel: 'EMAIL', to: 'admin@example.test', subject: 's', body: 'b', orgId: null })
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
+
+  it('in production, supports platform email only when the key is set, and never SMS', async () => {
+    vi.stubEnv('VERCEL_ENV', 'production')
+    expect(await adapter.supports('EMAIL', null)).toBe(true)
+    expect(await adapter.supports('SMS', null)).toBe(false)
+    vi.stubEnv('RESEND_API_KEY', '')
+    expect(await adapter.supports('EMAIL', null)).toBe(false)
+  })
+})

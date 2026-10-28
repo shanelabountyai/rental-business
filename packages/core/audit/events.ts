@@ -100,6 +100,15 @@ export const AUDIT_ACTIONS = [
   /// R-294b: a platform admin created. By the bootstrap script for the first;
   /// by another admin in the console from R-302b.
   'platform_admin.created',
+  /// R-302b: the console's acts on another admin (PRD 11 §4.8). A setup link
+  /// row carries the send's outcome: platform mail has no Notification row.
+  'platform_admin.setup_link_sent',
+  'platform_admin.deactivated',
+  'platform_role.granted',
+  'platform_role.revoked',
+  /// R-302b: the other platform owners were emailed about a lockout (§2.5);
+  /// `after.sent` is each recipient and outcome.
+  'auth.lockout_notified',
 
   // Permission changes (ROLE-03)
   'staff.assignment_granted',

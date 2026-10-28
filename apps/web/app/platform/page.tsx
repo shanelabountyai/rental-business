@@ -1,6 +1,7 @@
 import { requirePlatform } from '@/lib/platform/guard.ts'
 import { signOutOfPlatform } from '@/lib/platform/auth-actions.ts'
 import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
+import Link from 'next/link'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Platform console' }
@@ -19,6 +20,9 @@ export default async function PlatformHomePage() {
         <a href="/platform/account" className="text-sm underline underline-offset-4">
           Your account
         </a>
+        <Link href="/platform/admins" className="text-sm underline underline-offset-4">
+          Platform admins
+        </Link>
       </header>
       <form action={signOutOfPlatform}>
         <button type="submit" className={`${SUBMIT_BUTTON_CLASSES} min-h-11 px-4 py-2 text-base`}>

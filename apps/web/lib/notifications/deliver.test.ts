@@ -57,3 +57,16 @@ describe('deliverOverChannel and the shared SMS opt-out list', () => {
     expect(outcome.status).toBe('SENT')
   })
 })
+
+// R-302b (D-367): `orgId: null` is the platform mailing one of its own admins.
+describe('deliverOverChannel for the platform itself', () => {
+  it('sends an email with no org behind it', async () => {
+    const outcome = await deliverOverChannel({ channel: 'EMAIL', to: 'admin@example.test', subject: 's', body: 'b', orgId: null })
+    expect(outcome.status).toBe('SENT')
+  })
+
+  it('refuses any channel but email: an admin has no phone on file', async () => {
+    const outcome = await deliverOverChannel({ channel: 'SMS', to: uniquePhone(), body: 'b', orgId: null })
+    expect(outcome).toEqual({ status: 'SUPPRESSED', suppressedReason: 'unsupported_channel' })
+  })
+})

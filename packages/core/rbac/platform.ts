@@ -162,3 +162,29 @@ export function platformDeactivationRefusal(
   if (owners.length > 0 && owners.every((a) => a.platformAdminId === targetAdminId)) return LAST_PLATFORM_OWNER
   return null
 }
+
+export interface PlatformAdminSummary {
+  id: string
+  name: string
+  active: boolean
+  mfaEnrolledAt: Date | null
+}
+
+/// PADM-03 (R-302b): another admin's device, never your own - you are signed
+/// in with it, and a lost one is a recovery code or the bootstrap's
+/// `--reset-mfa`.
+export function platformMfaResetRefusal(target: PlatformAdminSummary, actorId: string): string | null {
+  if (target.id === actorId) return 'You cannot reset your own two-factor here. Use a recovery code, or ask another platform owner.'
+  if (!target.active) return `${target.name} is deactivated.`
+  if (!target.mfaEnrolledAt) return `${target.name} has not set up two-factor yet, so there is nothing to reset.`
+  return null
+}
+
+/// A fresh setup link only for an admin who has not finished setting up: once
+/// enrolled, a password link from another admin would be a password reset,
+/// which §4.8 does not offer.
+export function platformSetupLinkRefusal(target: PlatformAdminSummary): string | null {
+  if (!target.active) return `${target.name} is deactivated.`
+  if (target.mfaEnrolledAt) return `${target.name} has already finished setting up their account.`
+  return null
+}

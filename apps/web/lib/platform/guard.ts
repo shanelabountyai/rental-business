@@ -22,9 +22,13 @@ import { type PlatformPrincipal, currentPlatformPrincipal } from '@/platform-aut
  * asked. Pass the PAGE the action was pressed on, not the action: the admin
  * presses again on return, which is the point - the code authorises a press
  * they can see, never one replayed behind their back.
+ *
+ * `view` (R-302b, D-367) is for a PAGE behind a step-up permission: holding it
+ * is enough to look, and the code is asked for on the press. Without it
+ * `/platform/admins` would want a fresh code every ten minutes just to read.
  */
 export async function requirePlatform(
-  options: { permission?: PlatformPermission; stepUp?: boolean; next?: string } = {},
+  options: { permission?: PlatformPermission; stepUp?: boolean; view?: boolean; next?: string } = {},
 ): Promise<PlatformPrincipal> {
   const principal = await currentPlatformPrincipal()
   if (!principal) redirect('/platform/login')
@@ -44,7 +48,8 @@ export async function requirePlatform(
       },
       options.permission,
     )
-    if (!decision.allowed) {
+    // `canPlatform` answers no_permission first, so stepup_required means held.
+    if (!decision.allowed && !(options.view && decision.reason === 'stepup_required')) {
       if (decision.reason === 'stepup_required') toStepUp()
       redirect(`/platform/no-access?permission=${encodeURIComponent(options.permission)}`)
     }

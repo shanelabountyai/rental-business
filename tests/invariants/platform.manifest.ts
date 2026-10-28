@@ -23,4 +23,6 @@ export const platformManifest: Record<string, PlatformEntry> = {
   'lib/platform/auth-actions.ts#completePlatformStepUp': { guard: 'session' },
   'lib/platform/auth-actions.ts#regeneratePlatformRecoveryCodes': { guard: 'step-up' },
   'lib/platform/auth-actions.ts#signOutOfPlatformEverywhere': { guard: 'session' },
+  'lib/platform/admin-actions.ts#invitePlatformAdmin': { guard: 'step-up', permission: 'platformAdmin.manage' },
+  'lib/platform/admin-actions.ts#managePlatformAdmin': { guard: 'step-up', permission: 'platformAdmin.manage' },
 }
