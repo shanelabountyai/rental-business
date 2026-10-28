@@ -15047,3 +15047,4 @@ R-294a's CI run (`40595369728`) failed one e2e test on both projects: `ops-visib
 - `npm test`: 3,702 passed, 4 skipped, 1 failed on the full run. The failure was `schema.test.ts` wanting `org_scope` on `OrgHealth`. After the trigger migration, that file and the new test pass, 29 of 29. The other 272 files had already passed on the full run.
 - `db:ci`: migrations from scratch, seed, no drift.
 - e2e against the production build, both projects, `platform-orgs` + `platform-admins` + `platform-auth`: 36 passed of 36 listed, none flaky.
+- CI run 40773091103 (`d145761`) is green on both jobs, including e2e on both projects.
