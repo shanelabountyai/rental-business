@@ -23,6 +23,11 @@ vi.mock('@/auth.ts', () => ({
   MfaRateLimited: class MfaRateLimited extends Error {},
   handlers: {},
 }))
+// PLAT-01 (R-303) sets this: a live platform session beside no org one.
+const platformSession: { principal: { id: string; kind: 'platform'; email: string; name: string; mfaVerifiedAt: number } | null } = {
+  principal: null,
+}
+
 vi.mock('@/platform-auth.ts', () => ({
   // The console's Auth.js instance (R-294b). No harness caller is on
   // PLATFORM_HOST - the mocked headers carry no host - so every platform
@@ -33,7 +38,7 @@ vi.mock('@/platform-auth.ts', () => ({
   },
   platformSignOut: async () => {},
   platformHandlers: {},
-  currentPlatformPrincipal: async () => null,
+  currentPlatformPrincipal: async () => platformSession.principal,
   peekPlatformChallenge: async () => null,
   PLATFORM_MFA_PURPOSE: 'platform-mfa',
 }))
@@ -71,6 +76,22 @@ describe('every server action', () => {
     expect(findings.filter((f) => f.detail.startsWith('anonymous call wrote'))).toEqual([])
     // The read-before-guard half is a ratchet until R-286b (org-01.pending.ts).
     expect(findings.map((f) => f.action).sort()).toEqual([...ORG_01_PENDING].sort())
+  }, 300_000)
+
+  it('PLAT-01: refuses a platform session exactly as it refuses no session, and writes nothing', async () => {
+    // The worst case of a platform cookie reaching an org action: the
+    // console's session reads as live. Org code must not be able to tell it
+    // from nobody - same refusals, same ratchet, no write.
+    platformSession.principal = { id: 'plat-01-admin', kind: 'platform', email: 'a@example.test', name: 'a', mfaVerifiedAt: Date.now() }
+    try {
+      // The console's own actions admit it, rightly; PLAT-02 drives those.
+      const org = (await discover()).filter((f) => !f.file.startsWith('lib/platform/'))
+      const findings = await runAnonymous(org)
+      expect(findings.filter((f) => f.detail.startsWith('anonymous call wrote'))).toEqual([])
+      expect(findings.map((f) => f.action).sort()).toEqual([...ORG_01_PENDING].sort())
+    } finally {
+      platformSession.principal = null
+    }
   }, 300_000)
 
   it('has no inline use server the glob cannot see', () => {

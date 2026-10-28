@@ -355,6 +355,7 @@ OrgHealth                 orgId @id → Organization, computedAt,
 
 - **Written by the org's own cron child**, at the end of every per-org invocation (`lib/cron/per-org.ts` — daily, hourly notifications, 15-minute escalations), in the org's context, so the platform never runs the counting queries. Counts, booleans, timestamps and state codes only; a CHECK forbids nothing a CHECK can see, so the "no free text" rule is a unit test over the writer's output type.
 - Org-owned for ORG-06 (`orgId` NOT NULL, it is the key), readable by platform code (PLAT-03 allowlist).
+- *(2026-10-28, D-368: as built, `lastRun Json` is three pairs of columns, `dailyAt`/`dailyOk`, `notificationsAt`/`notificationsOk` and `escalationsAt`/`escalationsOk`, because the daily and hourly children both fire at 16:00 UTC and a read-merge-write of one JSON value would drop whichever finished first. `heldNotifications` counts `DEFERRED`. `states` keeps two-letter codes only. `checklist` comes with R-291.)*
 
 ### 5.6 Elsewhere
 

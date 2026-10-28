@@ -1,7 +1,9 @@
 // Every Prisma operation a call made. Its own module, importing nothing,
 // because the test file's `@rental/db` mock loads it while `@rental/db` itself
 // is still being mocked: anything that imported the client here would deadlock.
-export type Op = { name: string; write: boolean }
+/// `model` and `args` are what PLAT-03 reads: a nested `select`/`include` is
+/// one operation to Prisma, so the allowlist has to look inside the args.
+export type Op = { name: string; write: boolean; model?: string; args?: unknown }
 export const ops: Op[] = []
 
 const WRITE =
@@ -23,7 +25,7 @@ export function withWriteSpy<C>(client: C): C {
     query: {
       async $allOperations({ model, operation, args, query }: Query) {
         const op: Op = model
-          ? { name: `${model}.${operation}`, write: WRITE.test(operation) }
+          ? { name: `${model}.${operation}`, write: WRITE.test(operation), model, args }
           : { name: `raw ${rawSql(args).trim().slice(0, 60)}`, write: RAW_WRITE.test(rawSql(args)) }
         ops.push(op)
         let result: unknown

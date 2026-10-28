@@ -612,6 +612,7 @@ model Organization {
   applicantInfoRequests          ApplicantInfoRequest[]
   applicantNotes                 ApplicantNote[]
   integrations                   OrgIntegration[]
+  health                         OrgHealth?
 }
 
 enum IntegrationProvider {
@@ -642,6 +643,33 @@ model OrgIntegration {
   updatedAt    DateTime            @updatedAt
 
   @@unique([orgId, provider])
+}
+
+/// R-303 (PRD 11 §5.5, D-354): what the platform console may know about an
+/// org's running, upserted by the org's own cron child at the end of every
+/// per-org invocation. Counts, booleans, timestamps and state codes only -
+/// never `JobRun.error` or `result`, which can name a tenant. One timestamp
+/// and outcome per child rather than PRD 11's `lastRun Json`, because the
+/// daily and hourly children both fire at 16:00 UTC and a read-merge-write of
+/// one JSON value would lose whichever finished first (D-368).
+model OrgHealth {
+  orgId               String       @id
+  organization        Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  computedAt          DateTime
+  dailyAt             DateTime?
+  dailyOk             Boolean?
+  notificationsAt     DateTime?
+  notificationsOk     Boolean?
+  escalationsAt       DateTime?
+  escalationsOk       Boolean?
+  failedRuns7d        Int
+  deadLetters         Int
+  queuedNotifications Int
+  heldNotifications   Int
+  activeOwners        Int
+  activeMembers       Int
+  properties          Int
+  states              String[]
 }
 
 model LegalEntity {

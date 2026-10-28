@@ -15018,3 +15018,32 @@ R-294a's CI run (`40595369728`) failed one e2e test on both projects: `ops-visib
 **What it left behind.** Deactivation does not end support grants yet; R-295 adds them (marked `ponytail:`). There is no password reset of one admin by another; §4.8 does not offer one. A failed platform email is not retried. The `/platform` landing still links to the admins page for every admin, and one without the permission is told so on `/platform/no-access`. R-303 replaces the landing.
 
 **Gate.** lint (0 errors) and typecheck are clean. `npm test`: 3,692 passed, 4 skipped, 1 failed on the first full run. The failure was the org action manifest missing the two new actions. **That fix was itself wrong, and CI caught it** (run 40767237081): it tagged `form.adminId`/`form.assignmentId` with the platform models, and ORG-02..04's fixture cannot seed an org-less model, so `org-02-03-04.test.ts` failed at load. The fix had been checked against `org-01-05-06` alone. They are now `value`, since no org owns those rows, and all 4 invariant files pass, 26 of 26. Re-run every invariant file after touching the manifest, not just the one that failed. e2e against the production build on both projects, `platform-admins` + `platform-auth`: 30 passed of 30 listed, none flaky. No schema change, so `db:ci` was not re-run. CI run 40767941134 (`f7c62df`) is green on both jobs, including e2e on both projects.
+
+## R-303a — org console, read side: health and the org screens
+
+**What it built.** `OrgHealth` (migrations `20261028140000_org_health` and `…140100_org_health_scope`, the second adding the `org_scope` trigger that `schema.test.ts` demanded). `lib/cron/org-health.ts`: `orgHealthCounts` counts the org's own rows: failed runs in 7 days, dead letters, queued and deferred deliveries, active owners and members, active properties and their states. `recordOrgHealth` upserts them with one child's timestamp and outcome. `cronRoute` now takes the child's name (`'daily' | 'notifications' | 'escalations'`) and writes health after every per-org run, including one that threw. `MAX_ATTEMPTS` is exported from the outbox for the dead-letter count. `lib/platform/orgs.ts` holds `attentionReasons` (pure, in PRD 11 §4.2's order), `healthIsStale` (26 h), `providerName`, the select shapes, and `orgOwners` (active owner-role members, `id`/`name`/`email` only). `platformDecision` was extracted from `requirePlatform`, so the dashboard can show its panels only to `org.read` holders. Pages:
+- `/platform`: the org count, "needs attention", and a console nav. An admin with no role still gets the account link and sign-out.
+- `/platform/orgs`: a GET search by name or slug, integration chips, and health with its age.
+- `/platform/orgs/[slug]`: the no-grant line, owners with mailto, integrations with the provider's reason verbatim, and the health panel.
+
+`components/platform/org-health.tsx` replaces stale figures with "Health not reported since …". Tests:
+- `lib/cron/org-health.test.ts`: no free text, per-child outcomes surviving another child's write, and the attention rules.
+- **PLAT-03** in `tests/invariants/plat-02-03.test.ts` (renamed from `plat-02.test.ts`). Every `app/platform/**/page.tsx` is driven as an admin holding every role under the query spy. `write-spy.ts` now records each op's model and args, so nested `select`/`include` relations are walked against DMMF. `OrgIntegration` and `StaffUser` must be read with a `select` inside their column lists. Controls flag a nested `Property`, every column of an integration, and a staff phone.
+- **PLAT-01** in `org-01-05-06.test.ts`. ORG-01's run is repeated with a live platform principal over every org action (`lib/platform` excluded, since PLAT-02 drives those), and it must give the same refusals, the same ratchet and no write.
+- `e2e/platform-orgs.spec.ts` (serial, its own org): attention → search → detail; stale health; no `org.read`.
+
+**What it decided (D-368).** R-303 is split. R-303b is audit, jobs with re-run, and settings. `OrgHealth` stores per-child columns instead of `lastRun Json`, because two children fire at 16:00 UTC. Health is written in `cronRoute` and never throws. `heldNotifications` counts `DEFERRED`. `states` keeps two-letter codes only. `checklist` waits for R-291. PLAT-03 walks `select`/`include` and not `where`. PRD 11 §5.5 carries a dated note.
+
+**Real bugs found.** One, caught before it shipped: **`Property.state` is a free string column, and the "no free text" rule would have passed whatever it held to the console.** The first version of the writer's test failed on `Q59215702`, a `uniqueStateCode()` fixture value. In production that column is meant to hold a state, but nothing in the schema says so, so the writer now filters to `^[A-Z]{2}$`.
+
+**What it left behind.**
+- Waiting on other rows: status counts and filter (R-300), checklist *n*/10 (R-291), grants, break-glass and "Request access" (R-295), the fee (R-296), pending invites (R-304), the kill-switch toggle (R-306), and "Re-run", audit, jobs and settings (R-303b).
+- The org slug is shown as text, not as a link to the org's host. `ORG_BASE_DOMAIN` is unset until D-324.
+- PLAT-01's unit half (`can()` over an actor built from a platform principal) is not written. No such actor exists until R-295's `loadSupportActor`, and `currentActor` never sees the platform cookie.
+- PLAT-01 has no control of its own. It reuses ORG-01's driver and its controls.
+
+**Gate.**
+- lint: 0 errors. typecheck clean. `check:ship-deps` clean. `npm run build` clean.
+- `npm test`: 3,702 passed, 4 skipped, 1 failed on the full run. The failure was `schema.test.ts` wanting `org_scope` on `OrgHealth`. After the trigger migration, that file and the new test pass, 29 of 29. The other 272 files had already passed on the full run.
+- `db:ci`: migrations from scratch, seed, no drift.
+- e2e against the production build, both projects, `platform-orgs` + `platform-admins` + `platform-auth`: 36 passed of 36 listed, none flaky.

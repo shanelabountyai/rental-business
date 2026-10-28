@@ -20,7 +20,7 @@ export const maxDuration = 60
 // Per org (R-290), with no claim: each tick's sweep is idempotent per ticket
 // on its own, and a claim per fifteen minutes would be a row per org per tick.
 export function GET(request: Request) {
-  return cronRoute(request, async (orgId) => ({
+  return cronRoute(request, 'escalations', async (orgId) => ({
     ok: true,
     ...(await sweepEmergencyEscalations(new Date(), { orgId })),
   }))

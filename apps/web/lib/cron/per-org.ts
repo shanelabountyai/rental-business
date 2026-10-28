@@ -4,6 +4,7 @@ import { businessDateToUtc, utcToBusinessDate } from '@rental/core/scheduling'
 import { type Prisma, prisma } from '@rental/db'
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { isAuthorizedCron } from '@/lib/cron/authorize.ts'
+import { type CronChild, recordOrgHealth } from '@/lib/cron/org-health.ts'
 import { isUniqueViolation } from '@/lib/db/unique-violation.ts'
 
 // Every cron route, per organisation (R-290, PRD 10 §M6).
@@ -26,9 +27,14 @@ export type OrgRunResult = { ok: boolean } & Record<string, unknown>
  * The whole of a cron route: authorize, then fan out (no `org`) or run one
  * org (`?org=`). 404 for a bad token AND for an unknown org, so neither tells
  * a scanner anything (the route's own reasoning, unchanged).
+ *
+ * Every child ends by writing the org's `OrgHealth` row (R-303, D-354),
+ * whatever its outcome - a child that threw is the case the console most
+ * needs to see.
  */
 export async function cronRoute(
   request: Request,
+  child: CronChild,
   runForOrg: (orgId: string) => Promise<OrgRunResult>,
 ): Promise<Response> {
   if (!isAuthorizedCron(request)) return new Response('Not found', { status: 404 })
@@ -40,10 +46,13 @@ export async function cronRoute(
   if (!org) return new Response('Not found', { status: 404 })
 
   try {
-    return Response.json(await runForOrg(orgId))
+    const result = await runForOrg(orgId)
+    await recordOrgHealth(orgId, child, result.ok)
+    return Response.json(result)
   } catch (error) {
     // A 500 the parent reads as this org's failure. Nobody else's run is
     // affected - they are separate invocations.
+    await recordOrgHealth(orgId, child, false)
     return Response.json({ ok: false, error: messageOf(error) }, { status: 500 })
   }
 }

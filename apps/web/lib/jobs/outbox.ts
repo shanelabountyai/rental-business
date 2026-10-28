@@ -72,7 +72,7 @@ export interface DispatchResult {
   failed: number
 }
 
-const MAX_ATTEMPTS = 5
+export const MAX_ATTEMPTS = 5
 
 /**
  * Publishes unpublished events to every consumer subscribed to their type.

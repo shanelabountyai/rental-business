@@ -13,7 +13,7 @@ export const maxDuration = 60
 
 // Per org (R-290), with no claim, for the escalation route's reason.
 export function GET(request: Request) {
-  return cronRoute(request, async (orgId) => ({
+  return cronRoute(request, 'notifications', async (orgId) => ({
     ok: true,
     ...(await dispatchPendingNotifications(new Date(), 100, { orgId })),
   }))

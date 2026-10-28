@@ -35,19 +35,7 @@ export async function requirePlatform(
   const toStepUp = () => redirect(`/platform/step-up?next=${encodeURIComponent(options.next ?? '/platform')}`)
 
   if (options.permission) {
-    const assignments = await prisma.platformRoleAssignment.findMany({
-      where: { platformAdminId: principal.id, revokedAt: null },
-      select: { roleKey: true, role: { select: { permissions: true } } },
-    })
-    const decision = canPlatform(
-      {
-        // The session callback already refused an inactive admin.
-        active: true,
-        mfaVerifiedAt: principal.mfaVerifiedAt,
-        assignments: assignments.map((a) => ({ roleKey: a.roleKey, permissions: a.role.permissions })),
-      },
-      options.permission,
-    )
+    const decision = await platformDecision(principal, options.permission)
     // `canPlatform` answers no_permission first, so stepup_required means held.
     if (!decision.allowed && !(options.view && decision.reason === 'stepup_required')) {
       if (decision.reason === 'stepup_required') toStepUp()
@@ -56,4 +44,23 @@ export async function requirePlatform(
   }
   if (options.stepUp && !stepUpIsFresh(principal.mfaVerifiedAt)) toStepUp()
   return principal
+}
+
+/// `canPlatform` over the admin's live assignments, read on every call. For a
+/// page that shows a panel only to holders (the dashboard, R-303) as well as
+/// for the guard above.
+export async function platformDecision(principal: PlatformPrincipal, permission: PlatformPermission) {
+  const assignments = await prisma.platformRoleAssignment.findMany({
+    where: { platformAdminId: principal.id, revokedAt: null },
+    select: { roleKey: true, role: { select: { permissions: true } } },
+  })
+  return canPlatform(
+    {
+      // The session callback already refused an inactive admin.
+      active: true,
+      mfaVerifiedAt: principal.mfaVerifiedAt,
+      assignments: assignments.map((a) => ({ roleKey: a.roleKey, permissions: a.role.permissions })),
+    },
+    permission,
+  )
 }

@@ -34,7 +34,7 @@ export const maxDuration = 60
 // about whether this endpoint exists, and a scanner gets no signal to come
 // back. Per org since R-290: see lib/cron/per-org.ts.
 export function GET(request: Request) {
-  return cronRoute(request, (orgId) =>
+  return cronRoute(request, 'daily', (orgId) =>
     withOrgClaim('cron.daily', orgId, new Date(), () => runDaily(orgId)),
   )
 }

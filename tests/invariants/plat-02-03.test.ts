@@ -1,7 +1,10 @@
 import { globSync, readFileSync } from 'node:fs'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
+import { Prisma, prisma } from '@rental/db'
 import { type Found, NavSignal, WEB, call, discover, keyOfFound, unguardedEntrypoints } from './harness.ts'
+import { type Op, ops } from './write-spy.ts'
 import { PLATFORM_PERMISSIONS } from '@rental/core/rbac'
 import { type PlatformEntry, platformManifest } from './platform.manifest.ts'
 
@@ -200,5 +203,120 @@ describe('PLAT-02 controls', () => {
       'platform-actions.ts#queriesFirst',
       'platform-actions.ts#staffGuarded',
     ])
+  })
+})
+
+// PLAT-03 (PRD 11 §4.3, §7.1, D-354): platform code reads only the allowlist.
+// Every console page is driven as an admin holding every role, under the
+// query spy; each model it touches, nested `select`/`include` relations
+// included, must be listed, and a model listed with columns must be read with
+// a `select` naming only those. Relation FILTERS in `where` are not walked:
+// they decide which allowlisted rows come back and return none of their own.
+
+const EVERY_COLUMN = '*'
+const READ_ALLOWLIST: Record<string, readonly string[] | typeof EVERY_COLUMN> = {
+  Organization: EVERY_COLUMN,
+  OrgHealth: EVERY_COLUMN,
+  // Statuses, never `config` or `secret` (§4.3).
+  OrgIntegration: ['id', 'orgId', 'provider', 'status', 'statusReason', 'updatedAt'],
+  OrgInvite: EVERY_COLUMN,
+  SupportAccessGrant: EVERY_COLUMN,
+  PlatformAdmin: EVERY_COLUMN,
+  PlatformCredential: EVERY_COLUMN,
+  PlatformRole: EVERY_COLUMN,
+  PlatformRoleAssignment: EVERY_COLUMN,
+  AuditLog: EVERY_COLUMN,
+  JurisdictionRule: EVERY_COLUMN,
+  // Owners' contact (D-354): name and email, nothing else about a person.
+  OrgMembership: EVERY_COLUMN,
+  StaffAssignment: EVERY_COLUMN,
+  StaffUser: ['id', 'name', 'email'],
+}
+
+const MODELS = new Map(Prisma.dmmf.datamodel.models.map((m) => [m.name, m]))
+// Operations that return counts or nothing of a row's columns.
+const COUNTS = /^(count|aggregate|groupBy)$/
+
+function readFindings(model: string, operation: string, args: unknown, where: string): string[] {
+  const allowed = READ_ALLOWLIST[model]
+  if (!allowed) return [`${where}: reads ${model}, which is not on the allowlist`]
+  if (COUNTS.test(operation)) return []
+  const a = (args ?? {}) as { select?: Record<string, unknown>; include?: Record<string, unknown> }
+  const fields = MODELS.get(model)!.fields
+  const out: string[] = []
+  if (allowed !== EVERY_COLUMN) {
+    if (!a.select) out.push(`${where}: reads every column of ${model}`)
+    else {
+      for (const key of Object.keys(a.select)) {
+        const field = fields.find((f) => f.name === key)
+        if (field?.kind !== 'object' && key !== '_count' && !allowed.includes(key)) out.push(`${where}: reads ${model}.${key}`)
+      }
+    }
+  }
+  for (const [key, value] of Object.entries({ ...a.include, ...a.select })) {
+    const field = fields.find((f) => f.name === key)
+    if (field?.kind !== 'object' || !value) continue
+    out.push(...readFindings(field.type, 'findMany', value === true ? {} : value, where))
+  }
+  return out
+}
+
+function opFindings(ran: Op[], where: string): string[] {
+  return ran.flatMap((op) =>
+    op.model ? readFindings(op.model, op.name.slice(op.model.length + 1), op.args, where) : [`${where}: raw SQL ${op.name}`],
+  )
+}
+
+async function drive(fn: (...args: unknown[]) => Promise<unknown>, props: unknown): Promise<Op[]> {
+  ops.length = 0
+  try {
+    await fn(props)
+  } catch (e) {
+    if (!(e instanceof NavSignal)) throw e
+  }
+  return [...ops]
+}
+
+describe('PLAT-03: every console page reads only the allowlist', () => {
+  it('as an admin holding every role', async () => {
+    const { slug } = await prisma.organization.findUniqueOrThrow({ where: { id: 'org_0' }, select: { slug: true } })
+    const props = {
+      params: Promise.resolve({ slug, id: 'plat-03-no-such-admin' }),
+      searchParams: Promise.resolve({}),
+    }
+    platform.principal = { ...ADMIN, mfaVerifiedAt: Date.now() }
+    platform.roles = EVERYTHING
+    const findings: string[] = []
+    const touched = new Map<string, string[]>()
+    try {
+      for (const rel of globSync('app/platform/**/page.tsx', { cwd: WEB })) {
+        const page = (await import(pathToFileURL(path.join(WEB, rel)).href)) as { default: (p: unknown) => Promise<unknown> }
+        const ran = await drive(page.default, props)
+        touched.set(rel, ran.map((op) => op.name))
+        findings.push(...opFindings(ran, rel))
+      }
+    } finally {
+      platform.principal = null
+      platform.roles = []
+    }
+    expect(findings).toEqual([])
+    // Not vacuous: the org page really did run its reads under the spy.
+    expect(touched.get('app/platform/orgs/[slug]/page.tsx')).toEqual(
+      expect.arrayContaining(['Organization.findUnique', 'StaffUser.findMany']),
+    )
+  }, 60_000)
+})
+
+describe('PLAT-03 controls', () => {
+  it('flags a nested org-owned relation, every column of an integration, and a staff phone', async () => {
+    const controls = (await import('./controls/platform-reads.ts')) as Record<string, () => Promise<unknown>>
+    const findings: Record<string, string[]> = {}
+    for (const [name, fn] of Object.entries(controls)) findings[name] = opFindings(await drive(fn, undefined), name)
+    expect(findings).toEqual({
+      allowed: [],
+      nestedProperty: ['nestedProperty: reads Property, which is not on the allowlist'],
+      everyIntegrationColumn: ['everyIntegrationColumn: reads every column of OrgIntegration'],
+      staffPhone: ['staffPhone: reads StaffUser.phone'],
+    })
   })
 })
