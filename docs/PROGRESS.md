@@ -15075,7 +15075,7 @@ Tests: `lib/platform/settings.test.ts` (no secret value in the output, the kill 
 - No schema change, so `db:ci` was not re-run.
 - CI run 40778580824 (`0f7c31b`) is green on both jobs, including e2e on both projects.
 
-## R-304a — create an organisation and invite its owner (`SHA_PENDING`)
+## R-304a — create an organisation and invite its owner (`053a3c4`)
 
 **What it built.** R-304 split at its start (D-370): this half is the create-and-invite path. R-304b is org configure.
 - `OrgInvite` (migration `20261029120000_org_invite`): hashed token (`@unique`), 7-day expiry (`TOKEN_TTL_MINUTES.ORG_INVITE`), `roleKey` → `Role(key)`, `invitedByType` (`ActorType`, CHECK STAFF | PLATFORM) and `invitedById`, `acceptedAt`/`acceptedById`, `revokedAt`. CHECKs: email lower-case, accepted and revoked never both, accepted-at and accepted-by set together. `org_scope` refuses an `orgId` change.
