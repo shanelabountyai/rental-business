@@ -15073,3 +15073,4 @@ Tests: `lib/platform/settings.test.ts` (no secret value in the output, the kill 
 - `npm test`: 3,710 passed, 4 skipped, 0 failed (274 files).
 - e2e against the production build, both projects, `platform-ops` + `platform-orgs` + `platform-admins` + `platform-auth`: 41 passed, 1 flaky of 42 listed. The flaky test was the reload bug above. After the fix, `platform-ops` passed 18 of 18 with `--repeat-each=3 --retries=0`.
 - No schema change, so `db:ci` was not re-run.
+- CI run 40778580824 (`0f7c31b`) is green on both jobs, including e2e on both projects.
