@@ -68,6 +68,12 @@ export const manifest: Record<string, Entry> = {
   // lib/platform/job-actions.ts (R-303b): the console names any org by design
   // (D-356), so its id is a `value`, not a row this caller's org must own.
   'lib/platform/job-actions.ts#rerunCronChild': { 'form.orgId': 'value', 'form.child': '=daily' },
+  // lib/platform/org-actions.ts (R-304a): the console creates and names any
+  // org's invite by design, so its id is a `value`, as rerunCronChild's is.
+  'lib/platform/org-actions.ts#createOrganization': {},
+  'lib/platform/org-actions.ts#manageOrgInvite': { 'form.inviteId': 'value', 'form.slug': 'value' },
+  // lib/auth/invite-actions.ts (R-304a)
+  'lib/auth/invite-actions.ts#acceptOrgInvite': { 'form.token': 'token', public: 'gated by the invite token in the form, on its org host only' },
   // lib/billing/actions.ts
   'lib/billing/actions.ts#resyncPayer': { 'form.leasePayerId': 'leasePayer' },
   'lib/billing/actions.ts#resyncLease': { 'form.leaseId': 'lease' },

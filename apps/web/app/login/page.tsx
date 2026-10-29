@@ -7,9 +7,9 @@ export const metadata = { title: 'Sign in' }
 export default async function StaffLoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ reset?: string }>
+  searchParams: Promise<{ reset?: string; invited?: string }>
 }) {
-  const { reset } = await searchParams
+  const { reset, invited } = await searchParams
 
   return (
     <AuthCard
@@ -24,6 +24,11 @@ export default async function StaffLoginPage({
       {reset && (
         <FocusedStatus className="rounded-md border border-success/35 bg-success/6 px-3 py-2 text-sm text-success">
           Your password was changed. Sign in with the new one.
+        </FocusedStatus>
+      )}
+      {invited && (
+        <FocusedStatus className="rounded-md border border-success/35 bg-success/6 px-3 py-2 text-sm text-success">
+          Your invitation is accepted. Sign in with your email and password.
         </FocusedStatus>
       )}
       <AuthForm action={startStaffSignIn} submitLabel="Sign in">

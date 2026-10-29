@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { PERMISSIONS } from './permissions.ts'
 import {
+  INVITE_REFUSED,
+  RESERVED_ORG_SLUGS,
+  inviteRefusal,
+  orgSlugRefusal,
   LAST_PLATFORM_OWNER,
   PLATFORM_PERMISSIONS,
   PLATFORM_ROLE_DEFINITIONS,
@@ -135,5 +139,39 @@ describe('the last platform owner (§3.3), as lists', () => {
     expect(platformSetupLinkRefusal(kim)).toBeNull()
     expect(platformSetupLinkRefusal({ ...kim, mfaEnrolledAt: new Date() })).toMatch(/already finished/)
     expect(platformSetupLinkRefusal({ ...kim, active: false })).toMatch(/deactivated/)
+  })
+})
+
+describe('orgSlugRefusal (PRD 11 §4.5)', () => {
+  it('accepts a hostname label', () => {
+    for (const slug of ['acme', 'acme-homes', 'a1', 'x', 'a'.repeat(63)]) expect(orgSlugRefusal(slug)).toBeNull()
+  })
+  it('refuses what is not a hostname label', () => {
+    for (const slug of ['', 'Acme', '-acme', 'acme-', 'ac_me', 'ac.me', 'a'.repeat(64), 'acmé']) {
+      expect(orgSlugRefusal(slug)).toMatch(/lower-case/)
+    }
+  })
+  it('refuses every reserved word and the caller’s extra ones', () => {
+    for (const slug of RESERVED_ORG_SLUGS) expect(orgSlugRefusal(slug)).toMatch(/reserved/)
+    expect(orgSlugRefusal('console', [...RESERVED_ORG_SLUGS, 'console'])).toMatch(/reserved/)
+  })
+})
+
+describe('inviteRefusal (PRD 11 §4.17, §6)', () => {
+  const now = new Date('2026-10-29T12:00:00Z')
+  const live = { orgId: 'org_a', expiresAt: new Date('2026-11-01T00:00:00Z'), acceptedAt: null, revokedAt: null }
+  it('admits a live invite on its own org’s host', () => {
+    expect(inviteRefusal(live, 'org_a', now)).toBeNull()
+  })
+  it('answers every other case with the same sentence', () => {
+    const cases = [
+      inviteRefusal(null, 'org_a', now),
+      inviteRefusal(live, 'org_b', now),
+      inviteRefusal(live, null, now),
+      inviteRefusal({ ...live, expiresAt: now }, 'org_a', now),
+      inviteRefusal({ ...live, acceptedAt: now }, 'org_a', now),
+      inviteRefusal({ ...live, revokedAt: now }, 'org_a', now),
+    ]
+    expect(new Set(cases)).toEqual(new Set([INVITE_REFUSED]))
   })
 })

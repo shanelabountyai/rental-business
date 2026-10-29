@@ -1,5 +1,5 @@
 import { prisma } from '@rental/db'
-import { requirePlatform } from '@/lib/platform/guard.ts'
+import { platformDecision, requirePlatform } from '@/lib/platform/guard.ts'
 import { ORG_SUMMARY_SELECT, healthIsStale, providerName } from '@/lib/platform/orgs.ts'
 import { HealthFreshness, runOutcome } from '@/components/platform/org-health.tsx'
 import { INPUT_CLASSES, SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
@@ -12,7 +12,10 @@ export const metadata = { title: 'Organisations' }
 // hydration. Not here yet: the status filter and column (R-300), checklist
 // n/10 (R-291), open grants (R-295) and the fee (R-296).
 export default async function PlatformOrgsPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  await requirePlatform({ permission: 'org.read' })
+  const admin = await requirePlatform({ permission: 'org.read' })
+  // Shown to holders of `org.create`; the press asks for the code (R-304a).
+  const decision = await platformDecision(admin, 'org.create')
+  const canCreate = decision.allowed || decision.reason === 'stepup_required'
   const q = (await searchParams).q?.trim() ?? ''
   const orgs = await prisma.organization.findMany({
     where: q
@@ -30,6 +33,11 @@ export default async function PlatformOrgsPage({ searchParams }: { searchParams:
         <a href="/platform" className="text-sm underline underline-offset-4">
           Back to the console
         </a>
+        {canCreate && (
+          <Link href="/platform/orgs/new" className="text-sm underline underline-offset-4">
+            Create an organisation
+          </Link>
+        )}
       </header>
       <form method="get" role="search" className="flex flex-wrap items-end gap-2">
         <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm font-medium">

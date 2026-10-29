@@ -105,6 +105,13 @@ export const AUDIT_ACTIONS = [
   'platform_admin.setup_link_sent',
   'platform_admin.deactivated',
   'platform_role.granted',
+  /// R-304a (PRD 11 §4.5, §4.17): an org created from the console and its
+  /// owner's invitation, each audited IN THE NEW ORG. `org_invite.sent`
+  /// carries the send's outcome, as `platform_admin.setup_link_sent` does.
+  'org.created',
+  'org_invite.sent',
+  'org_invite.revoked',
+  'org_invite.accepted',
   'platform_role.revoked',
   /// R-302b: the other platform owners were emailed about a lockout (§2.5);
   /// `after.sent` is each recipient and outcome.

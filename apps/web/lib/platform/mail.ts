@@ -52,6 +52,24 @@ export function inviteEmail(name: string, inviterName: string, url: string, expi
   }
 }
 
+/// R-304a (PRD 11 §4.5): the owner's invitation to a new organisation.
+export function orgInviteEmail(name: string, orgName: string, inviterName: string, url: string, expiresAt: Date) {
+  const days = Math.max(1, Math.round(minutesUntil(expiresAt) / (60 * 24)))
+  return {
+    subject: `You are invited to run ${orgName}`,
+    body: [
+      `Hello ${name},`,
+      '',
+      `${inviterName} set up ${orgName} on the rental operations platform and invited you as its owner. Open this link to accept:`,
+      url,
+      '',
+      `It works once and expires in ${days} day${days === 1 ? '' : 's'}. You will set a password, or sign in if you already have an account.`,
+      '',
+      'If you did not expect this, ignore it.',
+    ].join('\n'),
+  }
+}
+
 /**
  * §2.5: an admin's account just locked. Every OTHER active platform owner is
  * told, because a lockout is either a forgotten password or somebody trying

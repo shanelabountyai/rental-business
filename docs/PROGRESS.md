@@ -15074,3 +15074,27 @@ Tests: `lib/platform/settings.test.ts` (no secret value in the output, the kill 
 - e2e against the production build, both projects, `platform-ops` + `platform-orgs` + `platform-admins` + `platform-auth`: 41 passed, 1 flaky of 42 listed. The flaky test was the reload bug above. After the fix, `platform-ops` passed 18 of 18 with `--repeat-each=3 --retries=0`.
 - No schema change, so `db:ci` was not re-run.
 - CI run 40778580824 (`0f7c31b`) is green on both jobs, including e2e on both projects.
+
+## R-304a — create an organisation and invite its owner (`SHA_PENDING`)
+
+**What it built.** R-304 split at its start (D-370): this half is the create-and-invite path. R-304b is org configure.
+- `OrgInvite` (migration `20261029120000_org_invite`): hashed token (`@unique`), 7-day expiry (`TOKEN_TTL_MINUTES.ORG_INVITE`), `roleKey` → `Role(key)`, `invitedByType` (`ActorType`, CHECK STAFF | PLATFORM) and `invitedById`, `acceptedAt`/`acceptedById`, `revokedAt`. CHECKs: email lower-case, accepted and revoked never both, accepted-at and accepted-by set together. `org_scope` refuses an `orgId` change.
+- `/platform/orgs/new` (`org.create`, step-up on the press): name, slug, owner name and email. `orgSlugRefusal` (DNS label, reserved `www admin platform api app` plus the `PLATFORM_HOST` label); a taken slug says so, including on a concurrent P2002. One transaction creates the org, the invite and `org.created` in the new org. The invite is then mailed and `org_invite.sent` records the outcome. The link is also shown to the inviter. "Create an organisation" on `/platform/orgs` shows only to holders.
+- `/platform/orgs/[slug]` has a pending-invitations panel with "Resend" (rotates the token and expiry on the same row, so the old link dies) and "Revoke" (`org_invite.revoked`). Both actions use a conditional update, so they cannot land on an invite accepted meanwhile.
+- `/invite/[token]` (public, on the org's host): `inviteRefusal` gives one sentence for a nonexistent, expired, used or revoked token and for a link opened on the wrong host. A new invitee sets a password. An existing account only presses "Accept and join"; a deactivated one is refused. The transaction creates the `StaffUser` if there is none, claims the invite with a conditional update, upserts the membership (so a removed member rejoins), grants an org-wide owner assignment unless one is already held, and audits `org_invite.accepted`. The invitee is then sent to `/login?invited=1`.
+- Tests: `orgSlugRefusal`/`inviteRefusal` units. `lib/auth/invite-actions.test.ts` runs the real actions: create plus audits plus the link host; slug refusals; acceptance only on the right host, once; an existing account's password untouched; resend killing the old link; expired; revoked. A control removing the host check fails it. `e2e/platform-org-create.spec.ts` covers the console creating an org, the invite on the org page, and acceptance on `<slug>.orgs.localhost`, then the dead link. Both manifests and `server-actions.test.ts`'s public list have the new actions.
+
+**What it decided (D-370).** The invite email goes through `deliverOverChannel` under the new org's id, with no `Notification` row, because the invitee has no recipient id until acceptance. Every unusable invite reads the same sentence (PRD 11 §6 over §4.17). `roleKey` is stored rather than `roleId` so the console never reads `Role` (PLAT-03). e2e now sets `ORG_BASE_DOMAIN=orgs.localhost`; bare `localhost` stays org #0.
+
+**Real bugs found.** None in the product. The first e2e run failed on an ambiguous locator: the email also appears in the buttons' screen-reader names, so the spec now asserts on the button.
+
+**What it left behind.**
+- R-304b: name, colours and slug change (§4.6).
+- The fee field waits for R-296 and `ONBOARDING` status for R-300.
+- In production the invite email is suppressed for an org with no Resend config until R-293. The audit row records that, and the inviter has the link on screen.
+- No rate limit on `/invite/[token]`; the token is 256-bit random.
+- Created orgs (unit and e2e) are never deleted, because their audit rows Restrict, as with R-303b's.
+
+**Gate.**
+- `npm run ci:local` (db:ci from scratch with no drift, lint 0 errors, typecheck, ship-deps clean, build): `npm test` 3,721 passed, 4 skipped, 0 failed (275 files).
+- e2e against the production build, both projects, `platform-org-create` + `platform-orgs`: 8 passed of 8 listed, 0 flaky.

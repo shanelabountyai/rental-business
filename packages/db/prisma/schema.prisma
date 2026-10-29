@@ -462,6 +462,36 @@ enum ActorType {
 /// removedAt rather than deleting, so the history of who could see what stays.
 /// Cascades from StaffUser only because the app never deletes one (it
 /// deactivates); test cleanup does, and a membership is part of the person.
+/// R-304a (PRD 10 §1.2, PRD 11 §4.5, §4.17, D-370): an invitation to join an
+/// organisation in a role. Hashed, 7-day, single use, accepted only on the
+/// org's own host and only as the StaffUser with this email. Resend rotates
+/// `tokenHash` and `expiresAt` on the same row, so the old link dies.
+model OrgInvite {
+  id            String       @id @default(cuid())
+  orgId         String
+  organization  Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  /// Lower-case (CHECK), matched against StaffUser.email.
+  email         String
+  /// Prefills a new account's name; an existing account keeps its own.
+  name          String
+  /// Role(key), not Role(id): the console writes one without reading Role.
+  roleKey       String
+  role          Role         @relation(fields: [roleKey], references: [key], onDelete: Restrict)
+  tokenHash     String       @unique
+  expiresAt     DateTime
+  acceptedAt    DateTime?
+  acceptedById  String?
+  acceptedBy    StaffUser?   @relation(fields: [acceptedById], references: [id], onDelete: Restrict)
+  revokedAt     DateTime?
+  /// STAFF or PLATFORM (CHECK). The first invite of every org is a platform
+  /// admin's, so this is not a StaffUser FK (PRD 11 §5.6).
+  invitedByType ActorType
+  invitedById   String
+  createdAt     DateTime     @default(now())
+
+  @@index([orgId])
+}
+
 model OrgMembership {
   orgId       String
   staffUserId String
@@ -501,6 +531,7 @@ model Organization {
   legalEntities LegalEntity[]
   properties    Property[]
   memberships   OrgMembership[]
+  invites       OrgInvite[]
 
   mortgages                      Mortgage[]
   mortgageAnnualStatements       MortgageAnnualStatement[]
@@ -2486,6 +2517,7 @@ model StaffUser {
   tenantLockCodesRevoked                  TenantLockCode[]                @relation("TenantLockCodeRevokedBy")
   applicantInfoRequests                   ApplicantInfoRequest[]          @relation("ApplicantInfoRequestedBy")
   applicantNotes                          ApplicantNote[]
+  acceptedOrgInvites                      OrgInvite[]
 
   @@index([active])
 }
@@ -4333,6 +4365,7 @@ model Role {
   updatedAt                    DateTime @updatedAt
 
   assignments StaffAssignment[]
+  orgInvites  OrgInvite[]
 }
 
 /// One grant of one role over one scope. A staff user may hold several.
@@ -4584,8 +4617,8 @@ model PlatformAdmin {
   createdById       String?
   deactivatedAt     DateTime?
 
-  createdBy  PlatformAdmin?      @relation("PlatformAdminCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  created    PlatformAdmin[]     @relation("PlatformAdminCreatedBy")
+  createdBy  PlatformAdmin?           @relation("PlatformAdminCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  created    PlatformAdmin[]          @relation("PlatformAdminCreatedBy")
   credential PlatformCredential?
   roles      PlatformRoleAssignment[] @relation("PlatformRoleHolder")
   granted    PlatformRoleAssignment[] @relation("PlatformRoleGrantedBy")

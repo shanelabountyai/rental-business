@@ -32,6 +32,7 @@ const PUBLIC_BY_DESIGN: Record<string, string> = {
   'lib/prospects/actions.ts#submitInquiry': 'public listing inquiry, rate-limited',
   'lib/auth/actions.ts#requestPasswordReset': 'sign-in flow, rate-limited',
   'lib/auth/actions.ts#completePasswordReset': 'reset token (redeemToken)',
+  'lib/auth/invite-actions.ts#acceptOrgInvite': 'invite token (OrgInvite.tokenHash), on its org host only',
   'lib/auth/actions.ts#requestTenantMagicLink': 'sign-in flow, rate-limited',
   'lib/auth/actions.ts#requestGuarantorMagicLink': 'sign-in flow, rate-limited',
   // R-294b: the platform console's sign-in. Every one refuses off PLATFORM_HOST.

@@ -25,5 +25,7 @@ export const platformManifest: Record<string, PlatformEntry> = {
   'lib/platform/auth-actions.ts#signOutOfPlatformEverywhere': { guard: 'session' },
   'lib/platform/admin-actions.ts#invitePlatformAdmin': { guard: 'step-up', permission: 'platformAdmin.manage' },
   'lib/platform/admin-actions.ts#managePlatformAdmin': { guard: 'step-up', permission: 'platformAdmin.manage' },
+  'lib/platform/org-actions.ts#createOrganization': { guard: 'step-up', permission: 'org.create' },
+  'lib/platform/org-actions.ts#manageOrgInvite': { guard: 'step-up', permission: 'org.create' },
   'lib/platform/job-actions.ts#rerunCronChild': { guard: 'session', permission: 'job.rerun' },
 }

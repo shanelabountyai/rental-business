@@ -1,7 +1,9 @@
 import { friendlyTimestamp } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { notFound } from 'next/navigation'
-import { requirePlatform } from '@/lib/platform/guard.ts'
+import { OrgInvitesPanel } from '@/components/platform/create-org-form.tsx'
+import { platformDecision, requirePlatform } from '@/lib/platform/guard.ts'
+import { manageOrgInvite } from '@/lib/platform/org-actions.ts'
 import { INTEGRATION_SELECT, orgOwners, providerName } from '@/lib/platform/orgs.ts'
 import { OrgHealthPanel } from '@/components/platform/org-health.tsx'
 import Link from 'next/link'
@@ -13,10 +15,10 @@ export const metadata = { title: 'Organisation' }
 // and a stated line that nothing inside it shows without a grant (D-320).
 // Read side only. Not here yet, each with the row that builds it: status and
 // its history (R-300), the checklist (R-291), grants and "Request access"
-// (R-295), the fee (R-296), pending invites (R-304), the kill-switch toggle
-// (R-306). "Re-run" is on /platform/jobs (R-303b, PRD 11 §4.10).
+// (R-295), the fee (R-296), the kill-switch toggle (R-306). Pending invites
+// with "Resend" and "Revoke" are R-304a's. "Re-run" is on /platform/jobs (R-303b, PRD 11 §4.10).
 export default async function PlatformOrgPage({ params }: { params: Promise<{ slug: string }> }) {
-  await requirePlatform({ permission: 'org.read' })
+  const admin = await requirePlatform({ permission: 'org.read' })
   const { slug } = await params
   const org = await prisma.organization.findUnique({
     where: { slug },
@@ -28,11 +30,23 @@ export default async function PlatformOrgPage({ params }: { params: Promise<{ sl
       createdAt: true,
       health: true,
       integrations: { select: INTEGRATION_SELECT, orderBy: { provider: 'asc' } },
+      invites: {
+        where: { acceptedAt: null, revokedAt: null },
+        select: { id: true, email: true, name: true, expiresAt: true },
+        orderBy: { createdAt: 'asc' },
+      },
     },
   })
   if (!org) notFound()
   const owners = await orgOwners(org.id)
   const now = new Date()
+  const invite = await platformDecision(admin, 'org.create')
+  const invites = org.invites.map((i) => ({
+    id: i.id,
+    email: i.email,
+    name: i.name,
+    expiryLabel: `${i.expiresAt > now ? 'expires' : 'expired'} ${friendlyTimestamp(i.expiresAt, 'UTC')}`,
+  }))
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-6 p-6">
@@ -68,6 +82,13 @@ export default async function PlatformOrgPage({ params }: { params: Promise<{ sl
           </ul>
         )}
       </section>
+
+      <OrgInvitesPanel
+        action={manageOrgInvite}
+        slug={org.slug}
+        invites={invites}
+        canManage={invite.allowed || invite.reason === 'stepup_required'}
+      />
 
       <section aria-labelledby="integrations-heading" className="flex flex-col gap-2 rounded-md border p-4 text-sm">
         <h2 id="integrations-heading" className="text-lg font-semibold">

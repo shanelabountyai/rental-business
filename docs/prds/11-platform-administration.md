@@ -186,6 +186,7 @@ All platform screens: `PLATFORM_HOST` only; the `(platform)` layout calls `requi
 
 - **Who:** `org.create`, step-up.
 - **Fields:** legal display name; slug (lower-case, `^[a-z0-9-]+$`, reserved words refused: `www`, `admin`, `platform`, `api`, `app`, the `PLATFORM_HOST` label); owner's name and email; `platformFeeBps` (default from `PLATFORM_DEFAULT_FEE_BPS`, owner-visible).
+- *(2026-10-29, D-370: built in R-304a without the fee field (R-296) or `ONBOARDING` (R-300); the email goes by `deliverOverChannel` under the new org's id with no `Notification` row, and the link is also shown on screen.)*
 - **On submit, one transaction:** `Organization` (status `ONBOARDING` once R-300's column exists), `OrgInvite` (hashed token, 7-day expiry, single use, email must match, role `owner` — foundation shape, PRD 10 §1.1), `org.created` and `org_invite.sent` audit rows **in the new org** (actor `PLATFORM`). The invite email goes through the notification engine (`account_access`, locked) on the org's host, built with `authUrl(orgId, '/invite/…')` (D-345).
 - **Errors:** slug taken (says so — slugs are public hostnames, not an oracle); email invalid. The page never creates a `StaffUser`; acceptance does (§4.17).
 
@@ -277,7 +278,7 @@ A frozen or offboarding org is still listed and readable; its actions are only t
 
 - **Who:** anyone holding the link, on the org's host.
 - **Flow:** shows the org's name and the invited email; set a password (existing strength rules); creates or reuses the `StaffUser` for that email (D-318), the `OrgMembership`, the owner `StaffAssignment` (`propertyId`/`legalEntityId` null, `orgId` set), marks the invite accepted, audits `org_invite.accepted` in the org; then MFA enrolment is offered and required before any privileged act (ROLE-05, unchanged).
-- **Errors:** expired, used, revoked, wrong host → one sentence each, with "Ask whoever invited you to send a new one". An existing user signs in instead of setting a password.
+- **Errors:** expired, used, revoked, wrong host → one sentence each, with "Ask whoever invited you to send a new one". An existing user signs in instead of setting a password. *(2026-10-29, D-370: built as ONE sentence for all four plus a nonexistent token, per §6; an existing user presses "Accept and join" with no password field, then signs in.)*
 
 ## 5. Data model (R-294, R-295, R-302, R-303, R-304)
 

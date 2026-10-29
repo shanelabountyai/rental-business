@@ -188,3 +188,36 @@ export function platformSetupLinkRefusal(target: PlatformAdminSummary): string |
   if (target.mfaEnrolledAt) return `${target.name} has already finished setting up their account.`
   return null
 }
+
+/// Hostnames the platform or the internet already means something by
+/// (PRD 11 §4.5). The PLATFORM_HOST label is added by the caller.
+export const RESERVED_ORG_SLUGS: readonly string[] = ['www', 'admin', 'platform', 'api', 'app']
+
+/// An org's slug is its hostname label (`<slug>.<ORG_BASE_DOMAIN>`, D-345):
+/// lower-case letters, digits and inner hyphens, at most 63 characters.
+export function orgSlugRefusal(slug: string, reserved: readonly string[] = RESERVED_ORG_SLUGS): string | null {
+  if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(slug)) {
+    return 'Use lower-case letters, digits and hyphens, starting and ending with a letter or digit, at most 63 characters.'
+  }
+  if (reserved.includes(slug)) return `“${slug}” is reserved.`
+  return null
+}
+
+/// The one sentence `/invite/[token]` answers for every invite it will not
+/// honour (PRD 11 §6): nonexistent, expired, used, revoked or on another
+/// org's host all read the same, so the page is no oracle for any of them.
+export const INVITE_REFUSED = 'This invitation link is no longer valid. Ask whoever invited you to send a new one.'
+
+export interface InviteSummary {
+  orgId: string
+  expiresAt: Date
+  acceptedAt: Date | null
+  revokedAt: Date | null
+}
+
+/// Whether an invite may be accepted on the host that names `hostOrgId`.
+export function inviteRefusal(invite: InviteSummary | null, hostOrgId: string | null, now = new Date()): string | null {
+  if (!invite || !hostOrgId || invite.orgId !== hostOrgId) return INVITE_REFUSED
+  if (invite.acceptedAt || invite.revokedAt || invite.expiresAt.getTime() <= now.getTime()) return INVITE_REFUSED
+  return null
+}

@@ -15,6 +15,8 @@ export const PUBLIC_ROUTES: Record<string, string> = {
   'forgot-password/page.tsx': 'Requesting a reset requires no session.',
   'reset-password/page.tsx':
     'The single-use token in the link is the credential; demanding a session would defeat the purpose.',
+  'invite/[token]/page.tsx':
+    "Accepting an organisation invite (R-304a). The single-use token is the credential, honoured only on its org's host.",
   'portal/login/page.tsx': 'Tenant sign-in.',
   'portal/verify/page.tsx':
     'Where a magic link lands (K1). Changes nothing on GET; the token is the credential and is spent by the POST below.',
