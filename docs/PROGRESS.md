@@ -15101,7 +15101,7 @@ Tests: `lib/platform/settings.test.ts` (no secret value in the output, the kill 
 
 - CI run 40920720244 (`03f666d`) is green on both jobs, including e2e on both projects.
 
-## R-304b — org name, brand colours and slug change (`SHA`)
+## R-304b — org name, brand colours and slug change (`1699e66`)
 
 **What it built.** PRD 11 §4.6's first two rows, on `/platform/orgs/[slug]`.
 - "Name and brand colours" (`configureOrganization`, `org.configure`): name, primary and accent. A colour must be `#rrggbb` and pass `usableColor()` (white text at 4.5:1) or the field is refused. Blank clears. The panel shows swatches of the saved values. Audited `org.configured` with before and after; an unchanged save says "Nothing changed" and writes nothing.
