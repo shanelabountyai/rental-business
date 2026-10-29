@@ -107,3 +107,103 @@ export function OrgInvitesPanel({
     </section>
   )
 }
+
+type OrgAction = (state: OrgInviteFormState, formData: FormData) => Promise<OrgInviteFormState>
+
+/**
+ * "Edit name / brand colours" (§4.6, R-304b). The preview is what
+ * `brandStyle()` applies to the SAVED values: a colour that fails AA is
+ * refused on save, so the swatches below are never a colour it would drop.
+ */
+export function OrgConfigurePanel({
+  action,
+  slug,
+  name,
+  colorPrimary,
+  colorAccent,
+  canConfigure,
+}: {
+  action: OrgAction
+  slug: string
+  name: string
+  colorPrimary: string | null
+  colorAccent: string | null
+  canConfigure: boolean
+}) {
+  const [state, formAction] = useActionState<OrgInviteFormState, FormData>(action, {})
+  const errors = state.fieldErrors ?? {}
+  const swatch = (label: string, colour: string | null) => (
+    <span className="flex items-center gap-2">
+      <span
+        aria-hidden="true"
+        className="inline-block size-5 rounded border"
+        style={colour ? { backgroundColor: colour } : undefined}
+      />
+      {label}: {colour ?? 'default'}
+    </span>
+  )
+  return (
+    <section aria-labelledby="configure-heading" className="flex flex-col gap-3 rounded-md border p-4 text-sm">
+      <h2 id="configure-heading" className="text-lg font-semibold">
+        Name and brand colours
+      </h2>
+      <p className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
+        {swatch('Primary', colorPrimary)}
+        {swatch('Accent', colorAccent)}
+      </p>
+      <FormAlerts state={state} />
+      {canConfigure && (
+        <form action={formAction} className="flex flex-col gap-4">
+          <input type="hidden" name="slug" value={slug} />
+          <TextField label="Brand name" name="name" required defaultValue={name} error={errors.name} />
+          <TextField
+            label="Primary colour"
+            name="colorPrimary"
+            defaultValue={colorPrimary ?? ''}
+            error={errors.colorPrimary}
+            hint="Six-digit hex such as #1d4ed8, dark enough for white text. Blank uses the default."
+          />
+          <TextField
+            label="Accent colour"
+            name="colorAccent"
+            defaultValue={colorAccent ?? ''}
+            error={errors.colorAccent}
+            hint="Also used for links on white. Blank uses the default."
+          />
+          <SubmitButton label="Save name and colours" />
+        </form>
+      )}
+    </section>
+  )
+}
+
+/** "Change slug" (§4.6, R-304b): the host moves, so the old slug is typed back. */
+export function OrgSlugPanel({ action, slug, canConfigure }: { action: OrgAction; slug: string; canConfigure: boolean }) {
+  const [state, formAction] = useActionState<OrgInviteFormState, FormData>(action, {})
+  const errors = state.fieldErrors ?? {}
+  if (!canConfigure) return null
+  return (
+    <section aria-labelledby="slug-heading" className="flex flex-col gap-3 rounded-md border p-4 text-sm">
+      <h2 id="slug-heading" className="text-lg font-semibold">
+        Web address
+      </h2>
+      <p>
+        Changing the slug moves the organisation to a new address. Staff signed in on the old address are signed out, and
+        pending invitations must be resent. It asks for a fresh code.
+      </p>
+      <FormAlerts state={state} />
+      <form action={formAction} className="flex flex-col gap-4">
+        <input type="hidden" name="slug" value={slug} />
+        <TextField label="New slug" name="newSlug" required error={errors.newSlug} />
+        <TextField
+          label="Type the current slug to confirm"
+          name="confirmSlug"
+          required
+          error={errors.confirmSlug}
+          hint={`The current slug is ${slug}.`}
+        />
+        <SubmitButton label="Change slug" />
+      </form>
+    </section>
+  )
+}

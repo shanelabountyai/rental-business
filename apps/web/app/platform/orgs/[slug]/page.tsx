@@ -1,9 +1,9 @@
 import { friendlyTimestamp } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { notFound } from 'next/navigation'
-import { OrgInvitesPanel } from '@/components/platform/create-org-form.tsx'
+import { OrgConfigurePanel, OrgInvitesPanel, OrgSlugPanel } from '@/components/platform/create-org-form.tsx'
 import { platformDecision, requirePlatform } from '@/lib/platform/guard.ts'
-import { manageOrgInvite } from '@/lib/platform/org-actions.ts'
+import { changeOrgSlug, configureOrganization, manageOrgInvite } from '@/lib/platform/org-actions.ts'
 import { INTEGRATION_SELECT, orgOwners, providerName } from '@/lib/platform/orgs.ts'
 import { OrgHealthPanel } from '@/components/platform/org-health.tsx'
 import Link from 'next/link'
@@ -17,15 +17,24 @@ export const metadata = { title: 'Organisation' }
 // its history (R-300), the checklist (R-291), grants and "Request access"
 // (R-295), the fee (R-296), the kill-switch toggle (R-306). Pending invites
 // with "Resend" and "Revoke" are R-304a's. "Re-run" is on /platform/jobs (R-303b, PRD 11 §4.10).
-export default async function PlatformOrgPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function PlatformOrgPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>
+  searchParams: Promise<{ slugChanged?: string }>
+}) {
   const admin = await requirePlatform({ permission: 'org.read' })
   const { slug } = await params
+  const { slugChanged } = await searchParams
   const org = await prisma.organization.findUnique({
     where: { slug },
     select: {
       id: true,
       name: true,
       slug: true,
+      colorPrimary: true,
+      colorAccent: true,
       notificationsEnabled: true,
       createdAt: true,
       health: true,
@@ -41,6 +50,8 @@ export default async function PlatformOrgPage({ params }: { params: Promise<{ sl
   const owners = await orgOwners(org.id)
   const now = new Date()
   const invite = await platformDecision(admin, 'org.create')
+  const configure = await platformDecision(admin, 'org.configure')
+  const canConfigure = configure.allowed
   const invites = org.invites.map((i) => ({
     id: i.id,
     email: i.email,
@@ -60,6 +71,13 @@ export default async function PlatformOrgPage({ params }: { params: Promise<{ sl
           Back to organisations
         </Link>
       </header>
+
+      {slugChanged && (
+        <p role="status" className="rounded-md border p-4 text-sm break-words">
+          The slug was changed from {slugChanged} to {org.slug}. Staff signed in on the old address are signed out, and
+          pending invitations must be resent.
+        </p>
+      )}
 
       <p className="rounded-md border p-4 text-sm">
         Viewing inside this organisation needs a support grant. Its properties, tenants, leases, money, messages,
@@ -82,6 +100,17 @@ export default async function PlatformOrgPage({ params }: { params: Promise<{ sl
           </ul>
         )}
       </section>
+
+      <OrgConfigurePanel
+        action={configureOrganization}
+        slug={org.slug}
+        name={org.name}
+        colorPrimary={org.colorPrimary}
+        colorAccent={org.colorAccent}
+        canConfigure={canConfigure}
+      />
+
+      <OrgSlugPanel action={changeOrgSlug} slug={org.slug} canConfigure={canConfigure} />
 
       <OrgInvitesPanel
         action={manageOrgInvite}

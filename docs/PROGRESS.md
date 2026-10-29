@@ -15100,3 +15100,25 @@ Tests: `lib/platform/settings.test.ts` (no secret value in the output, the kill 
 - e2e against the production build, both projects, `platform-org-create` + `platform-orgs`: 8 passed of 8 listed, 0 flaky.
 
 - CI run 40920720244 (`03f666d`) is green on both jobs, including e2e on both projects.
+
+## R-304b — org name, brand colours and slug change (`SHA`)
+
+**What it built.** PRD 11 §4.6's first two rows, on `/platform/orgs/[slug]`.
+- "Name and brand colours" (`configureOrganization`, `org.configure`): name, primary and accent. A colour must be `#rrggbb` and pass `usableColor()` (white text at 4.5:1) or the field is refused. Blank clears. The panel shows swatches of the saved values. Audited `org.configured` with before and after; an unchanged save says "Nothing changed" and writes nothing.
+- "Web address" (`changeOrgSlug`, `org.configure` plus step-up): new slug through `orgSlugRefusal` and the reserved list, old slug typed back, P2002 on a concurrent take. Audited `org.slug_changed`, then redirects to the new slug's page with a notice.
+- Both actions are in `platform.manifest.ts` and `actions.manifest.ts`. `e2e/platform-org-configure.spec.ts`: an AA refusal, a save, a wrong confirmation, then the slug change, with both audit rows counted.
+
+**What it decided (D-371).** A colour that fails AA is refused rather than saved and dropped by `brandStyle()`. A slug change strands the old host: staff there are signed out and pending invitations must be resent, and the page says so.
+
+**Real bugs found.** None in the product. The spec's first run failed because React resets an uncontrolled form after an action, which cleared the new-slug field after the refused confirmation.
+
+**What it left behind.**
+- "Before go-live" is not enforced: no `status` column until R-300, so the slug change is always allowed.
+- Notifications off/on, fee, freeze and offboard rows of §4.6 belong to R-306, R-296 and R-300.
+- No unit test of the two actions beyond PLAT-02's manifest checks and the e2e; the logic is validation plus one update.
+
+**Gate.**
+- lint 0 errors (16 warnings, same as before), typecheck clean, `npm test` 3,721 passed, 4 skipped, 0 failed.
+- e2e against the production build, both projects: `platform-org-configure` 2 of 2, `platform-orgs` and `platform-org-create` 8 of 8 together with it, 0 flaky.
+- No schema change, so `db:ci` was not re-run. The full sweep is CI's.
+

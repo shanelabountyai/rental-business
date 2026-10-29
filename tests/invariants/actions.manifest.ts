@@ -72,6 +72,9 @@ export const manifest: Record<string, Entry> = {
   // org's invite by design, so its id is a `value`, as rerunCronChild's is.
   'lib/platform/org-actions.ts#createOrganization': {},
   'lib/platform/org-actions.ts#manageOrgInvite': { 'form.inviteId': 'value', 'form.slug': 'value' },
+  // R-304b: the console names any org by its slug, by design.
+  'lib/platform/org-actions.ts#configureOrganization': { 'form.slug': 'value' },
+  'lib/platform/org-actions.ts#changeOrgSlug': { 'form.slug': 'value' },
   // lib/auth/invite-actions.ts (R-304a)
   'lib/auth/invite-actions.ts#acceptOrgInvite': { 'form.token': 'token', public: 'gated by the invite token in the form, on its org host only' },
   // lib/billing/actions.ts

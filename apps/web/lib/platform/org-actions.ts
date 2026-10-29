@@ -6,6 +6,8 @@ import { RESERVED_ORG_SLUGS, orgSlugRefusal } from '@rental/core/rbac'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
+import { redirect } from 'next/navigation'
+import { usableColor } from '@/lib/brand.ts'
 import { authUrl } from '@/lib/auth/delivery.ts'
 import { deliverOverChannel } from '@/lib/notifications/deliver.ts'
 import { requirePlatform } from '@/lib/platform/guard.ts'
@@ -196,4 +198,103 @@ export async function manageOrgInvite(
     }
   }
   return { error: 'That action is not recognised.' }
+}
+
+/**
+ * "Edit name / brand colours" on `/platform/orgs/[slug]` (PRD 11 §4.6, R-304b).
+ * A colour is refused unless it carries white text at AA - the same test
+ * `brandStyle()` applies, which would otherwise drop it silently and leave the
+ * admin believing it was live. Blank clears a colour back to Homestead's.
+ */
+export async function configureOrganization(
+  _previous: OrgInviteFormState,
+  formData: FormData,
+): Promise<OrgInviteFormState> {
+  const slug = str(formData, 'slug')
+  const actor = await requirePlatform({ permission: 'org.configure', next: `/platform/orgs/${encodeURIComponent(slug)}` })
+  const org = await prisma.organization.findUnique({ where: { slug }, select: { id: true, name: true, colorPrimary: true, colorAccent: true } })
+  if (!org) return { error: 'That organisation no longer exists.' }
+
+  const name = str(formData, 'name')
+  const fieldErrors: Record<string, string> = {}
+  if (!name) fieldErrors.name = 'A name is required.'
+  const colour = (key: 'colorPrimary' | 'colorAccent'): string | null => {
+    const value = str(formData, key).toLowerCase()
+    if (!value) return null
+    if (!/^#[0-9a-f]{6}$/.test(value)) fieldErrors[key] = 'Use a colour like #1d4ed8.'
+    else if (!usableColor(value)) fieldErrors[key] = 'Too light: white text on it would not reach 4.5:1. Choose a darker colour.'
+    return value
+  }
+  const colorPrimary = colour('colorPrimary')
+  const colorAccent = colour('colorAccent')
+  if (Object.keys(fieldErrors).length > 0) return { error: 'Fix the highlighted fields.', fieldErrors }
+
+  const before = { name: org.name, colorPrimary: org.colorPrimary, colorAccent: org.colorAccent }
+  const after = { name, colorPrimary, colorAccent }
+  if (JSON.stringify(before) === JSON.stringify(after)) return { notice: 'Nothing changed.' }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.organization.update({ where: { id: org.id }, data: after })
+    await recordAudit(tx, {
+      actor: { type: 'PLATFORM', ref: actor.id, ipAddress: await clientIp() },
+      action: 'org.configured',
+      entityType: 'Organization',
+      entityId: org.id,
+      orgId: org.id,
+      before,
+      after,
+    })
+  })
+  revalidatePath(`/platform/orgs/${slug}`)
+  revalidatePath('/platform/orgs')
+  return { notice: 'Saved. The organisation’s pages use the new name and colours now.' }
+}
+
+/**
+ * "Change slug" (PRD 11 §4.6, R-304b): the organisation's host changes, so it
+ * asks for a fresh code and the old slug typed back. Always allowed until
+ * R-300 adds a status column to say the org is live. Cookies are host-only, so
+ * signed-in staff are signed out of the old host, and a pending invitation's
+ * link names the old host: both are said so rather than left as a surprise.
+ */
+export async function changeOrgSlug(
+  _previous: OrgInviteFormState,
+  formData: FormData,
+): Promise<OrgInviteFormState> {
+  const oldSlug = str(formData, 'slug')
+  const actor = await requirePlatform({
+    permission: 'org.configure',
+    stepUp: true,
+    next: `/platform/orgs/${encodeURIComponent(oldSlug)}`,
+  })
+  const org = await prisma.organization.findUnique({ where: { slug: oldSlug }, select: { id: true } })
+  if (!org) return { error: 'That organisation no longer exists.' }
+
+  if (str(formData, 'confirmSlug') !== oldSlug) {
+    return { error: 'Type the current slug exactly to confirm.', fieldErrors: { confirmSlug: 'Does not match.' } }
+  }
+  const newSlug = str(formData, 'newSlug').toLowerCase()
+  const refusal = newSlug === oldSlug ? 'That is already its slug.' : orgSlugRefusal(newSlug, reservedSlugs())
+  if (refusal) return { error: refusal, fieldErrors: { newSlug: refusal } }
+
+  const taken = { error: `The slug “${newSlug}” is taken.`, fieldErrors: { newSlug: 'Already in use.' } }
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.organization.update({ where: { id: org.id }, data: { slug: newSlug } })
+      await recordAudit(tx, {
+        actor: { type: 'PLATFORM', ref: actor.id, ipAddress: await clientIp() },
+        action: 'org.slug_changed',
+        entityType: 'Organization',
+        entityId: org.id,
+        orgId: org.id,
+        before: { slug: oldSlug },
+        after: { slug: newSlug },
+      })
+    })
+  } catch (error) {
+    if ((error as { code?: string }).code === 'P2002') return taken
+    throw error
+  }
+  revalidatePath('/platform/orgs')
+  redirect(`/platform/orgs/${encodeURIComponent(newSlug)}?slugChanged=${encodeURIComponent(oldSlug)}`)
 }

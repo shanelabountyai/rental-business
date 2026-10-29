@@ -112,6 +112,9 @@ export const AUDIT_ACTIONS = [
   'org_invite.sent',
   'org_invite.revoked',
   'org_invite.accepted',
+  /// R-304b (PRD 11 §4.6): name/colours edited, and the slug (so the host) changed.
+  'org.configured',
+  'org.slug_changed',
   'platform_role.revoked',
   /// R-302b: the other platform owners were emailed about a lockout (§2.5);
   /// `after.sent` is each recipient and outcome.
