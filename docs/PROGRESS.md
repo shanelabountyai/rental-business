@@ -15098,3 +15098,5 @@ Tests: `lib/platform/settings.test.ts` (no secret value in the output, the kill 
 **Gate.**
 - `npm run ci:local` (db:ci from scratch with no drift, lint 0 errors, typecheck, ship-deps clean, build): `npm test` 3,721 passed, 4 skipped, 0 failed (275 files).
 - e2e against the production build, both projects, `platform-org-create` + `platform-orgs`: 8 passed of 8 listed, 0 flaky.
+
+- CI run 40920720244 (`03f666d`) is green on both jobs, including e2e on both projects.
