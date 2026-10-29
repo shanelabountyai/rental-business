@@ -15123,7 +15123,7 @@ Tests: `lib/platform/settings.test.ts` (no secret value in the output, the kill 
 - No schema change, so `db:ci` was not re-run. The full sweep is CI's.
 
 
-## R-305 — jurisdiction rules are platform-published (`SHA_PENDING`)
+## R-305 — jurisdiction rules are platform-published (`135247f`)
 
 **What it built.** PRD 11 §4.11, D-355.
 - `/platform/jurisdiction` (`org.read`): the current version of every (state, jurisdiction) with citation, reviewer, an unreviewed marker, and how many orgs have properties in the state (from `OrgHealth.states`), plus the states with properties and no statewide rule. Linked from the console nav.
