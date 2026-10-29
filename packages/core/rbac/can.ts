@@ -204,7 +204,7 @@ export type PropertyScope =
  * `can()` is left exactly as it was rather than taught the documented
  * meaning, and that is deliberate twice over. A resource-less `can()` is the
  * CORRECT guard for a portfolio-wide concept - `permissions.ts` says so of
- * `jurisdiction.write`, because a JurisdictionRule applies by state and there
+ * `jurisdiction.read`, because a JurisdictionRule applies by state and there
  * is no scoped resource to check it against. And relaxing it would have
  * handed a property-scoped manager `template.write` over portfolio-wide
  * message templates, which is a permissions decision and not a nav fix.

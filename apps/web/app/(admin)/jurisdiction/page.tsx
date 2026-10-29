@@ -1,13 +1,11 @@
 import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
-import Link from 'next/link'
 import { PageHeader } from '@/components/page-header.tsx'
-import { actorCan, requirePermission } from '@/lib/auth/guard.ts'
+import { requirePermission } from '@/lib/auth/guard.ts'
 import {
   listCurrentRules,
   listRuleVersions,
   portfolioCoverage,
 } from '@/lib/jurisdiction/queries.ts'
-import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Jurisdiction rules' }
 
@@ -44,16 +42,14 @@ function summarize(rule: {
 // trusting the resolver with it. Portfolio-wide, like /properties/entities -
 // a JurisdictionRule applies by state, not by property or entity, so there is
 // no scoped list to build here.
-export default async function JurisdictionRulesPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ versioned?: string }>
-}) {
+//
+// READ-ONLY FOR EVERY ORG (R-305, D-355): the platform publishes these at
+// `/platform/jurisdiction`, because a version written here governed every
+// other org's tenants too.
+export default async function JurisdictionRulesPage() {
   const actor = await requirePermission('jurisdiction.read')
-  const [rules, canWrite, { versioned }, coverage] = await Promise.all([
+  const [rules, coverage] = await Promise.all([
     listCurrentRules(new Date()),
-    actorCan('jurisdiction.write'),
-    searchParams,
     portfolioCoverage(new Date(), actor.orgId),
   ])
 
@@ -75,25 +71,13 @@ export default async function JurisdictionRulesPage({
             periods. All drafts requiring attorney review before real-world
             use - this is a learning project, not legal advice.
           </p>
+          <p className="text-muted-foreground max-w-prose text-sm">
+            The platform publishes these for every organisation. When a new
+            version is published for a state you have a property in, your
+            owners are told. A gap below is for the platform to close.
+          </p>
         </PageHeader>
-        {canWrite && (
-          <Link
-            href="/jurisdiction/new"
-            className={`${SUBMIT_BUTTON_CLASSES} flex min-h-11 items-center px-4 py-2 text-sm`}
-          >
-            New configuration
-          </Link>
-        )}
       </header>
-
-      {versioned && (
-        <p
-          role="status"
-          className="rounded-md border border-success/35 bg-success/6 px-3 py-2 text-sm text-success"
-        >
-          Added a new version for {versioned}.
-        </p>
-      )}
 
       {/* R-162 (review finding 11): "a portfolio screen naming which of your
           states has no rule and which has one with unreviewed fields" -
@@ -114,18 +98,7 @@ export default async function JurisdictionRulesPage({
               </p>
               <ul className="flex flex-wrap gap-x-3 text-sm">
                 {coverage.statesNeedingRule.map((code) => (
-                  <li key={code}>
-                    {canWrite ? (
-                      <Link
-                        href={`/jurisdiction/new?state=${code}`}
-                        className="font-medium underline underline-offset-2"
-                      >
-                        {code}
-                      </Link>
-                    ) : (
-                      code
-                    )}
-                  </li>
+                  <li key={code}>{code}</li>
                 ))}
               </ul>
             </div>
@@ -212,14 +185,6 @@ export default async function JurisdictionRulesPage({
                   ))}
                 </ul>
               </details>
-              {canWrite && (
-                <Link
-                  href={`/jurisdiction/new?state=${rule.state}${rule.jurisdiction ? `&jurisdiction=${encodeURIComponent(rule.jurisdiction)}` : ''}`}
-                  className="text-sm font-medium underline underline-offset-2"
-                >
-                  Add new version
-                </Link>
-              )}
             </li>
           ))}
         </ul>

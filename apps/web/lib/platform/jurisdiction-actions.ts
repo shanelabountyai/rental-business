@@ -1,5 +1,6 @@
 'use server'
 
+import { recordAudit } from '@rental/core/audit'
 import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import {
   type JurisdictionRuleInput,
@@ -8,15 +9,23 @@ import {
 import type { ServiceMethodMap } from '@rental/core/notices'
 import { type JurisdictionRule, prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
+import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { audit } from '@/lib/audit/index.ts'
-import { requirePermission } from '@/lib/auth/guard.ts'
-import { currentRuleVersion } from './queries.ts'
+import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
+import { requirePlatform } from '@/lib/platform/guard.ts'
+import { orgOwners } from '@/lib/platform/orgs.ts'
+import { currentRuleVersion } from '@/lib/jurisdiction/queries.ts'
 
 // Writes for JurisdictionRule (R-010, D-4). One shape only: adding a new
 // effective-dated version. There is no update or delete - "rule changes apply
 // prospectively, never retroactively" means an existing version is never
 // edited, only superseded, so the audit trail is the version history itself.
+//
+// PUBLISHED BY THE PLATFORM, NOT BY AN ORG (R-305, D-355). The table is
+// org-less, so every org's tenants are governed by whatever is written here;
+// an org owner holding `jurisdiction.write` could change Texas's late-fee cap
+// for every other org. The permission is gone from the org catalogue and the
+// form lives at `/platform/jurisdiction/new`.
 
 export interface FormState {
   error?: string
@@ -168,21 +177,69 @@ function ruleInputFrom(formData: FormData): JurisdictionRuleInput {
 }
 
 /**
+ * Tells the owners of every org with an active property in the rule's state
+ * (PRD 11 §4.11). Addressed through one of the org's properties in that state
+ * rather than by org id: that is what stamps the org on the Notification row,
+ * and it puts quiet hours in that state's timezone. Read from `Property`, not
+ * from `OrgHealth.states`, because the projection can be a day old and a
+ * property added this morning is governed by this version too.
+ */
+async function notifyOwnersInState(rule: {
+  id: string
+  state: string
+  jurisdiction: string | null
+  version: number
+  effectiveFrom: Date
+}) {
+  const properties = await prisma.property.findMany({
+    where: { state: rule.state, active: true },
+    distinct: ['orgId'],
+    select: { id: true, orgId: true },
+  })
+  const deliveryIds: string[] = []
+  for (const property of properties) {
+    for (const owner of await orgOwners(property.orgId)) {
+      const outcomes = await notify({
+        category: 'compliance_due',
+        templateKey: 'jurisdiction.rule_published',
+        recipient: { type: 'STAFF', id: owner.id, email: owner.email },
+        context: {
+          state: rule.state,
+          jurisdiction: rule.jurisdiction,
+          version: rule.version,
+          effectiveOn: utcToBusinessDate(rule.effectiveFrom),
+        },
+        propertyId: property.id,
+        idempotencyKey: `jurisdiction-rule-published:${rule.id}:${owner.id}`,
+      })
+      for (const outcome of outcomes) if (outcome.deliveryId) deliveryIds.push(outcome.deliveryId)
+    }
+  }
+  if (deliveryIds.length > 0) await dispatchPendingNotifications(new Date(), 100, { deliveryIds })
+}
+
+/**
  * Adds a new effective-dated version for a (state, jurisdiction) pair,
  * closing out whichever version was open-ended before it.
  *
- * Portfolio-wide only: `requirePermission('jurisdiction.write')` carries no
- * resource, which per R-004's `can()` only ever clears for a portfolio-wide
- * grant - correct here, since a JurisdictionRule applies by state, not by
- * property or entity, and there is no scoped resource to check it against.
+ * `jurisdiction.publish` is a step-up permission, so the guard wants a code
+ * proved in the last ten minutes. The page asks for the same on load, so a
+ * press inside that window is not sent away from a filled-in form.
  */
 export async function createRuleVersion(
   _previous: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  await requirePermission('jurisdiction.write')
-
   const input = ruleInputFrom(formData)
+  const actor = await requirePlatform({
+    permission: 'jurisdiction.publish',
+    next: `/platform/jurisdiction/new?${new URLSearchParams({
+      ...(input.state && { state: input.state }),
+      ...(input.jurisdiction && { jurisdiction: input.jurisdiction }),
+    })}`,
+  })
+  const ipAddress = (await headers()).get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown'
+
   const violations = validateJurisdictionRule(input)
   if (violations.length > 0) return violationsToState(violations)
 
@@ -218,7 +275,7 @@ export async function createRuleVersion(
 
   const version = (previous?.version ?? 0) + 1
 
-  await prisma.$transaction(async (tx) => {
+  const created = await prisma.$transaction(async (tx) => {
     if (previous) {
       // The day before the new version starts, never the new version's own
       // effectiveFrom - a rule is in force through the end of the day it is
@@ -289,25 +346,28 @@ export async function createRuleVersion(
       },
     })
 
-    await audit(
-      {
-        action: 'jurisdiction_rule.versioned',
-        entityType: 'JurisdictionRule',
-        entityId: created.id,
-        before: previous
-          ? { version: previous.version, effectiveFrom: previous.effectiveFrom }
-          : null,
-        after: {
-          state: created.state,
-          jurisdiction: created.jurisdiction,
-          version: created.version,
-          effectiveFrom: created.effectiveFrom,
-        },
+    // Org-less: a statute version belongs to no org, and every org reads it.
+    await recordAudit(tx, {
+      actor: { type: 'PLATFORM', ref: actor.id, ipAddress },
+      orgId: null,
+      action: 'jurisdiction_rule.versioned',
+      entityType: 'JurisdictionRule',
+      entityId: created.id,
+      before: previous
+        ? { version: previous.version, effectiveFrom: previous.effectiveFrom }
+        : null,
+      after: {
+        state: created.state,
+        jurisdiction: created.jurisdiction,
+        version: created.version,
+        effectiveFrom: created.effectiveFrom,
       },
-      tx,
-    )
+    })
+    return created
   })
 
+  await notifyOwnersInState(created)
   revalidatePath('/jurisdiction')
-  redirect(`/jurisdiction?versioned=${encodeURIComponent(input.state)}`)
+  revalidatePath('/platform/jurisdiction')
+  redirect(`/platform/jurisdiction?versioned=${encodeURIComponent(input.state)}`)
 }

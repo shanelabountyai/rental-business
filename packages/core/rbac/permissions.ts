@@ -72,11 +72,15 @@ export const PERMISSIONS = [
   'eviction.manage',
   /// Portfolio-wide only (R-010): a JurisdictionRule applies by state, not by
   /// property or entity, so there is no scoped resource to check it against.
-  /// `requirePermission('jurisdiction.write')` with no resource is the
+  /// `requirePermission('jurisdiction.read')` with no resource is the
   /// correct guard, not a bug - see propertyResource()'s own comment for the
   /// failure mode a resource-less check usually is.
+  ///
+  /// There is no `jurisdiction.write` (R-305, D-355): the table is org-less,
+  /// so a version an org wrote governed every org. The platform publishes
+  /// with `jurisdiction.publish`. A role row still carrying the old key is
+  /// harmless - `knownPermissions` drops it - and the seed rewrites it.
   'jurisdiction.read',
-  'jurisdiction.write',
   /// Versioning ScreeningCriteria (LEASE-04, R-060, R-242; OQ-6). Same
   /// portfolio-wide shape as jurisdiction.read/write and the same reason:
   /// criteria apply to every applicant across the whole portfolio at once
@@ -306,9 +310,8 @@ export const ROLE_DEFINITIONS: Record<
       'notice.send',
       'message.read',
       'message.send',
-      /// Authors templates, does NOT approve legal translations - the same
-      /// split as jurisdiction read/write one line down, and for the same
-      /// reason: signing off legal wording is not day-to-day portfolio work.
+      /// Authors templates, does NOT approve legal translations: signing off
+      /// legal wording is not day-to-day portfolio work.
       'template.write',
       'task.read',
       'task.write',
@@ -319,8 +322,8 @@ export const ROLE_DEFINITIONS: Record<
       /// this).
       'accesscode.issue',
       'report.financial',
-      /// Read, not write: a jurisdiction config change is a legal release
-      /// gate (D-4), not day-to-day portfolio work.
+      /// Read only, like every org role since D-355: the platform publishes
+      /// jurisdiction rules.
       'jurisdiction.read',
       /// Same split, same reason: reviewing screening criteria is a legal
       /// release gate (OQ-6), not day-to-day portfolio work.

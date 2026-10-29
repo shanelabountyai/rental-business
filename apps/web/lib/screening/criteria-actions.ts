@@ -10,7 +10,7 @@ import { requirePermission } from '@/lib/auth/guard.ts'
 import { currentCriteriaVersion } from './criteria-queries.ts'
 
 // Writes for ScreeningCriteria (R-242; OQ-6). Same shape as
-// jurisdiction/actions.ts: one write only, adding a new effective-dated
+// platform/jurisdiction-actions.ts: one write only, adding a new effective-dated
 // version - there is no update or delete, because a version that already
 // governed an applicant's decision must stay exactly as it was.
 

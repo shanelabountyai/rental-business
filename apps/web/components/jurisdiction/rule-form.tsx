@@ -26,7 +26,7 @@ import {
   TextField,
   TextareaField,
 } from '@/components/form/field.tsx'
-import type { FormState } from '@/lib/jurisdiction/actions.ts'
+import type { FormState } from '@/lib/platform/jurisdiction-actions.ts'
 
 const LATE_FEE_TYPE_OPTIONS = [
   { value: 'NONE', label: 'No late fee' },

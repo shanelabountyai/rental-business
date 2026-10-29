@@ -43,6 +43,11 @@ export default async function PlatformHomePage() {
               Jobs
             </Link>
           )}
+          {canRead && (
+            <Link href="/platform/jurisdiction" className="underline underline-offset-4">
+              Jurisdiction rules
+            </Link>
+          )}
           {canAudit && (
             <Link href="/platform/audit" className="underline underline-offset-4">
               Audit log

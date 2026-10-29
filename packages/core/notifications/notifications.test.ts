@@ -417,3 +417,21 @@ describe('announcement footer (R-266)', () => {
     expect(renderTemplate('comms.announcement', context, 'EMAIL').body).toBe('Water is off Tuesday.')
   })
 })
+
+describe('jurisdiction.rule_published (R-305)', () => {
+  it('names the state, the local jurisdiction when there is one, and a friendly date', () => {
+    const statewide = renderTemplate(
+      'jurisdiction.rule_published',
+      { state: 'TX', jurisdiction: null, version: 3, effectiveOn: '2027-01-01' },
+      'EMAIL',
+    )
+    expect(statewide.subject).toBe('A new TX rule takes effect on 1 Jan 2027')
+    const local = renderTemplate(
+      'jurisdiction.rule_published',
+      { state: 'TX', jurisdiction: 'Austin', version: 1, effectiveOn: '2027-01-01' },
+      'EMAIL',
+    )
+    expect(local.subject).toContain('TX (Austin)')
+    expect(local.body).toContain('Version 1')
+  })
+})

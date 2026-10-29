@@ -15122,3 +15122,26 @@ Tests: `lib/platform/settings.test.ts` (no secret value in the output, the kill 
 - e2e against the production build, both projects: `platform-org-configure` 2 of 2, `platform-orgs` and `platform-org-create` 8 of 8 together with it, 0 flaky.
 - No schema change, so `db:ci` was not re-run. The full sweep is CI's.
 
+
+## R-305 — jurisdiction rules are platform-published (`SHA_PENDING`)
+
+**What it built.** PRD 11 §4.11, D-355.
+- `/platform/jurisdiction` (`org.read`): the current version of every (state, jurisdiction) with citation, reviewer, an unreviewed marker, and how many orgs have properties in the state (from `OrgHealth.states`), plus the states with properties and no statewide rule. Linked from the console nav.
+- `/platform/jurisdiction/new` (`jurisdiction.publish`, step-up on load and on press): the existing form, clone and supersede flows moved unchanged, R-162's founding-version citation/reviewer rule included. `createRuleVersion` moved to `lib/platform/jurisdiction-actions.ts`, audits `jurisdiction_rule.versioned` org-less as PLATFORM, and redirects back to the console list.
+- Owners of every org with an active property in the state get `jurisdiction.rule_published` (`compliance_due`, email + portal): "A new {state} rule takes effect on {date}". New template in `packages/core/notifications/templates.ts` with a unit test.
+- Org `/jurisdiction` is read-only: no "New configuration", no per-rule or coverage-gap links, and `/jurisdiction/new` is gone (404). `jurisdiction.write` left `PERMISSIONS`.
+- Manifests: the action is in `platform.manifest.ts` (step-up, `jurisdiction.publish`) and `actions.manifest.ts`; the two route-guard exemptions for the deleted org write paths are removed.
+- `e2e/jurisdiction.spec.ts` publishes from the console as a platform owner. New cases: an org owner sees no write path and gets a 404 on the old form; `platform_support` reads the library and is refused the form; the publish asserts an org-less PLATFORM audit row and the owner's two notification rows stamped with their org.
+
+**What it decided (D-372).** The action lives in `lib/platform`, as PLAT-02 requires. The form page asks for the code on load so a press is not sent away from forty filled fields. Each owner notice carries `propertyId` of one of the org's properties in the state, which stamps the org and puts quiet hours in that zone without a new engine parameter. Recipients come from `Property` at publish time, the console count from `OrgHealth`. No migration strips the old key: `knownPermissions` drops it and the seed rewrites system roles.
+
+**Real bugs found.** None in the product. The new spec's first run read the owner's notifications globally and saw a second rule's notice, published by a parallel WY test. That is correct behaviour, so the read was scoped to the rule's own idempotency key.
+
+**What it left behind.**
+- Per-org stricter policy stays R-298.
+- A city-level rule notifies every org with a property anywhere in the state, not only in that city: `Property` has no jurisdiction column to match against.
+- An org with more owners than usual gets one notice per owner. `rental_test` holds about 1,700 org #0 owner grants, so a publish for TX there would be slow. Tests publish only WY, with no active org #0 WY property.
+
+**Gate.**
+- `npm run ci:local` (db:ci from scratch with no drift, lint 0 errors with the same 16 warnings, typecheck, ship-deps clean, build): `npm test` 3,721 passed, 4 skipped, 0 failed (275 files). Net zero against R-304b: one new template test, and one org page fewer in the per-route guard scan.
+- e2e against the production build, both projects, `jurisdiction` + every `platform-*` spec: 70 passed of 70 listed, 0 flaky. That was after the scoping fix; the run before it was killed on its first `✘`.

@@ -27,7 +27,7 @@ export interface NavItem {
   permission: Permission
   /// A destination that is portfolio-wide by nature and guards itself with a
   /// RESOURCE-LESS `requirePermission` - which `permissions.ts` calls "the
-  /// correct guard, not a bug" for `jurisdiction.write`, because a
+  /// correct guard, not a bug" for `jurisdiction.read`, because a
   /// JurisdictionRule applies by state and has no scoped resource to check
   /// against. A scoped actor cannot pass that guard, so showing them the link
   /// would only dead-end. These three are checked with `can()` and no

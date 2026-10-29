@@ -6,7 +6,7 @@ import { axeScan } from './fixtures.ts'
 
 // Vendor records themselves (MAINT-11, R-079) - no admin surface for
 // "manage vendor records" existed before this item. `vendor.write` is
-// portfolio-wide (no resource passed), the same posture `jurisdiction.write`
+// portfolio-wide (no resource passed), the same posture `jurisdiction.read`
 // already takes for an entity with no property column of its own - so this
 // needs an owner, not a property-scoped manager.
 

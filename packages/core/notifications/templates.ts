@@ -2473,7 +2473,42 @@ export const staffSetupLinkTemplate: NotificationTemplate<AuthLinkContext> = {
   }),
 }
 
+/// Context for `jurisdiction.rule_published` (R-305, PRD 11 §4.11).
+export interface JurisdictionRulePublishedContext {
+  state: string
+  /// Null for a statewide rule.
+  jurisdiction: string | null
+  version: number
+  effectiveOn: BusinessDate
+}
+
+/**
+ * The platform published a rule version (D-355) for a state an org has a
+ * property in. Sent to that org's owners, because a statute version is not
+ * the org's to write any more and the first they would otherwise hear of it
+ * is a late fee computed differently.
+ */
+export const jurisdictionRulePublishedTemplate: NotificationTemplate<JurisdictionRulePublishedContext> = {
+  key: 'jurisdiction.rule_published',
+  category: 'compliance_due',
+  channels: ['EMAIL', 'PORTAL'],
+  render: (context) => {
+    const where = context.jurisdiction ? `${context.state} (${context.jurisdiction})` : context.state
+    const headline = `A new ${where} rule takes effect on ${friendlyBusinessDate(context.effectiveOn)}`
+    return {
+      subject: headline,
+      body: [
+        headline + '.',
+        '',
+        `Version ${context.version} of the jurisdiction rules for ${where} was published. Grace periods, fee caps, deposit deadlines and notice periods for your properties there follow it from that day. The full version is on your Jurisdiction rules page.`,
+      ].join('\n'),
+    }
+  },
+}
+
 export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = {
+  [jurisdictionRulePublishedTemplate.key]:
+    jurisdictionRulePublishedTemplate as unknown as NotificationTemplate<never>,
   [tenantMagicLinkTemplate.key]:
     tenantMagicLinkTemplate as unknown as NotificationTemplate<never>,
   [guarantorMagicLinkTemplate.key]:

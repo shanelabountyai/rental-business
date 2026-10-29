@@ -144,9 +144,6 @@ describe('every route is guarded (ROLE-01)', () => {
 const RESOURCE_LESS_GUARDS: Record<string, string> = {
   'app/(admin)/jurisdiction/page.tsx':
     'A JurisdictionRule applies by STATE, not by property (D-4) - there is no scoped resource to check it against. propertyResource() cannot be constructed for a thing no property owns.',
-  'app/(admin)/jurisdiction/new/page.tsx': 'Same as the jurisdiction list above.',
-  'lib/jurisdiction/actions.ts':
-    'Same as the jurisdiction pages. Also a legal-release gate: a rule change alters the law this product believes in for every property in a state at once.',
   'app/(admin)/screening-criteria/page.tsx':
     'ScreeningCriteria applies to every applicant across the whole portfolio at once (the model\'s own doc comment) - owner policy, not law, but the same "no scoped resource" shape jurisdiction/page.tsx is exempted for.',
   'app/(admin)/screening-criteria/new/page.tsx': 'Same as the screening-criteria list above.',

@@ -3,22 +3,28 @@ import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling
 import { SelectField } from '@/components/form/field.tsx'
 import { RuleForm } from '@/components/jurisdiction/rule-form.tsx'
 import { PageHeader } from '@/components/page-header.tsx'
-import { requirePermission } from '@/lib/auth/guard.ts'
-import { createRuleVersion } from '@/lib/jurisdiction/actions.ts'
+import { createRuleVersion } from '@/lib/platform/jurisdiction-actions.ts'
 import { currentRuleVersion, listCurrentRules } from '@/lib/jurisdiction/queries.ts'
+import { requirePlatform } from '@/lib/platform/guard.ts'
 
 export const metadata = { title: 'New jurisdiction rule' }
 
-// No resource: per R-004 this only clears for a portfolio-wide
-// jurisdiction.write grant, correct here since a JurisdictionRule applies by
-// state, not by property or entity - see permissions.ts's own comment.
+// The platform publishes every org's statute (R-305, D-355). Asks for a fresh
+// code on LOAD, not only on the press: the action's step-up would otherwise
+// send the admin away from forty filled-in fields, and the press is honoured
+// for ten minutes after the code.
 export default async function NewJurisdictionRulePage({
   searchParams,
 }: {
   searchParams: Promise<{ state?: string; jurisdiction?: string; cloneFrom?: string }>
 }) {
-  await requirePermission('jurisdiction.write')
   const { state, jurisdiction, cloneFrom } = await searchParams
+  const query = new URLSearchParams({
+    ...(state && { state }),
+    ...(jurisdiction && { jurisdiction }),
+    ...(cloneFrom && { cloneFrom }),
+  })
+  await requirePlatform({ permission: 'jurisdiction.publish', next: `/platform/jurisdiction/new?${query}` })
 
   // Prefills the whole form from whatever is currently in force for this
   // (state, jurisdiction) pair, so adding a version means changing the one
@@ -49,7 +55,10 @@ export default async function NewJurisdictionRulePage({
   const source = previous ?? cloneSource
 
   return (
-    <div className="flex flex-col gap-6">
+    <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-6 p-6">
+      <a href="/platform/jurisdiction" className="text-sm underline underline-offset-4">
+        Back to jurisdiction rules
+      </a>
       <PageHeader title={previous
           ? 'New rule version'
           : cloneSource
@@ -176,6 +185,6 @@ export default async function NewJurisdictionRulePage({
           // reviewer would make an un-reviewed change look signed off.
         }}
       />
-    </div>
+    </main>
   )
 }

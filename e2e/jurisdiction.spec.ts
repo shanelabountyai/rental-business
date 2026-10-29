@@ -3,8 +3,11 @@ import { hashPassword } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
 import { axeScan } from './fixtures.ts'
+import { CONSOLE, createAdmin, ensureKeeperOwner, retireAdmins, signIn as consoleSignIn } from './platform-fixtures.ts'
 
-// The jurisdiction-rules engine (R-010, D-4). Portfolio-wide, unlike every
+// The jurisdiction-rules engine (R-010, D-4). PUBLISHED BY THE PLATFORM since
+// R-305 (D-355): every write below is a platform owner on the console, and an
+// org sees `/jurisdiction` read-only. Portfolio-wide, unlike every
 // other admin section built so far - a JurisdictionRule applies by state,
 // not by property or entity, so there is no property/entity scoping to test
 // here. What matters instead:
@@ -26,6 +29,16 @@ const staffIds: string[] = []
 const propertyIds: string[] = []
 const entityIds: string[] = []
 const ruleIds: string[] = []
+const admins: string[] = []
+const orgIds: string[] = []
+
+/// A platform owner, signed in on the console. A fresh sign-in proved a code,
+/// so `jurisdiction.publish`'s step-up is already satisfied.
+async function signInPublisher(page: import('@playwright/test').Page) {
+  await ensureKeeperOwner()
+  const admin = await createAdmin(true, admins, ['platform_owner'])
+  await consoleSignIn(page, admin)
+}
 
 async function createStaff(
   roleKey: string,
@@ -120,14 +133,24 @@ test.afterAll(async () => {
   // not PII, and the same "leave what the trigger makes undeletable" rule
   // R-009 and R-008 both hit applies here with no cleanup step available.
 
-  const auditedProperties = new Set(
-    (
+  await retireAdmins(admins)
+  await prisma.organization.updateMany({ where: { id: { in: orgIds } }, data: { notificationsEnabled: false } })
+  // A property a Notification names cannot be deleted either: the FK's SET
+  // NULL is an UPDATE the append-only trigger refuses.
+  const auditedProperties = new Set([
+    ...(
       await prisma.auditLog.findMany({
         where: { propertyId: { in: propertyIds } },
         select: { propertyId: true },
       })
     ).map((row) => row.propertyId!),
-  )
+    ...(
+      await prisma.notification.findMany({
+        where: { propertyId: { in: propertyIds } },
+        select: { propertyId: true },
+      })
+    ).map((row) => row.propertyId!),
+  ])
   // Before the properties: StaffAssignment's scope FKs are RESTRICT (R-285b).
   await prisma.staffAssignment.deleteMany({ where: { staffUserId: { in: staffIds } } })
   await prisma.property.deleteMany({
@@ -179,23 +202,67 @@ async function signIn(page: import('@playwright/test').Page, email: string) {
 }
 
 test.describe('viewing and creating jurisdiction rules', () => {
-  test('an owner sees the seeded Texas rule and an unreviewed badge', async ({
-    page,
-  }) => {
+  // R-305 (D-355): an org's owner reads the library and can no longer write
+  // it - the form is gone from the org app, not merely hidden.
+  test('an org owner sees the seeded Texas rule, read-only', async ({ page }) => {
     const staff = await createStaff('owner')
     await signIn(page, staff.email)
 
     await page.goto('/jurisdiction')
     await expect(page.getByText('TX — Statewide')).toBeVisible()
-    await expect(page.getByRole('link', { name: 'New configuration' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'New configuration' })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: /new version/i })).toHaveCount(0)
+    expect((await page.goto('/jurisdiction/new'))?.status()).toBe(404)
+  })
+
+  test('a platform admin without jurisdiction.publish can read the library and not publish', async ({ page }) => {
+    await ensureKeeperOwner()
+    const support = await createAdmin(true, admins, ['platform_support'])
+    await consoleSignIn(page, support)
+
+    await page.goto(`${CONSOLE}/platform/jurisdiction`)
+    await expect(page.getByText('TX — Statewide')).toBeVisible()
+    await expect(page.getByRole('link', { name: 'New configuration' })).toHaveCount(0)
+    await page.goto(`${CONSOLE}/platform/jurisdiction/new`)
+    await expect(page).toHaveURL(/\/platform\/no-access/)
   })
 
   test('creates a new jurisdiction configuration end to end', async ({ page }) => {
     const jurisdiction = `Test County ${randomUUID().slice(0, 8)}`
-    const staff = await createStaff('owner')
-    await signIn(page, staff.email)
+    // An org with a property in the state, whose owner is told (PRD 11
+    // §4.11). Its own org, so the notification is unambiguously this one;
+    // notifications off, so the row is recorded and nothing is sent.
+    const tag = randomUUID().slice(0, 8)
+    const org = await prisma.organization.create({
+      data: { name: `Juris ${tag}`, slug: `e2e-juris-${tag}`, notificationsEnabled: false },
+    })
+    orgIds.push(org.id)
+    const entity = await prisma.legalEntity.create({ data: { orgId: org.id, name: `Juris LLC ${tag}`, type: 'LLC' } })
+    entityIds.push(entity.id)
+    const property = await prisma.property.create({
+      data: {
+        orgId: org.id,
+        legalEntityId: entity.id,
+        name: `Juris House ${tag}`,
+        addressLine1: '1 Test St',
+        city: 'Cheyenne',
+        state: STATE,
+        postalCode: '82001',
+        timezone: 'America/Denver',
+        propertyType: 'SINGLE_FAMILY',
+      },
+    })
+    propertyIds.push(property.id)
+    const owner = await prisma.staffUser.create({
+      data: { email: `juris-owner-${tag}@example.test`, name: 'Juris Owner', orgMemberships: { create: { orgId: org.id } } },
+    })
+    staffIds.push(owner.id)
+    const ownerRole = await prisma.role.findUniqueOrThrow({ where: { key: 'owner' } })
+    await prisma.staffAssignment.create({ data: { orgId: org.id, staffUserId: owner.id, roleId: ownerRole.id } })
 
-    await page.goto('/jurisdiction/new')
+    await signInPublisher(page)
+
+    await page.goto(`${CONSOLE}/platform/jurisdiction/new`)
     await page.getByLabel('State').selectOption(STATE)
     await page.getByLabel('City or county (optional)').fill(jurisdiction)
     await page.getByLabel('Effective from').fill('2026-01-01')
@@ -208,7 +275,7 @@ test.describe('viewing and creating jurisdiction rules', () => {
     await page.getByLabel('Reviewed by').fill('Counsel Q. Test')
     await page.getByRole('button', { name: 'Create configuration' }).click()
 
-    await page.waitForURL(/\/jurisdiction\?versioned=/)
+    await page.waitForURL(/\/platform\/jurisdiction\?versioned=/)
     await expect(page.getByText(`${STATE} — ${jurisdiction}`)).toBeVisible()
 
     const created = await prisma.jurisdictionRule.findFirst({
@@ -222,6 +289,18 @@ test.describe('viewing and creating jurisdiction rules', () => {
       where: { entityType: 'JurisdictionRule', entityId: created!.id },
     })
     expect(entry?.action).toBe('jurisdiction_rule.versioned')
+    // Org-less and the platform's: a statute version belongs to no org.
+    expect(entry?.orgId).toBeNull()
+    expect(entry?.actorType).toBe('PLATFORM')
+
+    // Scoped to THIS rule: every test here publishes a WY version, and each
+    // one correctly tells this owner too while the property exists.
+    const told = await prisma.notification.findMany({
+      where: { recipientId: owner.id, idempotencyKey: { startsWith: `jurisdiction-rule-published:${created!.id}:` } },
+    })
+    expect(told.map((n) => n.channel).sort()).toEqual(['EMAIL', 'PORTAL'])
+    expect(told[0]!.orgId).toBe(org.id)
+    expect(told[0]!.subject).toBe(`A new ${STATE} (${jurisdiction}) rule takes effect on 1 Jan 2026`)
   })
 
   // R-162 (review finding 11): the founding version of a (state,
@@ -232,10 +311,9 @@ test.describe('viewing and creating jurisdiction rules', () => {
     page,
   }) => {
     const jurisdiction = `Test County ${randomUUID().slice(0, 8)}`
-    const staff = await createStaff('owner')
-    await signIn(page, staff.email)
+    await signInPublisher(page)
 
-    await page.goto('/jurisdiction/new')
+    await page.goto(`${CONSOLE}/platform/jurisdiction/new`)
     await page.getByLabel('State').selectOption(STATE)
     await page.getByLabel('City or county (optional)').fill(jurisdiction)
     await page.getByLabel('Effective from').fill('2026-01-01')
@@ -258,11 +336,11 @@ test.describe('viewing and creating jurisdiction rules', () => {
     // badge the list page already shows for exactly this case.
     const previous = await seedRule(jurisdiction)
     await page.goto(
-      `/jurisdiction/new?state=${STATE}&jurisdiction=${encodeURIComponent(jurisdiction)}`,
+      `${CONSOLE}/platform/jurisdiction/new?state=${STATE}&jurisdiction=${encodeURIComponent(jurisdiction)}`,
     )
     await page.getByLabel('Effective from').fill('2027-01-01')
     await page.getByRole('button', { name: 'Add version' }).click()
-    await page.waitForURL(/\/jurisdiction\?versioned=/)
+    await page.waitForURL(/\/platform\/jurisdiction\?versioned=/)
     const v2 = await prisma.jurisdictionRule.findFirstOrThrow({
       where: { state: STATE, jurisdiction, version: 2 },
     })
@@ -288,10 +366,9 @@ test.describe('viewing and creating jurisdiction rules', () => {
       where: { state: 'TX', jurisdiction: null, effectiveTo: null },
     })
     const targetJurisdiction = `Test County ${randomUUID().slice(0, 8)}`
-    const staff = await createStaff('owner')
-    await signIn(page, staff.email)
+    await signInPublisher(page)
 
-    await page.goto('/jurisdiction/new?cloneFrom=TX')
+    await page.goto(`${CONSOLE}/platform/jurisdiction/new?cloneFrom=TX`)
     await expect(page.getByLabel('Clone from')).toHaveValue('TX')
     await expect(page.getByLabel('Grace days')).toHaveValue(String(source.graceDays))
     await expect(page.getByLabel('Citation')).toHaveValue('')
@@ -304,7 +381,7 @@ test.describe('viewing and creating jurisdiction rules', () => {
     await page.getByLabel('Reviewed by').fill('Counsel R. Clone')
     await page.getByRole('button', { name: 'Create configuration' }).click()
 
-    await page.waitForURL(/\/jurisdiction\?versioned=/)
+    await page.waitForURL(/\/platform\/jurisdiction\?versioned=/)
     const cloned = await prisma.jurisdictionRule.findFirstOrThrow({
       where: { state: STATE, jurisdiction: targetJurisdiction },
     })
@@ -316,18 +393,17 @@ test.describe('viewing and creating jurisdiction rules', () => {
   test('adding a version closes out the one it replaces', async ({ page }) => {
     const jurisdiction = `Test County ${randomUUID().slice(0, 8)}`
     const previous = await seedRule(jurisdiction)
-    const staff = await createStaff('owner')
-    await signIn(page, staff.email)
+    await signInPublisher(page)
 
     await page.goto(
-      `/jurisdiction/new?state=${STATE}&jurisdiction=${encodeURIComponent(jurisdiction)}`,
+      `${CONSOLE}/platform/jurisdiction/new?state=${STATE}&jurisdiction=${encodeURIComponent(jurisdiction)}`,
     )
     // Prefilled from the version it supersedes.
     await expect(page.getByLabel('Grace days')).toHaveValue('2')
 
     await page.getByLabel('Effective from').fill('2027-01-01')
     await page.getByRole('button', { name: 'Add version' }).click()
-    await page.waitForURL(/\/jurisdiction\?versioned=/)
+    await page.waitForURL(/\/platform\/jurisdiction\?versioned=/)
 
     const rows = await prisma.jurisdictionRule.findMany({
       where: { state: STATE, jurisdiction },
@@ -409,16 +485,15 @@ test.describe('viewing and creating jurisdiction rules', () => {
     })
     ruleIds.push(v1.id)
 
-    const staff = await createStaff('owner')
-    await signIn(page, staff.email)
+    await signInPublisher(page)
     await page.goto(
-      `/jurisdiction/new?state=${STATE}&jurisdiction=${encodeURIComponent(jurisdiction)}`,
+      `${CONSOLE}/platform/jurisdiction/new?state=${STATE}&jurisdiction=${encodeURIComponent(jurisdiction)}`,
     )
     await expect(page.getByLabel('Grace days')).toHaveValue('2')
     await page.getByLabel('Effective from').fill('2027-01-01')
     await page.getByLabel('Grace days').fill('9')
     await page.getByRole('button', { name: 'Add version' }).click()
-    await page.waitForURL(/\/jurisdiction\?versioned=/)
+    await page.waitForURL(/\/platform\/jurisdiction\?versioned=/)
 
     const v2 = await prisma.jurisdictionRule.findFirstOrThrow({
       where: { state: STATE, jurisdiction, version: 2 },
@@ -446,10 +521,9 @@ test.describe('viewing and creating jurisdiction rules', () => {
   })
 
   test('rejects a late fee type with no matching amount', async ({ page }) => {
-    const staff = await createStaff('owner')
-    await signIn(page, staff.email)
+    await signInPublisher(page)
 
-    await page.goto('/jurisdiction/new')
+    await page.goto(`${CONSOLE}/platform/jurisdiction/new`)
     await page.getByLabel('State').selectOption(STATE)
     await page.getByLabel('Effective from').fill('2026-01-01')
     await page.getByLabel('Grace days').fill('3')
@@ -457,7 +531,7 @@ test.describe('viewing and creating jurisdiction rules', () => {
     await page.getByRole('button', { name: 'Create configuration' }).click()
 
     await expect(page.getByText('Enter the flat late fee in cents.')).toBeVisible()
-    await expect(page).toHaveURL('/jurisdiction/new')
+    await expect(page).toHaveURL(`${CONSOLE}/platform/jurisdiction/new`)
   })
 })
 
@@ -470,8 +544,7 @@ test.describe('portfolio-wide only', () => {
     await expect(page).not.toHaveURL(/\/no-access/)
     await expect(page.getByRole('link', { name: 'New configuration' })).toHaveCount(0)
 
-    await page.goto('/jurisdiction/new')
-    await expect(page).toHaveURL(/\/no-access/)
+    expect((await page.goto('/jurisdiction/new'))?.status()).toBe(404)
   })
 
   test('a property-scoped manager is refused entirely, despite holding jurisdiction.read', async ({
@@ -500,7 +573,7 @@ test.describe('portfolio-wide only', () => {
 })
 
 test.describe('accessibility', () => {
-  test('the list and new-configuration pages have no detectable violations', async ({
+  test('the org list and the console list and form have no detectable violations', async ({
     page,
   }) => {
     const staff = await createStaff('owner')
@@ -510,7 +583,12 @@ test.describe('accessibility', () => {
     let results = await axeScan(page)
     expect(results.violations).toEqual([])
 
-    await page.goto('/jurisdiction/new')
+    await signInPublisher(page)
+    await page.goto(`${CONSOLE}/platform/jurisdiction`)
+    results = await axeScan(page)
+    expect(results.violations).toEqual([])
+
+    await page.goto(`${CONSOLE}/platform/jurisdiction/new`)
     results = await axeScan(page)
     expect(results.violations).toEqual([])
   })

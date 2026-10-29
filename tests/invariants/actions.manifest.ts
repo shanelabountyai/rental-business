@@ -75,6 +75,8 @@ export const manifest: Record<string, Entry> = {
   // R-304b: the console names any org by its slug, by design.
   'lib/platform/org-actions.ts#configureOrganization': { 'form.slug': 'value' },
   'lib/platform/org-actions.ts#changeOrgSlug': { 'form.slug': 'value' },
+  // R-305 (D-355): a statute version is org-less, so nothing names an org.
+  'lib/platform/jurisdiction-actions.ts#createRuleVersion': {},
   // lib/auth/invite-actions.ts (R-304a)
   'lib/auth/invite-actions.ts#acceptOrgInvite': { 'form.token': 'token', public: 'gated by the invite token in the form, on its org host only' },
   // lib/billing/actions.ts
@@ -193,8 +195,6 @@ export const manifest: Record<string, Entry> = {
   'lib/insurance/actions.ts#closeClaim': { 'form.claimId': 'insuranceClaim' },
   // lib/jobs/actions.ts
   'lib/jobs/actions.ts#rerunJobAction': { 'form.jobRunId': 'jobRun' },
-  // lib/jurisdiction/actions.ts
-  'lib/jurisdiction/actions.ts#createRuleVersion': {  },
   // lib/leases/access-code-actions.ts
   'lib/leases/access-code-actions.ts#issueAccessCodeToTenant': { leaseId: 'lease', accessCodeId: 'accessCode' },
   'lib/leases/access-code-actions.ts#issueTenantLockCode': { leaseId: 'lease', tenantId: 'tenant' },
