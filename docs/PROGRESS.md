@@ -15147,7 +15147,7 @@ Tests: `lib/platform/settings.test.ts` (no secret value in the output, the kill 
 - e2e against the production build, both projects, `jurisdiction` + every `platform-*` spec: 70 passed of 70 listed, 0 flaky. That was after the scoping fix; the run before it was killed on its first `✘`.
 
 
-## R-306 — per-org notification kill switch in the console (`SHA_PENDING`)
+## R-306 — per-org notification kill switch in the console (`c55e574`)
 
 **What it built.** PRD 11 §4.6, D-347.
 - A "Notifications" panel on `/platform/orgs/[slug]` (shown to `org.configure`): one form whose direction is the org's current state, a required reason, and "Switch notifications off/on". `switchOrgNotifications` in `lib/platform/org-actions.ts` is step-up, flips `Organization.notificationsEnabled` with an `updateMany` conditional on the current value, and audits `org.notifications_switched` in the org with `after.reason`.
