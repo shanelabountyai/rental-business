@@ -115,6 +115,8 @@ export const AUDIT_ACTIONS = [
   /// R-304b (PRD 11 §4.6): name/colours edited, and the slug (so the host) changed.
   'org.configured',
   'org.slug_changed',
+  /// R-306 (D-347): the org's notification kill switch flipped; `after.reason` says why.
+  'org.notifications_switched',
   'platform_role.revoked',
   /// R-302b: the other platform owners were emailed about a lockout (§2.5);
   /// `after.sent` is each recipient and outcome.

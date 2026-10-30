@@ -15145,3 +15145,23 @@ Tests: `lib/platform/settings.test.ts` (no secret value in the output, the kill 
 **Gate.**
 - `npm run ci:local` (db:ci from scratch with no drift, lint 0 errors with the same 16 warnings, typecheck, ship-deps clean, build): `npm test` 3,721 passed, 4 skipped, 0 failed (275 files). Net zero against R-304b: one new template test, and one org page fewer in the per-route guard scan.
 - e2e against the production build, both projects, `jurisdiction` + every `platform-*` spec: 70 passed of 70 listed, 0 flaky. That was after the scoping fix; the run before it was killed on its first `✘`.
+
+
+## R-306 — per-org notification kill switch in the console (`SHA_PENDING`)
+
+**What it built.** PRD 11 §4.6, D-347.
+- A "Notifications" panel on `/platform/orgs/[slug]` (shown to `org.configure`): one form whose direction is the org's current state, a required reason, and "Switch notifications off/on". `switchOrgNotifications` in `lib/platform/org-actions.ts` is step-up, flips `Organization.notificationsEnabled` with an `updateMany` conditional on the current value, and audits `org.notifications_switched` in the org with `after.reason`.
+- `org.notifications_switched` added to `packages/core/audit/events.ts`; the action is in `platform.manifest.ts` (step-up, `org.configure`) and `actions.manifest.ts`.
+- `e2e/platform-org-configure.spec.ts`: off with a reason, on with a reason, both audit rows asserted in order with their reasons.
+
+**What it decided (D-373).** A reason in both directions, because switching on releases a held queue. The copy separates the two things D-347 actually does: rows already queued are held and go out on switch-on, while a notification created while off is recorded `SUPPRESSED`/`kill_switch` and never goes. The switch-on copy points at Health's queued count rather than querying the org (D-354). A press against a stale page answers "already off/on" and audits nothing.
+
+**Real bugs found.** One in the docs, not the code: D-359 says break-glass's owner notice is "held like every other send", but under D-347 a notice created while the org is off is suppressed, not held. That is recorded as an open point for R-295 in D-373, not resolved here.
+
+**What it left behind.**
+- Clearing a runaway queue before switching on is still SQL (D-347's own note). No console action for it, because nothing asks for one yet.
+- Owners are not notified when the platform switches their notifications. PRD 11 §4.6 asks for it only on fee and freeze, and while off the notice would be suppressed anyway.
+
+**Gate.**
+- lint 0 errors (same 16 warnings), typecheck clean. `npm test`: 3,721 passed, 4 skipped, 0 failed (275 files). The first run was killed on PLAT-02's `×` for the missing manifest entries.
+- e2e against the production build, both projects, `platform-org-configure`: 4 passed of 4. The full sweep is CI's.

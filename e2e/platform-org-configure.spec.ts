@@ -57,3 +57,37 @@ test('a platform owner edits the brand and moves the slug', async ({ page }, tes
   expect((await prisma.organization.findUniqueOrThrow({ where: { id: org.id } })).slug).toBe(next)
   expect(await prisma.auditLog.count({ where: { orgId: org.id, action: 'org.slug_changed' } })).toBe(1)
 })
+
+test('a platform owner switches an org’s notifications off and on, with a reason', async ({ page }, testInfo) => {
+  await ensureKeeperOwner()
+  const admin = await createAdmin(true, admins, ['platform_owner'])
+  const tag = `${testInfo.project.name.slice(0, 1)}${randomUUID().slice(0, 8)}`
+  const slug = `e2e-ks-${tag}`
+  const org = await prisma.organization.create({ data: { name: `Ks ${tag}`, slug } })
+  orgs.push(org.id)
+  const enabled = async () => (await prisma.organization.findUniqueOrThrow({ where: { id: org.id } })).notificationsEnabled
+
+  await signIn(page, admin)
+  await page.goto(`${CONSOLE}/platform/orgs/${slug}`)
+
+  await page.getByLabel('Reason for switching notifications off').fill('Runaway reminder loop')
+  await page.getByRole('button', { name: 'Switch notifications off' }).click()
+  await expect(page.getByText('Notifications are switched off. Nothing is sent')).toBeVisible()
+  await expect.poll(enabled).toBe(false)
+
+  // The page re-renders in the other direction; the reason is asked again.
+  await page.getByLabel('Reason for switching notifications on').fill('Loop fixed')
+  await page.getByRole('button', { name: 'Switch notifications on' }).click()
+  await expect(page.getByText('Notifications are on. Anything held')).toBeVisible()
+  await expect.poll(enabled).toBe(true)
+
+  const audits = await prisma.auditLog.findMany({
+    where: { orgId: org.id, action: 'org.notifications_switched' },
+    orderBy: { occurredAt: 'asc' },
+    select: { after: true },
+  })
+  expect(audits.map((a) => a.after)).toEqual([
+    { notificationsEnabled: false, reason: 'Runaway reminder loop' },
+    { notificationsEnabled: true, reason: 'Loop fixed' },
+  ])
+})

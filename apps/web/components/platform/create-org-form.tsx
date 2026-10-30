@@ -207,3 +207,56 @@ export function OrgSlugPanel({ action, slug, canConfigure }: { action: OrgAction
     </section>
   )
 }
+
+/**
+ * "Notifications off / on" (PRD 11 §4.6, R-306). One form whose direction is
+ * the org's current state, so a stale page cannot send the opposite of what
+ * its button said: the action refuses a switch to the value already set.
+ */
+export function OrgNotificationsPanel({
+  action,
+  slug,
+  enabled,
+  canConfigure,
+}: {
+  action: OrgAction
+  slug: string
+  enabled: boolean
+  canConfigure: boolean
+}) {
+  const [state, formAction] = useActionState<OrgInviteFormState, FormData>(action, {})
+  const errors = state.fieldErrors ?? {}
+  if (!canConfigure) return null
+  return (
+    <section aria-labelledby="notifications-heading" className="flex flex-col gap-3 rounded-md border p-4 text-sm">
+      <h2 id="notifications-heading" className="text-lg font-semibold">
+        Notifications
+      </h2>
+      {enabled ? (
+        <p>
+          On. Switching them off stops every email and text for this organisation at once. Anything already queued is
+          held and goes out when they are switched back on; anything created while they are off is recorded as not sent
+          and never goes. It asks for a fresh code.
+        </p>
+      ) : (
+        <p>
+          Switched off. Switching them on sends anything held in the queue on the next drain; the queued count is under
+          Health below. If the queue is what went wrong, have it cleared before switching on. It asks for a fresh code.
+        </p>
+      )}
+      <FormAlerts state={state} />
+      <form action={formAction} className="flex flex-col gap-4">
+        <input type="hidden" name="slug" value={slug} />
+        <input type="hidden" name="intent" value={enabled ? 'off' : 'on'} />
+        <TextField
+          label={enabled ? 'Reason for switching notifications off' : 'Reason for switching notifications on'}
+          name="reason"
+          required
+          error={errors.reason}
+          hint="Recorded in the organisation's audit log."
+        />
+        <SubmitButton label={enabled ? 'Switch notifications off' : 'Switch notifications on'} />
+      </form>
+    </section>
+  )
+}

@@ -1,9 +1,9 @@
 import { friendlyTimestamp } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { notFound } from 'next/navigation'
-import { OrgConfigurePanel, OrgInvitesPanel, OrgSlugPanel } from '@/components/platform/create-org-form.tsx'
+import { OrgConfigurePanel, OrgInvitesPanel, OrgNotificationsPanel, OrgSlugPanel } from '@/components/platform/create-org-form.tsx'
 import { platformDecision, requirePlatform } from '@/lib/platform/guard.ts'
-import { changeOrgSlug, configureOrganization, manageOrgInvite } from '@/lib/platform/org-actions.ts'
+import { changeOrgSlug, configureOrganization, manageOrgInvite, switchOrgNotifications } from '@/lib/platform/org-actions.ts'
 import { INTEGRATION_SELECT, orgOwners, providerName } from '@/lib/platform/orgs.ts'
 import { OrgHealthPanel } from '@/components/platform/org-health.tsx'
 import Link from 'next/link'
@@ -15,7 +15,7 @@ export const metadata = { title: 'Organisation' }
 // and a stated line that nothing inside it shows without a grant (D-320).
 // Read side only. Not here yet, each with the row that builds it: status and
 // its history (R-300), the checklist (R-291), grants and "Request access"
-// (R-295), the fee (R-296), the kill-switch toggle (R-306). Pending invites
+// (R-295), the fee (R-296). Pending invites
 // with "Resend" and "Revoke" are R-304a's. "Re-run" is on /platform/jobs (R-303b, PRD 11 §4.10).
 export default async function PlatformOrgPage({
   params,
@@ -111,6 +111,13 @@ export default async function PlatformOrgPage({
       />
 
       <OrgSlugPanel action={changeOrgSlug} slug={org.slug} canConfigure={canConfigure} />
+
+      <OrgNotificationsPanel
+        action={switchOrgNotifications}
+        slug={org.slug}
+        enabled={org.notificationsEnabled}
+        canConfigure={canConfigure}
+      />
 
       <OrgInvitesPanel
         action={manageOrgInvite}

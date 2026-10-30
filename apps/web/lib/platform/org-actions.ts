@@ -298,3 +298,57 @@ export async function changeOrgSlug(
   revalidatePath('/platform/orgs')
   redirect(`/platform/orgs/${encodeURIComponent(newSlug)}?slugChanged=${encodeURIComponent(oldSlug)}`)
 }
+
+/**
+ * "Notifications off / on" (PRD 11 §4.6, R-306, D-347). Switched off, rows
+ * already queued are HELD and go out when it is switched back on; a send made
+ * while it is off is recorded as not sent (`kill_switch`) and never goes. The
+ * panel says both before the press. A fresh code and a
+ * reason, both directions. The update is conditional on the current value, so
+ * two admins pressing at once audit one switch, not two.
+ */
+export async function switchOrgNotifications(
+  _previous: OrgInviteFormState,
+  formData: FormData,
+): Promise<OrgInviteFormState> {
+  const slug = str(formData, 'slug')
+  const actor = await requirePlatform({
+    permission: 'org.configure',
+    stepUp: true,
+    next: `/platform/orgs/${encodeURIComponent(slug)}`,
+  })
+  const org = await prisma.organization.findUnique({ where: { slug }, select: { id: true } })
+  if (!org) return { error: 'That organisation no longer exists.' }
+
+  const intent = str(formData, 'intent')
+  if (intent !== 'on' && intent !== 'off') return { error: 'That action is not recognised.' }
+  const enabled = intent === 'on'
+  const reason = str(formData, 'reason')
+  if (!reason) return { error: 'A reason is required.', fieldErrors: { reason: 'Say why.' } }
+
+  const switched = await prisma.$transaction(async (tx) => {
+    const { count } = await tx.organization.updateMany({
+      where: { id: org.id, notificationsEnabled: !enabled },
+      data: { notificationsEnabled: enabled },
+    })
+    if (count === 0) return false
+    await recordAudit(tx, {
+      actor: { type: 'PLATFORM', ref: actor.id, ipAddress: await clientIp() },
+      action: 'org.notifications_switched',
+      entityType: 'Organization',
+      entityId: org.id,
+      orgId: org.id,
+      before: { notificationsEnabled: !enabled },
+      after: { notificationsEnabled: enabled, reason },
+    })
+    return true
+  })
+  if (!switched) return { notice: `Notifications were already ${enabled ? 'on' : 'switched off'}.` }
+  revalidatePath(`/platform/orgs/${slug}`)
+  revalidatePath('/platform/orgs')
+  return {
+    notice: enabled
+      ? 'Notifications are on. Anything held in the queue goes out on the next drain.'
+      : 'Notifications are switched off. Nothing is sent for this organisation until they are switched back on.',
+  }
+}
