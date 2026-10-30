@@ -1,5 +1,6 @@
 import { verifyTwilioSignature } from '@rental/core/comms'
 import { handleInboundSms } from '@/lib/comms/sms-intake.ts'
+import { twilioWebhookAccount } from '@/lib/notifications/live-adapter.ts'
 import { fetchTwilioMedia, parseTwilioMedia } from '@/lib/comms/twilio-media.ts'
 
 // Twilio's inbound-SMS webhook (MAINT-01, COMM-01, R-021).
@@ -41,23 +42,28 @@ function signedUrl(request: Request): string {
 }
 
 export async function POST(request: Request) {
-  const authToken = process.env.TWILIO_AUTH_TOKEN
-  if (!authToken) {
-    // Refuses everything when unset, exactly as the cron route does with
-    // CRON_SECRET. A missing environment variable in a new deployment must
-    // not turn a ticket-creating endpoint into an open one - and 503 rather
-    // than 403 tells Twilio to retry, so messages sent during a
-    // misconfiguration window are redelivered once it is fixed rather than
-    // silently lost.
-    console.error('[sms] TWILIO_AUTH_TOKEN is not set; refusing inbound webhook')
-    return new Response('Not configured', { status: 503 })
-  }
-
   const form = await request.formData()
   const params: Record<string, string> = {}
   for (const [key, value] of form.entries()) {
     if (typeof value === 'string') params[key] = value
   }
+
+  // WHOSE NUMBER, BEFORE THE SIGNATURE (R-292a, PRD 10 §3.1). Each org's
+  // subaccount signs with its own token, and `To` - the number the renter
+  // texted - is the only thing that says which one. See twilioWebhookAccount
+  // for why choosing the token from an unverified field is safe.
+  const account = await twilioWebhookAccount(params.To ?? '')
+  if (!account) {
+    // Refuses everything with no token to check, exactly as the cron route
+    // does with CRON_SECRET. A missing credential in a new deployment (or an
+    // org whose number is not provisioned yet) must not turn a
+    // ticket-creating endpoint into an open one - and 503 rather than 403
+    // tells Twilio to retry, so messages sent during a misconfiguration
+    // window are redelivered once it is fixed rather than silently lost.
+    console.error('[sms] no Twilio token for the number this was sent to; refusing inbound webhook')
+    return new Response('Not configured', { status: 503 })
+  }
+  const { orgId, authToken } = account
 
   const valid = verifyTwilioSignature({
     authToken,
@@ -94,6 +100,7 @@ export async function POST(request: Request) {
   // the signature's alone. `AccountSid` is likewise read from the signed form
   // rather than from `TWILIO_ACCOUNT_SID`, which is not set until 10DLC
   // clears - inbound has never waited for outbound and must not start now.
+  // The token is the org's own (R-292a), so it opens only its own media.
   const { declared, media } = parseTwilioMedia(params)
   const accountSid = params.AccountSid ?? ''
   if (declared > 0 && !accountSid) {
@@ -109,6 +116,7 @@ export async function POST(request: Request) {
 
   try {
     const result = await handleInboundSms({
+      orgId,
       from,
       body,
       receivedAt: new Date(),

@@ -324,6 +324,7 @@ test.describe('unsorted messages', () => {
     const body = `Hi it is Casey from the new phone ${randomUUID().slice(0, 8)}`
     const unrouted = await prisma.unroutedMessage.create({
       data: {
+        orgId: 'org_0',
         channel: 'SMS',
         // Unique, and that matters more than it looks: this literal used to
         // be the exact number workorders.spec.ts seeds its tenant with, so a

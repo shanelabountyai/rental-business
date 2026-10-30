@@ -180,6 +180,7 @@ describe('inbound routing', () => {
     const tenant = await makeTenant({ phone, propertyId: propertyA })
 
     const result = await receiveInboundMessage({
+      orgId: 'org_0',
       channel: 'SMS',
       from: formatPhone(phone),
       body: 'The kitchen tap is dripping',
@@ -207,8 +208,37 @@ describe('inbound routing', () => {
     expect(message.delivery?.status).toBe('DELIVERED')
   })
 
+  it("never files a text to another org's number into this org's tenant (R-292a)", async () => {
+    // The same person can rent from two orgs. Their text to org X's number
+    // is org X's, so org #0's thread is not a candidate even though their
+    // number matches a live tenancy here.
+    const phone = uniquePhone()
+    await makeTenant({ phone, propertyId: propertyA })
+    const other = await prisma.organization.create({
+      data: { slug: `comms-x-${randomUUID().slice(0, 8)}`, name: 'Comms X' },
+    })
+    try {
+      const result = await receiveInboundMessage({
+        orgId: other.id,
+        channel: 'SMS',
+        from: phone,
+        body: 'The kitchen tap is dripping',
+        receivedAt: new Date(),
+      })
+      expect(result.outcome).toBe('unrouted')
+      if (result.outcome !== 'unrouted') return
+      const row = await prisma.unroutedMessage.findUniqueOrThrow({ where: { id: result.unroutedId } })
+      // In org X's queue, for org X's `everything` actors.
+      expect(row.orgId).toBe(other.id)
+      await prisma.unroutedMessage.delete({ where: { id: row.id } })
+    } finally {
+      await prisma.organization.delete({ where: { id: other.id } })
+    }
+  })
+
   it('records an unknown number instead of guessing or dropping it', async () => {
     const result = await receiveInboundMessage({
+      orgId: 'org_0',
       channel: 'SMS',
       from: '+15125559999',
       body: 'wrong number probably',
@@ -237,6 +267,7 @@ describe('inbound routing', () => {
     await makeTenant({ phone, propertyId: propertyA })
 
     const result = await receiveInboundMessage({
+      orgId: 'org_0',
       channel: 'SMS',
       from: phone,
       body: 'Which of us is this?',
@@ -258,6 +289,7 @@ describe('inbound routing', () => {
     await makeTenant({ phone, propertyId: propertyA, active: false })
 
     const result = await receiveInboundMessage({
+      orgId: 'org_0',
       channel: 'SMS',
       from: phone,
       body: 'hello?',
@@ -272,6 +304,7 @@ describe('inbound routing', () => {
 
   it('refuses an unparseable sender', async () => {
     const result = await receiveInboundMessage({
+      orgId: 'org_0',
       channel: 'SMS',
       from: 'UNKNOWN',
       body: 'from a blocked number',
@@ -291,6 +324,7 @@ describe('inbound routing', () => {
     const externalId = `SM${randomUUID()}`
 
     const first = await receiveInboundMessage({
+      orgId: 'org_0',
       channel: 'SMS',
       from: phone,
       body: 'only once please',
@@ -301,6 +335,7 @@ describe('inbound routing', () => {
     if (first.outcome === 'routed') threadIds.push(first.threadId)
 
     const second = await receiveInboundMessage({
+      orgId: 'org_0',
       channel: 'SMS',
       from: phone,
       body: 'only once please',
@@ -344,6 +379,7 @@ describe('inbound routing', () => {
     })
 
     const result = await receiveInboundMessage({
+      orgId: 'org_0',
       channel: 'SMS',
       from: phone,
       body: 'which house is this about?',
@@ -385,6 +421,7 @@ describe('inbound routing', () => {
     })
 
     const result = await receiveInboundMessage({
+      orgId: 'org_0',
       channel: 'SMS',
       from: phone,
       body: 'porch light is out',
@@ -406,6 +443,7 @@ describe('filing an unrouted message', () => {
     const received = new Date('2026-08-05T09:00:00Z')
 
     const inbound = await receiveInboundMessage({
+      orgId: 'org_0',
       channel: 'SMS',
       from: '+15125558888',
       body: 'sorted out later',
@@ -443,6 +481,7 @@ describe('filing an unrouted message', () => {
   it('files once when two people triage the same item', async () => {
     const tenant = await makeTenant({ propertyId: propertyA })
     const inbound = await receiveInboundMessage({
+      orgId: 'org_0',
       channel: 'SMS',
       from: '+15125558887',
       body: 'double filed?',

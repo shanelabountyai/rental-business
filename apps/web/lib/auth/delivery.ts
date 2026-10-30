@@ -178,5 +178,12 @@ export async function canReceiveAuthLink(
   recipient: { id: string; email?: string | null; phone?: string | null },
 ): Promise<boolean> {
   if (recipient.email?.trim()) return true
-  return canTextAuthLink(prisma, { type, ...recipient })
+  // The person's own org sends the link, and its opt-out list is the one
+  // that counts (R-292a).
+  const person =
+    type === 'TENANT'
+      ? await prisma.tenant.findUnique({ where: { id: recipient.id }, select: { orgId: true } })
+      : await prisma.guarantor.findUnique({ where: { id: recipient.id }, select: { orgId: true } })
+  if (!person) return false
+  return canTextAuthLink(prisma, { type, ...recipient }, person.orgId)
 }

@@ -93,25 +93,25 @@ describe('the opt-out store', () => {
     const phone = uniquePhone()
     phones.push(phone)
 
-    expect(await isOptedOut(phone)).toBe(false)
+    expect(await isOptedOut('org_0', phone)).toBe(false)
 
-    const first = await recordOptOut({ phone, source: 'INBOUND_KEYWORD', reason: 'STOP' })
+    const first = await recordOptOut({ orgId: 'org_0', phone, source: 'INBOUND_KEYWORD', reason: 'STOP' })
     expect(first.recorded).toBe(true)
-    expect(await isOptedOut(phone)).toBe(true)
+    expect(await isOptedOut('org_0', phone)).toBe(true)
 
     // Both sources can report the same block - the tenant texts STOP and the
     // carrier also fails the next send with 21610.
-    const second = await recordOptOut({ phone, source: 'CARRIER_CALLBACK', reason: '21610' })
+    const second = await recordOptOut({ orgId: 'org_0', phone, source: 'CARRIER_CALLBACK', reason: '21610' })
     expect(second.recorded).toBe(false)
 
     // And the date it STARTED is not moved by the second report; it is the
     // fact somebody will later be accounting for.
-    const row = await prisma.smsOptOut.findUniqueOrThrow({ where: { phone } })
+    const row = await prisma.smsOptOut.findUniqueOrThrow({ where: { orgId_phone: { orgId: 'org_0', phone } } })
     expect(row.optedOutAt.getTime()).toBeLessThanOrEqual(Date.now())
     expect(row.reason).toBe('STOP')
 
-    expect((await recordOptIn({ phone, reason: 'START' })).recorded).toBe(true)
-    expect(await isOptedOut(phone)).toBe(false)
+    expect((await recordOptIn({ orgId: 'org_0', phone, reason: 'START' })).recorded).toBe(true)
+    expect(await isOptedOut('org_0', phone)).toBe(false)
   })
 
   it('matches however the number was typed', async () => {
@@ -120,17 +120,17 @@ describe('the opt-out store', () => {
     // opt-out that does nothing at all.
     const phone = uniquePhone()
     phones.push(phone)
-    await recordOptOut({ phone, source: 'INBOUND_KEYWORD', reason: 'STOP' })
+    await recordOptOut({ orgId: 'org_0', phone, source: 'INBOUND_KEYWORD', reason: 'STOP' })
 
     const digits = phone.replace(/^\+1/, '')
     const pretty = `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
-    expect(await isOptedOut(pretty)).toBe(true)
+    expect(await isOptedOut('org_0', pretty)).toBe(true)
   })
 
   it('says a number we cannot parse is not opted out, rather than throwing', async () => {
     // A send path is the wrong place to discover a malformed phone column.
-    expect(await isOptedOut('not a phone')).toBe(false)
-    expect(await isOptedOut(null)).toBe(false)
+    expect(await isOptedOut('org_0', 'not a phone')).toBe(false)
+    expect(await isOptedOut('org_0', null)).toBe(false)
   })
 })
 
@@ -138,7 +138,7 @@ describe('sending to a blocked number', () => {
   it('records the SMS as SUPPRESSED / sms_opt_out, NOT as sent', async () => {
     const phone = uniquePhone()
     phones.push(phone)
-    await recordOptOut({ phone, source: 'INBOUND_KEYWORD', reason: 'STOP' })
+    await recordOptOut({ orgId: 'org_0', phone, source: 'INBOUND_KEYWORD', reason: 'STOP' })
 
     const key = `test:entry-blocked:${randomUUID()}`
     await notify({
@@ -182,7 +182,7 @@ describe('sending to a blocked number', () => {
     // cannot quietly remove the only channels a blocked tenant still has.
     const phone = uniquePhone()
     phones.push(phone)
-    await recordOptOut({ phone, source: 'INBOUND_KEYWORD', reason: 'STOP' })
+    await recordOptOut({ orgId: 'org_0', phone, source: 'INBOUND_KEYWORD', reason: 'STOP' })
 
     const key = `test:entry-fallback:${randomUUID()}`
     await notify({
@@ -217,7 +217,7 @@ describe('sending to a blocked number', () => {
   it('RAISES A TASK for a human to serve the notice another way (D-38)', async () => {
     const phone = uniquePhone()
     phones.push(phone)
-    await recordOptOut({ phone, source: 'INBOUND_KEYWORD', reason: 'STOP' })
+    await recordOptOut({ orgId: 'org_0', phone, source: 'INBOUND_KEYWORD', reason: 'STOP' })
 
     const key = `test:entry-task:${randomUUID()}`
     await notify({
@@ -256,7 +256,7 @@ describe('sending to a blocked number', () => {
     // getting exactly what they asked for; there is no obligation to chase.
     const phone = uniquePhone()
     phones.push(phone)
-    await recordOptOut({ phone, source: 'INBOUND_KEYWORD', reason: 'STOP' })
+    await recordOptOut({ orgId: 'org_0', phone, source: 'INBOUND_KEYWORD', reason: 'STOP' })
 
     const key = `test:unlocked:${randomUUID()}`
     await notify({
@@ -394,7 +394,7 @@ describe('a synchronous carrier rejection', () => {
   it('records the opt-out that the failed send just discovered', async () => {
     const phone = uniquePhone()
     phones.push(phone)
-    expect(await isOptedOut(phone)).toBe(false)
+    expect(await isOptedOut('org_0', phone)).toBe(false)
 
     vi.spyOn(notificationAdapter, 'send').mockRejectedValue(
       new ChannelSendError('21610', 'The message From/To pair violates a blacklist rule.'),
@@ -406,7 +406,7 @@ describe('a synchronous carrier rejection', () => {
     // so. What changed is that the NEXT one will be suppressed before it is
     // ever attempted.
     expect(outcome).toEqual({ status: 'FAILED', failureCode: '21610' })
-    expect(await isOptedOut(phone)).toBe(true)
+    expect(await isOptedOut('org_0', phone)).toBe(true)
   })
 
   it('does not opt out a number for an ordinary failure', async () => {
@@ -421,7 +421,7 @@ describe('a synchronous carrier rejection', () => {
 
     const outcome = await deliverOverChannel({ channel: 'SMS', to: phone, body: 'hello', orgId: 'org_0' })
     expect(outcome.status).toBe('FAILED')
-    expect(await isOptedOut(phone)).toBe(false)
+    expect(await isOptedOut('org_0', phone)).toBe(false)
   })
 })
 

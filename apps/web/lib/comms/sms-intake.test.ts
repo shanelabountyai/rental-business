@@ -3,6 +3,7 @@ import { hashToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { notificationAdapter } from '@/lib/notifications/provider.ts'
+import { messagingSettings } from './messaging-settings.ts'
 import { handleInboundSms } from './sms-intake.ts'
 
 // SMS-to-ticket against a real database (MAINT-01, COMM-01, R-021).
@@ -170,6 +171,7 @@ async function closeOpenTickets() {
 
 async function text(body: string, from = TENANT_PHONE) {
   const result = await handleInboundSms({
+    orgId: 'org_0',
     from,
     body,
     receivedAt: new Date(),
@@ -431,11 +433,11 @@ describe('provider redelivery', () => {
 
     await closeOpenTickets()
 
-    const first = await handleInboundSms(args)
+    const first = await handleInboundSms({ orgId: 'org_0', ...args })
     if (first.outcome === 'ticket_opened') ticketIds.push(first.ticketId)
     expect(first.outcome).toBe('ticket_opened')
 
-    const second = await handleInboundSms(args)
+    const second = await handleInboundSms({ orgId: 'org_0', ...args })
     expect(second).toEqual({ outcome: 'duplicate' })
 
     const messages = await prisma.message.count({ where: { externalId } })
@@ -457,6 +459,7 @@ describe('carrier keyword replies (R-145, D-162)', () => {
   })
 
   const strangerArgs = (body: string) => ({
+    orgId: 'org_0',
     from: `+1555${Math.floor(Math.random() * 9_000_000 + 1_000_000)}`,
     body,
     receivedAt: new Date(),
@@ -476,7 +479,10 @@ describe('carrier keyword replies (R-145, D-162)', () => {
     expect(sent.to).toBe(args.from)
     // The carrier expects the business named, what the messages are about,
     // how to stop, and the rates disclosure.
-    expect(sent.body).toContain('Rental Operations')
+    // The org whose number was texted, by its own name (R-292a), on its own
+    // sender.
+    expect(sent.orgId).toBe('org_0')
+    expect(sent.body).toContain((await messagingSettings('org_0')).businessName)
     expect(sent.body).toContain('Reply STOP to opt out')
     expect(sent.body).toContain('Message and data rates may apply')
   })
@@ -532,6 +538,7 @@ describe('a photograph texted in', () => {
     // it was taken for.
     await closeOpenTickets()
     const result = await handleInboundSms({
+      orgId: 'org_0',
       from: TENANT_PHONE,
       body: 'The water heater pan is full',
       receivedAt: new Date(),
@@ -566,6 +573,7 @@ describe('a photograph texted in', () => {
     if (opened.outcome !== 'ticket_opened') return
 
     const followUp = await handleInboundSms({
+      orgId: 'org_0',
       from: TENANT_PHONE,
       body: 'here is what it looks like',
       receivedAt: new Date(),
@@ -584,6 +592,7 @@ describe('a photograph texted in', () => {
     // the COUNT is what survives - whoever triages it needs to know to ask
     // for the photograph again.
     const result = await handleInboundSms({
+      orgId: 'org_0',
       from: UNKNOWN_PHONE,
       body: 'the gate is broken',
       receivedAt: new Date(),
@@ -606,6 +615,7 @@ describe('a photograph texted in', () => {
     // the tenant demonstrably sent something. Reporting nought here would
     // tell the triager the opposite of the truth.
     const result = await handleInboundSms({
+      orgId: 'org_0',
       from: UNKNOWN_PHONE,
       body: 'photo of the gate',
       receivedAt: new Date(),

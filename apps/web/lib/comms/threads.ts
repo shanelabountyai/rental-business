@@ -151,10 +151,13 @@ export async function candidatesForEmail(address: string, db: Db = prisma) {
   return candidates
 }
 
-export async function candidatesForPhone(e164: string, db: Db = prisma) {
+/// Within ONE org (R-292a): the number texted says which. The same renter at
+/// two orgs is two people to this function, so the cross-org AMBIGUOUS that
+/// a global lookup produced cannot happen.
+export async function candidatesForPhone(e164: string, orgId: string, db: Db = prisma) {
   const [tenants, vendors] = await Promise.all([
     db.tenant.findMany({
-      where: { phone: e164, active: true },
+      where: { orgId, phone: e164, active: true },
       select: {
         id: true,
         leaseTenants: {
@@ -180,7 +183,7 @@ export async function candidatesForPhone(e164: string, db: Db = prisma) {
       },
     }),
     db.vendor.findMany({
-      where: { phone: e164, active: true },
+      where: { orgId, phone: e164, active: true },
       select: { id: true, workOrders: { take: 1, select: { propertyId: true } } },
     }),
   ])

@@ -11,7 +11,6 @@ import { detectHabitabilityLanguage, suggestTicketPriority } from '@rental/core/
 import { prisma } from '@rental/db'
 // From system.ts, not index.ts: index pulls in Auth.js, and a webhook has no
 // session by definition. See system.ts's own comment.
-import { DEFAULT_ORG_ID } from '@/lib/auth/org.ts'
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { emitEvent } from '@/lib/jobs/outbox.ts'
 import { notificationAdapter } from '@/lib/notifications/provider.ts'
@@ -21,6 +20,7 @@ import {
   type InboundAttachment,
   attachMessageDocumentsToTicket,
 } from './inbound-attachments.ts'
+import { messagingSettings } from './messaging-settings.ts'
 import { recordOptIn, recordOptOut } from './opt-out-store.ts'
 import { raiseReplyTask, receiveInboundMessage } from './messages.ts'
 
@@ -50,6 +50,10 @@ export type SmsIntakeResult =
  * and whoever files it can open a ticket then.
  */
 export async function handleInboundSms(args: {
+  /// The org whose number was texted (R-292a): the route reads it off `To`
+  /// before it verifies the signature. Routing, the opt-out and the keyword
+  /// reply all stay inside it.
+  orgId: string
   from: string
   body: string
   receivedAt: Date
@@ -76,17 +80,23 @@ export async function handleInboundSms(args: {
   const keyword = classifyOptOutKeyword(args.body)
   if (keyword === 'STOP') {
     await recordOptOut({
+      orgId: args.orgId,
       phone: args.from,
       source: 'INBOUND_KEYWORD',
       reason: args.body.trim().slice(0, 40),
     })
   } else if (keyword === 'START') {
-    await recordOptIn({ phone: args.from, reason: args.body.trim().slice(0, 40) })
+    await recordOptIn({
+      orgId: args.orgId,
+      phone: args.from,
+      reason: args.body.trim().slice(0, 40),
+    })
   }
 
-  if (keyword !== null) await replyToKeyword(keyword, args.from)
+  if (keyword !== null) await replyToKeyword(keyword, args.from, args.orgId)
 
   const routed = await receiveInboundMessage({
+    orgId: args.orgId,
     channel: 'SMS',
     from: args.from,
     body: args.body,
@@ -247,13 +257,6 @@ export async function handleInboundSms(args: {
 
 export { isOpenTicketStatus }
 
-/// The business name on a carrier keyword reply. Same constant and same
-/// shape as `email-opt-out.ts`'s, deliberately: a tenant who texts HELP and
-/// a tenant who clicks unsubscribe are being told about the same business.
-/// ponytail: one name for the one Twilio number. The number does not yet say
-/// which org it belongs to; R-292 gives each org its own and this the org's name.
-const BUSINESS_NAME = 'Rental Operations'
-
 /**
  * The reply the carrier expects for HELP, and the confirmation for START
  * (R-145, D-162).
@@ -280,13 +283,15 @@ const BUSINESS_NAME = 'Rental Operations'
 async function replyToKeyword(
   keyword: 'STOP' | 'START' | 'HELP',
   to: string,
+  orgId: string,
 ): Promise<void> {
-  const body = optOutReply(keyword, BUSINESS_NAME)
-  if (!body) return
   try {
-    // ponytail: org #0's sender. Inbound does not know its org until R-292
-    // routes by `To`; it then passes that org here.
-    await notificationAdapter.send({ channel: 'SMS', to, body, orgId: DEFAULT_ORG_ID })
+    // The org's own name and its own number (R-292a, PRD 10 §3.3): the
+    // renter texted that org, so that org answers. Inside the try - a
+    // settings read that fails must not fail the intake either.
+    const body = optOutReply(keyword, (await messagingSettings(orgId)).businessName)
+    if (!body) return
+    await notificationAdapter.send({ channel: 'SMS', to, body, orgId })
   } catch (error) {
     console.error(`[sms] could not answer ${keyword} from ${to}`, error)
   }

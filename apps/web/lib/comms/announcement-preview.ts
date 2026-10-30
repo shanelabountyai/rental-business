@@ -75,7 +75,7 @@ export async function previewAnnouncement(
     const tenant = lease.leaseTenants.map((lt) => lt.tenant).find((t) => t.active)
     return tenant ? [{ lease, tenant }] : []
   })
-  const blocked = await blockedNumbers(rows.map((r) => r.tenant.phone))
+  const blocked = await blockedNumbers(orgId, rows.map((r) => r.tenant.phone))
   const smsFooter = announcementSmsFooter((await messagingSettings(orgId)).businessName)
 
   const preview: AnnouncementPreview = {

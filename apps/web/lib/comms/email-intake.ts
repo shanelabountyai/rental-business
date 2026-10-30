@@ -55,6 +55,7 @@ export async function handleInboundEmail(args: {
   hasReplyKey: boolean
 }): Promise<EmailIntakeResult> {
   const routed = await receiveInboundMessage({
+    orgId: null,
     channel: 'EMAIL',
     from: args.from,
     body: args.body,

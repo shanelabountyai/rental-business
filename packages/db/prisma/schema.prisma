@@ -6004,8 +6004,9 @@ model Thread {
 /// precisely why the content cannot simply live on the Task.
 model UnroutedMessage {
   id           String           @id @default(cuid())
-  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
-  orgId        String           @default("org_0")
+  /// The org whose number or address it was sent to (R-292a), named by the
+  /// writer; org_scope checks it against the Message it is filed into.
+  orgId        String
   organization Organization     @relation(fields: [orgId], references: [id], onDelete: Restrict)
   channel      MessageChannel
   direction    MessageDirection @default(INBOUND)
@@ -7551,10 +7552,12 @@ model TenantConsent {
 model SmsOptOut {
   id           String          @id @default(cuid())
   /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
-  orgId        String          @default("org_0")
+  /// R-292a: no default - an opt-out names the org whose number heard STOP.
+  orgId        String
   organization Organization    @relation(fields: [orgId], references: [id], onDelete: Restrict)
-  /// E.164.
-  phone        String          @unique
+  /// E.164. Unique per org (R-292a): STOP to one org's number does not
+  /// silence another's.
+  phone        String
   optedOutAt   DateTime        @default(now())
   source       SmsOptOutSource
   /// The keyword they sent, or the provider error code that told us.
@@ -7565,12 +7568,12 @@ model SmsOptOut {
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
 
-  // NO @@index HERE. `phone` is already `@unique`, which is the index every
-  // query on this table uses, and there is one row per number. An earlier
+  // NO OTHER INDEX HERE. `(orgId, phone)` is the index every query on this
+  // table uses, and there is one row per number per org. An earlier
   // version declared a second index and created it in SQL as a PARTIAL one
   // (`WHERE revokedAt IS NULL`) - a shape Prisma cannot express, so the drift
   // check reported a missing index on every CI run for ever (R-040e).
-  @@index([orgId])
+  @@unique([orgId, phone])
 }
 
 enum SmsOptOutSource {

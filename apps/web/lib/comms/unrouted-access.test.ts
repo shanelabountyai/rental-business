@@ -72,6 +72,7 @@ async function staff(grants: Array<{ role: string; propertyId?: string }>) {
 async function stray() {
   const row = await prisma.unroutedMessage.create({
     data: {
+      orgId: 'org_0',
       channel: 'SMS',
       fromAddress: `+1555${Math.floor(Math.random() * 1e7).toString().padStart(7, '0')}`,
       body: `who is this ${randomUUID()}`,

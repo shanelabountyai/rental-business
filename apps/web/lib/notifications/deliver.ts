@@ -93,7 +93,8 @@ export async function deliverOverChannel(args: {
   if (!(await notificationAdapter.supports(args.channel, args.orgId))) {
     return { status: 'SUPPRESSED', suppressedReason: 'unsupported_channel' }
   }
-  if (args.channel === 'SMS' && (await isOptedOut(args.to))) {
+  // args.orgId is non-null here: an org-less SMS was refused above.
+  if (args.channel === 'SMS' && args.orgId && (await isOptedOut(args.orgId, args.to))) {
     return { status: 'SUPPRESSED', suppressedReason: 'sms_opt_out' }
   }
 
@@ -137,8 +138,9 @@ export async function deliverOverChannel(args: {
     // recording an opt-out against the tenant we were only pretending to
     // text would block a real person because a developer's test handset
     // said STOP.
-    if (args.channel === 'SMS' && isOptOutErrorCode(failureCode)) {
+    if (args.channel === 'SMS' && args.orgId && isOptOutErrorCode(failureCode)) {
       await recordOptOut({
+        orgId: args.orgId,
         phone: to,
         source: 'CARRIER_CALLBACK',
         reason: `twilio:${failureCode}`,

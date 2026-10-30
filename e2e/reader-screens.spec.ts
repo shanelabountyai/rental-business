@@ -258,7 +258,7 @@ test('the lease page says a tenant has opted out of texts', async ({ page }) => 
   const normalized = normalizePhone(phone)!
   optOutPhones.push(normalized)
   await prisma.smsOptOut.create({
-    data: { phone: normalized, source: 'INBOUND_KEYWORD', reason: 'STOP' },
+    data: { orgId: 'org_0', phone: normalized, source: 'INBOUND_KEYWORD', reason: 'STOP' },
   })
 
   const staff = await createOwner()

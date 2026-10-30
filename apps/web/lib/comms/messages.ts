@@ -19,6 +19,7 @@ import { candidatesForEmail, candidatesForPhone, resolveThread } from './threads
 import { inboundEmailConfig } from './inbound-email-config.ts'
 import { type InboundAttachment, storeInboundAttachments } from './inbound-attachments.ts'
 import { replyTaskAssignee } from '@/lib/comms/messaging-settings.ts'
+import { DEFAULT_ORG_ID } from '@/lib/auth/org.ts'
 
 // Writing to a thread (COMM-01, R-017).
 //
@@ -277,6 +278,12 @@ export type InboundResult =
  * without one.
  */
 export async function receiveInboundMessage(args: {
+  /// R-292a: the org whose number was texted. Candidates come only from it
+  /// and an unrouted text lands in its queue (PRD 10 §3.2). Null is the
+  /// email path, which still has one address for every org.
+  /// ponytail: null routes email across every org and files the unrouted
+  /// ones in org #0; R-293 gives each org its address and passes it here.
+  orgId: string | null
   channel: MessageChannel
   from: string
   body: string
@@ -365,14 +372,15 @@ export async function receiveInboundMessage(args: {
   const candidates =
     args.channel === 'EMAIL'
       ? await candidatesForEmail(args.from)
-      : e164
-        ? await candidatesForPhone(e164)
+      : e164 && args.orgId
+        ? await candidatesForPhone(e164, args.orgId)
         : []
   const decision = decideRoute(candidates)
 
   if (decision.outcome === 'unrouted') {
     const unrouted = await prisma.unroutedMessage.create({
       data: {
+        orgId: args.orgId ?? DEFAULT_ORG_ID,
         channel: args.channel,
         // Stored normalized where possible, as received where not - an
         // unparseable number is still evidence of who tried to make contact.

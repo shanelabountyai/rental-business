@@ -236,7 +236,7 @@ export async function reviewSegment(
     const tenant = lease.leaseTenants.map((lt) => lt.tenant).find((t) => t.active)
     return tenant ? [{ lease, tenant }] : []
   })
-  const blocked = await blockedNumbers(rows.map((r) => r.tenant.phone))
+  const blocked = await blockedNumbers(scope.orgId, rows.map((r) => r.tenant.phone))
   return rows
     .map(({ lease, tenant }) => {
       const phone = tenant.phone ? normalizePhone(tenant.phone) : null

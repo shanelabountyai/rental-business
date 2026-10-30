@@ -155,7 +155,7 @@ describe('the delivery status callback', () => {
 
     await post({ MessageSid: sid, MessageStatus: 'undelivered', ErrorCode: '21610', To: phone })
 
-    const optOut = await prisma.smsOptOut.findUnique({ where: { phone } })
+    const optOut = await prisma.smsOptOut.findUnique({ where: { orgId_phone: { orgId: 'org_0', phone } } })
     expect(optOut).not.toBeNull()
     expect(optOut?.source).toBe('CARRIER_CALLBACK')
     expect(optOut?.revokedAt).toBeNull()
@@ -169,7 +169,7 @@ describe('the delivery status callback', () => {
 
     await post({ MessageSid: sid, MessageStatus: 'failed', ErrorCode: '30003', To: phone })
 
-    expect(await prisma.smsOptOut.findUnique({ where: { phone } })).toBeNull()
+    expect(await prisma.smsOptOut.findUnique({ where: { orgId_phone: { orgId: 'org_0', phone } } })).toBeNull()
   })
 
   it('REFUSES to walk a record backwards when callbacks arrive out of order', async () => {

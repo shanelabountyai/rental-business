@@ -27,7 +27,7 @@ describe('deliverOverChannel and the shared SMS opt-out list', () => {
   it('refuses an SMS to a number that opted out', async () => {
     const phone = uniquePhone()
     phones.push(phone)
-    await recordOptOut({ phone, source: 'INBOUND_KEYWORD', reason: 'STOP' })
+    await recordOptOut({ orgId: 'org_0', phone, source: 'INBOUND_KEYWORD', reason: 'STOP' })
 
     const outcome = await deliverOverChannel({ channel: 'SMS', to: phone, body: 'hello', orgId: 'org_0' })
     expect(outcome).toEqual({ status: 'SUPPRESSED', suppressedReason: 'sms_opt_out' })
@@ -36,8 +36,8 @@ describe('deliverOverChannel and the shared SMS opt-out list', () => {
   it('sends again once the number opts back in', async () => {
     const phone = uniquePhone()
     phones.push(phone)
-    await recordOptOut({ phone, source: 'INBOUND_KEYWORD', reason: 'STOP' })
-    await recordOptIn({ phone, reason: 'START' })
+    await recordOptOut({ orgId: 'org_0', phone, source: 'INBOUND_KEYWORD', reason: 'STOP' })
+    await recordOptIn({ orgId: 'org_0', phone, reason: 'START' })
 
     const outcome = await deliverOverChannel({ channel: 'SMS', to: phone, body: 'hello', orgId: 'org_0' })
     expect(outcome.status).toBe('SENT')

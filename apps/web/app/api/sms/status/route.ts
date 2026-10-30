@@ -6,6 +6,7 @@ import {
 } from '@rental/core/comms'
 import { prisma } from '@rental/db'
 import { recordOptOut } from '@/lib/comms/opt-out-store.ts'
+import { twilioWebhookAccount } from '@/lib/notifications/live-adapter.ts'
 
 // Twilio's delivery status callback (NOTIF-01, R-040e; D-38).
 //
@@ -38,19 +39,22 @@ function signedUrl(request: Request): string {
 }
 
 export async function POST(request: Request) {
-  const authToken = process.env.TWILIO_AUTH_TOKEN
-  if (!authToken) {
-    // 503, so Twilio retries: a callback lost during a misconfiguration
-    // window is a delivery record that stays wrong for ever.
-    console.error('[sms-status] TWILIO_AUTH_TOKEN is not set; refusing callback')
-    return new Response('Not configured', { status: 503 })
-  }
-
   const form = await request.formData()
   const params: Record<string, string> = {}
   for (const [key, value] of form.entries()) {
     if (typeof value === 'string') params[key] = value
   }
+
+  // Our number is `From` on a status callback - `To` is the renter (R-292a).
+  // The inbound route's comment explains looking it up before verifying.
+  const account = await twilioWebhookAccount(params.From ?? '')
+  if (!account) {
+    // 503, so Twilio retries: a callback lost during a misconfiguration
+    // window is a delivery record that stays wrong for ever.
+    console.error('[sms-status] no Twilio token for the sending number; refusing callback')
+    return new Response('Not configured', { status: 503 })
+  }
+  const { orgId, authToken } = account
 
   if (
     !verifyTwilioSignature({
@@ -88,6 +92,7 @@ export async function POST(request: Request) {
     // reintroduce the exact defect this route closes.
     if (isOptOutErrorCode(errorCode) && to) {
       await recordOptOut({
+        orgId,
         phone: to,
         source: 'CARRIER_CALLBACK',
         reason: `twilio:${errorCode}`,
@@ -95,7 +100,9 @@ export async function POST(request: Request) {
     }
 
     const delivery = await prisma.notificationDelivery.findFirst({
-      where: { externalId },
+      // Within the org whose token signed it: a callback can only move its
+      // own org's delivery rows.
+      where: { externalId, orgId },
       select: { id: true, status: true },
     })
     if (!delivery) {

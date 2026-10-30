@@ -183,7 +183,7 @@ export default async function LeaseDetailPage({
   // R-148: a party who texted STOP gets silence from every SMS this product
   // sends, and until now nothing on this screen said so - staff texting into
   // the void read it as a tenant ignoring them. Informational, not an alarm.
-  const smsBlocked = await blockedNumbers([
+  const smsBlocked = await blockedNumbers(lease.property.orgId, [
     ...lease.leaseTenants.map((lt) => lt.tenant.phone),
     ...lease.guarantors.map((g) => g.phone),
   ])

@@ -78,3 +78,16 @@ export async function saveOrgIntegration(
     update: data,
   })
 }
+
+/**
+ * The org a Twilio number is provisioned to (R-292a), or null. Unique by the
+ * `OrgIntegration_twilio_number` index, so a number can never name two orgs
+ * and hand a forger the choice of token.
+ */
+export async function orgIdForTwilioNumber(e164: string): Promise<string | null> {
+  const row = await prisma.orgIntegration.findFirst({
+    where: { provider: 'TWILIO', config: { path: ['phoneNumber'], equals: e164 } },
+    select: { orgId: true },
+  })
+  return row?.orgId ?? null
+}

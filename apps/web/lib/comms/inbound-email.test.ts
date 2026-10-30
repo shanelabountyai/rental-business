@@ -104,6 +104,7 @@ async function tenantAt(propertyIds: readonly string[], email: string) {
 
 const inbound = (over: Partial<Parameters<typeof receiveInboundMessage>[0]> = {}) =>
   receiveInboundMessage({
+    orgId: null,
     channel: 'EMAIL',
     from: 'nobody@example.test',
     body: 'The boiler is making a noise.',

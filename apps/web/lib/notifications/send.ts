@@ -212,7 +212,7 @@ export async function notify(
   // always carries a sign-in link, and neither address carries nothing.
   const portalReachable =
     channels.includes('PORTAL') && !input.recipient.email?.trim()
-      ? await canTextAuthLink(db, input.recipient)
+      ? await canTextAuthLink(db, input.recipient, org?.id ?? 'org_0')
       : Boolean(input.recipient.email?.trim())
 
   const addressable = channels.filter(
@@ -261,7 +261,7 @@ export async function notify(
   // LOCKED_CATEGORIES refuses to let a tenant set.
   const smsBlocked =
     template.channels.includes('SMS') && input.recipient.phone?.trim()
-      ? await isOptedOut(input.recipient.phone)
+      ? await isOptedOut(org?.id ?? 'org_0', input.recipient.phone)
       : false
 
   // TCPA CONSENT (R-051b). Asked once, alongside the carrier block above and
@@ -915,8 +915,10 @@ async function consentSubject(
 export async function canTextAuthLink(
   db: Db,
   recipient: NotificationRecipient,
+  /// The org that would send it - the opt-out is per org (R-292a).
+  orgId: string,
 ): Promise<boolean> {
   if (!recipient.phone?.trim()) return false
-  if (await isOptedOut(recipient.phone)) return false
+  if (await isOptedOut(orgId, recipient.phone)) return false
   return (await smsConsentVerdict(db, recipient, 'account_access')).allowed
 }

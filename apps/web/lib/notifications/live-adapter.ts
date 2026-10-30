@@ -1,11 +1,12 @@
 import 'server-only'
 
+import { normalizePhone } from '@rental/core/comms'
 import type { NotificationChannel } from '@rental/core/notifications'
 import { ChannelSendError } from './adapter.ts'
 import type { ChannelAdapter, OutboundMessage, SendResult } from './adapter.ts'
 import { LoggingChannelAdapter } from './logging-adapter.ts'
 import { DEFAULT_ORG_ID } from '@/lib/auth/org.ts'
-import { orgIntegration } from '@/lib/integrations/store.ts'
+import { orgIdForTwilioNumber, orgIntegration } from '@/lib/integrations/store.ts'
 
 // The real drivers (R-104, closing D-15's seam). Resend for email, Twilio for
 // SMS, behind the one `ChannelAdapter` interface `deliverOverChannel` already
@@ -51,7 +52,7 @@ function env(name: string): string | undefined {
 // same reason `notificationConfig()` is: a key added in the dashboard (or a
 // row provisioned by R-292/R-293) takes effect on the next send.
 //
-// ponytail: a row is used whatever its `status`. R-292 adds the 10DLC
+// ponytail: a row is used whatever its `status`. R-292b adds the 10DLC
 // campaign gate and R-293 the domain-verified gate on top of this.
 type ResendConfig = { apiKey: string; from: string }
 type TwilioConfig = { accountSid: string; authToken: string; serviceSid: string }
@@ -93,6 +94,33 @@ async function twilioConfig(orgId: string | null): Promise<TwilioConfig | null> 
   return accountSid && authToken && serviceSid
     ? { accountSid, authToken, serviceSid }
     : null
+}
+
+/**
+ * Which org a Twilio webhook belongs to, and the token it must verify with
+ * (R-292a, PRD 10 §3.1 step 4). Keyed on OUR number in the signed form -
+ * `To` inbound, `From` on a status callback - because nothing else in an
+ * unverified request can say which token to check it against. Picking the
+ * token from an unverified field is safe: a forger who names org A's number
+ * still has to sign with org A's token.
+ *
+ * A provisioned number names its org and its sealed subaccount token. Any
+ * other number is org #0's on the env token, and only while org #0 has no
+ * row - the same rule `twilioConfig` sends by (D-362). Null means there is no
+ * token to verify with, and the route refuses.
+ */
+export async function twilioWebhookAccount(
+  number: string,
+): Promise<{ orgId: string; authToken: string } | null> {
+  const e164 = normalizePhone(number)
+  const orgId = e164 ? await orgIdForTwilioNumber(e164) : null
+  if (orgId) {
+    const row = await orgIntegration(orgId, 'TWILIO')
+    return row?.secret ? { orgId, authToken: row.secret } : null
+  }
+  if (await orgIntegration(DEFAULT_ORG_ID, 'TWILIO')) return null
+  const authToken = env('TWILIO_AUTH_TOKEN')
+  return authToken ? { orgId: DEFAULT_ORG_ID, authToken } : null
 }
 
 function isProductionDeployment(): boolean {
