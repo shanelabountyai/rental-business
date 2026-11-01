@@ -5,6 +5,8 @@ import { notFound } from 'next/navigation'
 import { ListingInquiryForm } from '@/components/listings/listing-inquiry-form.tsx'
 import { PageHeader } from '@/components/page-header.tsx'
 import { Panel } from '@/components/panel.tsx'
+import { prisma } from '@rental/db'
+import { smsDisclosureFor } from '@/lib/comms/messaging-settings.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { recordListingLead } from '@/lib/listings/leads.ts'
 import { publicListing, unitPhotosForListing } from '@/lib/listings/queries.ts'
@@ -59,12 +61,17 @@ export default async function PublicListingPage({
   // write failing must never be why a prospect cannot see the listing.
   void recordListingLead(id, src)
 
-  const [photos, rule] = await Promise.all([
+  const [photos, rule, smsDisclosure] = await Promise.all([
     unitPhotosForListing(listing.unitId),
     rulesFor(
       { state: listing.property.state, county: listing.property.county },
       new Date(),
     ).catch(() => null),
+    // Outside `publicListing`'s allowlist (K6): the org is read here only to
+    // name it in the consent words, never rendered as an id.
+    prisma.listing
+      .findUniqueOrThrow({ where: { id: listing.id }, select: { orgId: true } })
+      .then(({ orgId }) => smsDisclosureFor(orgId)),
   ])
   const disclosures = rule
     ? listingDisclosures({
@@ -175,7 +182,11 @@ export default async function PublicListingPage({
           We&rsquo;ll send a few quick pre-screening questions - the same ones everyone who inquires
           gets asked.
         </p>
-        <ListingInquiryForm action={submitInquiry.bind(null, listing.id)} source={src ?? 'direct'} />
+        <ListingInquiryForm
+          action={submitInquiry.bind(null, listing.id)}
+          source={src ?? 'direct'}
+          smsDisclosure={smsDisclosure}
+        />
       </Panel>
     </main>
   )

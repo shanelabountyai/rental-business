@@ -8,6 +8,7 @@ import { runDueJobs } from '@/lib/jobs/runner.ts'
 import { reconcileLedger } from '@/lib/ledger/reconcile.ts'
 import { storageIsDurable } from '@/lib/storage/index.ts'
 import { sweepUnansweredTenantMessages } from '@/lib/comms/unanswered-sweep.ts'
+import { pollTwilioProvisioning } from '@/lib/integrations/twilio-provisioning.ts'
 import { sweepPendingDelists } from '@/lib/listings/delist-sweep.ts'
 import { dispatchPendingNotifications } from '@/lib/notifications/send.ts'
 import { sweepShowingReminders } from '@/lib/showings/reminders.ts'
@@ -77,6 +78,10 @@ async function runDaily(orgId: string) {
   // question, it is one comparison over recent rows. "A projection nobody
   // checks is a lie with a timestamp."
   const reconciliation = await reconcileLedger(orgId)
+  // R-292b (PRD 10 §3.1): the nightly 10DLC re-poll of a PROVISIONING row.
+  // A provider error is reported, not thrown: it is not this org's tick
+  // failing, and the console's "Re-poll" is there to try again.
+  const smsProvisioning = await repollSms(orgId)
 
   const ran = runs.filter((r) => r.outcome === 'ran')
   // R-174. A run that filled a business date an earlier tick missed, counted
@@ -136,6 +141,27 @@ async function runDaily(orgId: string) {
     // dropped env var - looks exactly like everything working until somebody
     // opens a photo months later and it is gone.
     storageDurable: storageIsDurable,
+    smsProvisioning,
     durationMs: Date.now() - startedAt,
+  }
+}
+
+async function repollSms(orgId: string): Promise<string | null> {
+  try {
+    const poll = await pollTwilioProvisioning(orgId)
+    if (!poll) return null
+    if (poll.after.status !== poll.before.status) {
+      await auditAsSystem('cron', {
+        action: 'integration.polled',
+        entityType: 'OrgIntegration',
+        entityId: poll.after.id,
+        orgId,
+        before: { status: poll.before.status },
+        after: { status: poll.after.status, statusReason: poll.after.statusReason },
+      })
+    }
+    return poll.after.status
+  } catch (error) {
+    return `error: ${error instanceof Error ? error.message : String(error)}`
   }
 }

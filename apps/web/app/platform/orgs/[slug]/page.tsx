@@ -6,6 +6,9 @@ import { platformDecision, requirePlatform } from '@/lib/platform/guard.ts'
 import { changeOrgSlug, configureOrganization, manageOrgInvite, switchOrgNotifications } from '@/lib/platform/org-actions.ts'
 import { INTEGRATION_SELECT, orgOwners, providerName } from '@/lib/platform/orgs.ts'
 import { OrgHealthPanel } from '@/components/platform/org-health.tsx'
+import { SmsProvisioningPanel, type SmsProvisioningView } from '@/components/platform/sms-provisioning.tsx'
+import { twilioRow } from '@/lib/integrations/twilio-provisioning.ts'
+import { provisionTwilio } from '@/lib/platform/integration-actions.ts'
 import Link from 'next/link'
 
 export const dynamic = 'force-dynamic'
@@ -52,6 +55,8 @@ export default async function PlatformOrgPage({
   const invite = await platformDecision(admin, 'org.create')
   const configure = await platformDecision(admin, 'org.configure')
   const canConfigure = configure.allowed
+  const canProvision = (await platformDecision(admin, 'integration.provision')).allowed
+  const sms = smsView(await twilioRow(org.id), now)
   const invites = org.invites.map((i) => ({
     id: i.id,
     email: i.email,
@@ -130,11 +135,11 @@ export default async function PlatformOrgPage({
         <h2 id="integrations-heading" className="text-lg font-semibold">
           Integrations
         </h2>
-        {org.integrations.length === 0 ? (
-          <p>No integrations started.</p>
+        {org.integrations.filter((i) => i.provider !== 'TWILIO').length === 0 ? (
+          <p>No other integrations started.</p>
         ) : (
           <ul className="flex flex-col gap-2 break-words">
-            {org.integrations.map((i) => (
+            {org.integrations.filter((i) => i.provider !== 'TWILIO').map((i) => (
               <li key={i.provider} className="flex flex-col">
                 <span className="font-medium">
                   {providerName(i.provider)}: {i.status.toLowerCase().replaceAll('_', ' ')}
@@ -146,9 +151,31 @@ export default async function PlatformOrgPage({
             ))}
           </ul>
         )}
+        <SmsProvisioningPanel action={provisionTwilio} slug={org.slug} view={sms} canProvision={canProvision} />
       </section>
 
       <OrgHealthPanel health={org.health} now={now} />
     </main>
   )
+}
+
+/// The Twilio row as the panel shows it: named config keys only, never the
+/// sealed secret (`twilioRow` does not read it). "Started N days ago" is PRD
+/// 10 §3.1's: brand vetting is days, campaign review days to weeks.
+function smsView(row: Awaited<ReturnType<typeof twilioRow>>, now: Date): SmsProvisioningView {
+  if (!row) return { status: null, statusReason: null, phoneNumber: null, brand: null, campaign: null, startedLabel: null, polledLabel: null }
+  const c = row.config
+  const review = (status?: string, reason?: string) => (status ? { status, reason: reason ?? null } : null)
+  const startedAt = c.startedAt ? new Date(c.startedAt) : null
+  const days = startedAt ? Math.floor((now.getTime() - startedAt.getTime()) / 86_400_000) : null
+  return {
+    status: row.status,
+    statusReason: row.statusReason,
+    phoneNumber: c.phoneNumber ?? null,
+    brand: review(c.brandStatus, c.brandReason),
+    campaign: review(c.campaignStatus, c.campaignReason),
+    startedLabel:
+      days === null ? null : days === 0 ? 'today' : `${days} day${days === 1 ? '' : 's'} ago`,
+    polledLabel: c.polledAt ? friendlyTimestamp(new Date(c.polledAt), 'UTC') : null,
+  }
 }

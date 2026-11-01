@@ -217,8 +217,9 @@ const EVERY_COLUMN = '*'
 const READ_ALLOWLIST: Record<string, readonly string[] | typeof EVERY_COLUMN> = {
   Organization: EVERY_COLUMN,
   OrgHealth: EVERY_COLUMN,
-  // Statuses, never `config` or `secret` (§4.3).
-  OrgIntegration: ['id', 'orgId', 'provider', 'status', 'statusReason', 'updatedAt'],
+  // Statuses and the non-secret display `config` (§4.3; R-292b shows the
+  // number and each 10DLC step), never `secret`.
+  OrgIntegration: ['id', 'orgId', 'provider', 'status', 'statusReason', 'config', 'updatedAt'],
   OrgInvite: EVERY_COLUMN,
   SupportAccessGrant: EVERY_COLUMN,
   PlatformAdmin: EVERY_COLUMN,

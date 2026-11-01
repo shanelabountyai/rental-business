@@ -429,6 +429,8 @@ describe('orgId on every org-owned table (R-285a)', () => {
     'JurisdictionRule', 'RateLimitCounter', 'AuthToken', 'DecisionReason',
     // R-294b: a platform admin is inside no org (PRD 11 §2.1).
     'PlatformAdmin', 'PlatformCredential', 'PlatformRole', 'PlatformRoleAssignment',
+    // R-292b: the simulated Twilio's own state - another company's database.
+    'SimulatedTwilioAccount',
   ]
 
   it('every model but the org-less list has orgId and an org_scope trigger', async () => {

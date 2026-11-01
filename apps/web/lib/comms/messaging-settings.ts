@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { inquirySmsDisclosure } from '@rental/core/consent'
 import { prisma } from '@rental/db'
 
 import { brandFor } from '@/lib/brand.ts'
@@ -19,6 +20,13 @@ export async function messagingSettings(orgId: string): Promise<{
     businessName: row?.businessName ?? (await brandFor(orgId)).name,
     replyTaskAssigneeStaffId: row?.replyTaskAssigneeStaffId ?? null,
   }
+}
+
+/// The texting consent words for an org (R-292b, PRD 10 §3.3): one builder for
+/// the inquiry form, the consent row that stores them, and the 10DLC
+/// campaign's opt-in description, so the three cannot drift apart.
+export async function smsDisclosureFor(orgId: string): Promise<string> {
+  return inquirySmsDisclosure((await messagingSettings(orgId)).businessName)
 }
 
 /// The configured reply assignee, but only while they are active and hold

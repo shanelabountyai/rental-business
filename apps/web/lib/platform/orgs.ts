@@ -5,7 +5,8 @@ import { prisma } from '@rental/db'
 // The console's reads about organisations (PRD 11 §4.2–4.4, R-303). PLAT-03
 // holds every platform page to an allowlist of models and columns, so these
 // select what they show and nothing else: an integration's status and never
-// its `config` or `secret`, an owner's name and email and nothing more.
+// its `config` or `secret` (R-292b's Twilio panel shows named config keys,
+// which hold nothing secret), an owner's name and email and nothing more.
 
 /// `OrgHealth` is written at least daily; past this it is a dead cron, not a
 /// quiet org (§4.2), and the numbers are replaced rather than shown stale.

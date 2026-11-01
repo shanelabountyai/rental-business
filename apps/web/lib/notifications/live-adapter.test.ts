@@ -204,6 +204,30 @@ describe("an org's own credentials (R-275)", () => {
     )
   })
 
+  it("points the StatusCallback at the org's own host (R-292b)", async () => {
+    vi.stubEnv('ORG_BASE_DOMAIN', 'example.test')
+    const fetchMock = stubFetch(response(201, { sid: 'SM_A' }))
+    await adapter.send({ channel: 'SMS', to: '+15125550123', body: 'b', orgId: orgA })
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(new URLSearchParams(String(init.body)).get('StatusCallback')).toBe(
+      `https://${stamp}-a.example.test/api/sms/status`,
+    )
+  })
+
+  it('never sends on a row the simulated provisioner made (R-292b)', async () => {
+    await saveOrgIntegration(orgB, 'TWILIO', {
+      config: { provisionedBy: 'simulated', accountSid: 'AC_sim', messagingServiceSid: 'MG_sim' },
+      secret: 'sim_token',
+    })
+    const fetchMock = stubFetch(response(201, { sid: 'SM_B' }))
+    const result = await adapter.send({ channel: 'SMS', to: '+15125550123', body: 'b', orgId: orgB })
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(result.externalId).toMatch(/^log_/)
+    vi.stubEnv('VERCEL_ENV', 'production')
+    expect(await adapter.supports('SMS', orgB)).toBe(false)
+    await prisma.orgIntegration.deleteMany({ where: { orgId: orgB } })
+  })
+
   it('stores the secret sealed, never as plaintext', async () => {
     const row = await prisma.orgIntegration.findUniqueOrThrow({
       where: { orgId_provider: { orgId: orgA, provider: 'TWILIO' } },

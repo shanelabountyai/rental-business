@@ -77,6 +77,9 @@ export const manifest: Record<string, Entry> = {
   'lib/platform/org-actions.ts#changeOrgSlug': { 'form.slug': 'value' },
   // R-306: the kill switch names the org the same way.
   'lib/platform/org-actions.ts#switchOrgNotifications': { 'form.slug': 'value', 'form.intent': '=off', 'form.reason': '=invariant' },
+  // R-292b: SMS provisioning names the org by slug; `poll` reaches the lookup
+  // and, with no row, does nothing.
+  'lib/platform/integration-actions.ts#provisionTwilio': { 'form.slug': 'value', 'form.intent': '=poll' },
   // R-305 (D-355): a statute version is org-less, so nothing names an org.
   'lib/platform/jurisdiction-actions.ts#createRuleVersion': {},
   // lib/auth/invite-actions.ts (R-304a)

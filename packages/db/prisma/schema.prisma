@@ -676,6 +676,30 @@ model OrgIntegration {
   @@unique([orgId, provider])
 }
 
+/// R-292b: the SIMULATED Twilio's own records (D-27, D-7). It stands in for
+/// Twilio's database, not ours, so it is org-less like a provider would be:
+/// it knows a subaccount by its SID and remembers what it was TOLD and where
+/// its reviews stand. Only lib/integrations/twilio-provisioning.ts reads it;
+/// the send gate reads our `OrgIntegration.config`, never this, so the two
+/// can disagree until a poll tells us.
+model SimulatedTwilioAccount {
+  accountSid          String    @id
+  friendlyName        String
+  phoneNumber         String?   @unique
+  messagingServiceSid String?
+  brandStatus         String?
+  brandReason         String?
+  campaignStatus      String?
+  campaignReason      String?
+  optInDescription    String?
+  /// Test seam: the next brand / campaign review step fails with exactly this
+  /// reason, which must reach the console verbatim.
+  failBrandWith       String?
+  failCampaignWith    String?
+  closedAt            DateTime?
+  createdAt           DateTime  @default(now())
+}
+
 /// R-303 (PRD 11 §5.5, D-354): what the platform console may know about an
 /// org's running, upserted by the org's own cron child at the end of every
 /// per-org invocation. Counts, booleans, timestamps and state codes only -

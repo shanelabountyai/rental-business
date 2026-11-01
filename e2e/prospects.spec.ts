@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto'
 import { hashPassword, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { INQUIRY_SMS_DISCLOSURE } from '@rental/core/consent'
 import { uniqueClientHeaders, uniquePhone } from './fixtures.ts'
 
 // The prospect pipeline (LEASE-07, R-058).
@@ -208,6 +207,9 @@ test('a phone-only visitor who ticks the texting box is recorded as consenting',
   await anonPage.getByLabel('Last name').fill(`Texter-${randomUUID().slice(0, 8)}`)
   await anonPage.getByLabel('Phone', { exact: true }).fill(phone)
   await anonPage.getByLabel('Text me at this phone number').check()
+  // R-292b: the words name the org, which `messaging-settings.spec.ts` may be
+  // renaming concurrently - so the assertion is "stored what was shown".
+  const shown = await anonPage.getByText(/^You agree to get text messages from /).textContent()
   await anonPage.getByRole('button', { name: 'Send my question' }).click()
   await expect(anonPage.getByText(/check your email or phone/)).toBeVisible()
   await anon.close()
@@ -222,8 +224,9 @@ test('a phone-only visitor who ticks the texting box is recorded as consenting',
     channel: 'SMS',
     basis: 'EXPRESS_WRITTEN',
     source: 'WEB_FORM',
-    disclosureText: INQUIRY_SMS_DISCLOSURE,
   })
+  expect(shown).toBeTruthy()
+  expect(prospect.consents[0]!.disclosureText).toBe(shown)
 })
 
 test('a prospect answers the identical five questions, and staff moves the pipeline forward', async ({

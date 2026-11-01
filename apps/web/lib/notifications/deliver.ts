@@ -4,6 +4,7 @@ import type { NotificationChannel } from '@rental/core/notifications'
 import { isOptOutErrorCode } from '@rental/core/comms'
 import { prisma } from '@rental/db'
 import { isOptedOut, recordOptOut } from '@/lib/comms/opt-out-store.ts'
+import { smsSendRefusal } from '@/lib/integrations/twilio-provisioning.ts'
 import { notificationConfig, sandboxAddressFor } from './config.ts'
 import { notificationAdapter } from './provider.ts'
 
@@ -41,7 +42,7 @@ import { notificationAdapter } from './provider.ts'
 export interface DeliveryOutcome {
   status: 'SENT' | 'SUPPRESSED' | 'FAILED'
   externalId?: string
-  /// Set when SUPPRESSED - today only ever 'kill_switch'.
+  /// Set when SUPPRESSED: a `SuppressionReason`.
   suppressedReason?: string
   /// Set when FAILED.
   failureCode?: string
@@ -92,6 +93,13 @@ export async function deliverOverChannel(args: {
   }
   if (!(await notificationAdapter.supports(args.channel, args.orgId))) {
     return { status: 'SUPPRESSED', suppressedReason: 'unsupported_channel' }
+  }
+  // R-292b, PRD 10 §3.1: an org's own number texts only its owners until the
+  // 10DLC campaign is APPROVED, and a retired one texts nobody. Every
+  // environment, so the record says why rather than a carrier block later.
+  if (args.channel === 'SMS' && args.orgId) {
+    const refusal = await smsSendRefusal(args.orgId, args.to)
+    if (refusal) return { status: 'SUPPRESSED', suppressedReason: refusal }
   }
   // args.orgId is non-null here: an org-less SMS was refused above.
   if (args.channel === 'SMS' && args.orgId && (await isOptedOut(args.orgId, args.to))) {

@@ -6,6 +6,7 @@ import { ChannelSendError } from './adapter.ts'
 import type { ChannelAdapter, OutboundMessage, SendResult } from './adapter.ts'
 import { LoggingChannelAdapter } from './logging-adapter.ts'
 import { DEFAULT_ORG_ID } from '@/lib/auth/org.ts'
+import { authUrl } from '@/lib/auth/org-url.ts'
 import { orgIdForTwilioNumber, orgIntegration } from '@/lib/integrations/store.ts'
 
 // The real drivers (R-104, closing D-15's seam). Resend for email, Twilio for
@@ -52,8 +53,11 @@ function env(name: string): string | undefined {
 // same reason `notificationConfig()` is: a key added in the dashboard (or a
 // row provisioned by R-292/R-293) takes effect on the next send.
 //
-// ponytail: a row is used whatever its `status`. R-292b adds the 10DLC
-// campaign gate and R-293 the domain-verified gate on top of this.
+// A row is used whatever its `status`: the 10DLC campaign gate (R-292b) is
+// `smsSendRefusal` in deliver.ts, ahead of this; R-293 adds the domain gate.
+// A row the SIMULATED provisioner made (`provisionedBy: 'simulated'`) has
+// SIDs no real Twilio knows, so it is no sender: logged off production,
+// `unsupported_channel` on it.
 type ResendConfig = { apiKey: string; from: string }
 type TwilioConfig = { accountSid: string; authToken: string; serviceSid: string }
 
@@ -81,6 +85,7 @@ async function twilioConfig(orgId: string | null): Promise<TwilioConfig | null> 
   if (orgId === null) return null
   const row = await orgIntegration(orgId, 'TWILIO')
   if (row) {
+    if (configString(row.config, 'provisionedBy') === 'simulated') return null
     const accountSid = configString(row.config, 'accountSid')
     const serviceSid = configString(row.config, 'messagingServiceSid')
     return row.secret && accountSid && serviceSid
@@ -180,6 +185,13 @@ async function sendEmail(
   return { externalId: id }
 }
 
+async function statusCallbackUrl(orgId: string | null): Promise<string | null> {
+  if (!env('AUTH_URL')) return null
+  return orgId === null
+    ? new URL('/api/sms/status', env('AUTH_URL')).toString()
+    : authUrl(orgId, '/api/sms/status')
+}
+
 async function sendSms(
   message: OutboundMessage,
   config: TwilioConfig,
@@ -192,11 +204,12 @@ async function sendSms(
 
   // Wiring the callback R-040e built and could not reach. Without it `SENT`
   // goes on meaning only "Twilio accepted it", which for `entry_notice` is
-  // the difference D-38 exists to record. Skipped when AUTH_URL is unset
-  // rather than guessed: a callback URL derived from anything else would
-  // point at a host we do not control.
-  const base = env('AUTH_URL')
-  if (base) form.set('StatusCallback', new URL('/api/sms/status', base).toString())
+  // the difference D-38 exists to record. On the ORG's host (R-292b, PRD 10
+  // §3.1 step 4): Twilio signs the exact URL with the subaccount's token.
+  // Skipped when AUTH_URL is unset rather than guessed: a callback URL
+  // derived from anything else would point at a host we do not control.
+  const callback = await statusCallbackUrl(message.orgId)
+  if (callback) form.set('StatusCallback', callback)
 
   const response = await fetch(
     `https://api.twilio.com/2010-04-01/Accounts/${config.accountSid}/Messages.json`,

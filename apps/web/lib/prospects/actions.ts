@@ -1,13 +1,13 @@
 'use server'
 
 import { validateProspectInquiry } from '@rental/core/prospects'
-import { INQUIRY_SMS_DISCLOSURE } from '@rental/core/consent'
 import { RATE_LIMITS } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { hostOrgId } from '@/lib/auth/org.ts'
+import { smsDisclosureFor } from '@/lib/comms/messaging-settings.ts'
 import { consumeRateLimit } from '@/lib/auth/store.ts'
 import { sendPrescreenInvite } from './invite.ts'
 
@@ -134,6 +134,8 @@ export async function submitInquiry(
   // unticked phone-only inquiry is still accepted - consent must not be a
   // condition of asking - and gets a call back rather than a text.
   const smsConsent = Boolean(input.phone) && formData.get('smsConsent') === 'on'
+  // The words the form showed, naming the listing's org (R-292b).
+  const disclosureText = await smsDisclosureFor(listing.orgId)
 
   const prospect = await prisma.$transaction(async (tx) => {
     const created = await tx.prospect.create({
@@ -155,7 +157,7 @@ export async function submitInquiry(
           channel: 'SMS',
           basis: 'EXPRESS_WRITTEN',
           source: 'WEB_FORM',
-          disclosureText: INQUIRY_SMS_DISCLOSURE,
+          disclosureText,
         },
       })
     }

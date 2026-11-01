@@ -30,6 +30,7 @@ export const platformManifest: Record<string, PlatformEntry> = {
   'lib/platform/org-actions.ts#configureOrganization': { guard: 'session', permission: 'org.configure' },
   'lib/platform/org-actions.ts#changeOrgSlug': { guard: 'step-up', permission: 'org.configure' },
   'lib/platform/org-actions.ts#switchOrgNotifications': { guard: 'step-up', permission: 'org.configure' },
+  'lib/platform/integration-actions.ts#provisionTwilio': { guard: 'session', permission: 'integration.provision' },
   'lib/platform/job-actions.ts#rerunCronChild': { guard: 'session', permission: 'job.rerun' },
   'lib/platform/jurisdiction-actions.ts#createRuleVersion': { guard: 'step-up', permission: 'jurisdiction.publish' },
 }

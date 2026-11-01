@@ -121,7 +121,11 @@ export function consentVerdict(
 
 /// The words beside the texting checkbox on the public inquiry form
 /// (LEGAL-03), stored verbatim as the consent row's `disclosureText` - the
-/// record has to be able to show what was agreed to. Draft wording, not
-/// legal advice: counsel should review it before a real prospect sees it.
-export const INQUIRY_SMS_DISCLOSURE =
-  'You agree to get text messages at this number about this listing, a showing, and any application, including automated texts. Message and data rates may apply. Reply STOP to opt out. Agreeing is not a condition of renting.'
+/// record has to be able to show what was agreed to. Names the org that will
+/// text (R-292b, PRD 10 §3.3), and is quoted as its 10DLC campaign's opt-in
+/// description, so what the carrier approved is what the renter saw. Draft
+/// wording, not legal advice: counsel should review it before a real prospect
+/// sees it.
+export function inquirySmsDisclosure(businessName: string): string {
+  return `You agree to get text messages from ${businessName} at this number about this listing, a showing, and any application, including automated texts. Message and data rates may apply. Reply STOP to opt out. Agreeing is not a condition of renting.`
+}

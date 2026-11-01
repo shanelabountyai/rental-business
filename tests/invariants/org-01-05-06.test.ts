@@ -120,6 +120,7 @@ const ORG_LESS: Record<string, string> = {
   PlatformCredential: "a PlatformAdmin's password and MFA, as org-less as the admin",
   PlatformRole: 'a console role (R-302a); its permissions are platform permissions, which name no org',
   PlatformRoleAssignment: 'a PlatformAdmin holding a console role, as org-less as the admin',
+  SimulatedTwilioAccount: "the simulated Twilio's own state (R-292b, D-27): another company's database, keyed by subaccount SID",
 }
 
 describe('ORG-06: every org-owned model', () => {

@@ -42,6 +42,11 @@ export const SUPPRESSION_REASONS = [
   /// its timing changed, and "why didn't this arrive on its own" needs a
   /// different answer than "they turned it off".
   'digest_batched',
+  /// R-292b: the org's own Twilio number is still in 10DLC review (or the
+  /// review failed), and the recipient is not one of its owners. Carriers
+  /// block unregistered traffic, so this says why a text never left rather
+  /// than letting it read as a carrier fault. Decided at delivery time.
+  'campaign_not_approved',
 ] as const
 
 export type SuppressionReason = (typeof SUPPRESSION_REASONS)[number]

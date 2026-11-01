@@ -38,6 +38,7 @@ const SUPPRESSION_LABELS: Record<string, string> = {
   sms_opt_out: 'this number has blocked our texts',
   no_consent: 'no SMS consent on file',
   digest_batched: 'batched into the daily digest',
+  campaign_not_approved: 'texting number not approved yet',
 }
 
 const CHANNEL_LABELS: Record<string, string> = {

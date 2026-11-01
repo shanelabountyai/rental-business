@@ -48,6 +48,7 @@ const NOT_SENT_BECAUSE: Record<SuppressionReason, string> = {
   // Unreachable: `digest_batched` is counted as reaching them - see below.
   digest_batched: 'folded into their daily digest instead',
   cancelled: 'the scheduled announcement was cancelled',
+  campaign_not_approved: "this organisation's texting number is not approved yet",
 }
 
 /**

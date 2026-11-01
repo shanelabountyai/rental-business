@@ -8,7 +8,6 @@ import {
   useFormVersion,
 } from '@/components/auth-form.tsx'
 import { CheckboxField, TextField, TextareaField } from '@/components/form/field.tsx'
-import { INQUIRY_SMS_DISCLOSURE } from '@rental/core/consent'
 import type { InquiryFormState } from '@/lib/prospects/actions.ts'
 
 // The public inquiry form (LEASE-07, R-058) - what turns an anonymous
@@ -19,9 +18,13 @@ import type { InquiryFormState } from '@/lib/prospects/actions.ts'
 export function ListingInquiryForm({
   action,
   source,
+  smsDisclosure,
 }: {
   action: (state: InquiryFormState, formData: FormData) => Promise<InquiryFormState>
   source: string
+  /// `inquirySmsDisclosure` for the listing's org (R-292b): the action stores
+  /// the same words, built the same way.
+  smsDisclosure: string
 }) {
   const [state, formAction] = useActionState<InquiryFormState, FormData>(action, {})
   const errors = state.fieldErrors ?? {}
@@ -103,7 +106,7 @@ export function ListingInquiryForm({
         label="Text me at this phone number"
         name="smsConsent"
         defaultChecked={echoed.smsConsent === 'on'}
-        hint={INQUIRY_SMS_DISCLOSURE}
+        hint={smsDisclosure}
       />
       <TextareaField
         label="Anything you'd like us to know? (optional)"

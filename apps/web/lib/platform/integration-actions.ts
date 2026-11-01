@@ -1,0 +1,89 @@
+'use server'
+
+import { type AuditAction, recordAudit } from '@rental/core/audit'
+import { prisma } from '@rental/db'
+import { revalidatePath } from 'next/cache'
+import { headers } from 'next/headers'
+import {
+  AREA_CODE,
+  type TwilioRow,
+  pollTwilioProvisioning,
+  retireTwilioProvisioning,
+  startTwilioProvisioning,
+} from '@/lib/integrations/twilio-provisioning.ts'
+import { requirePlatform } from '@/lib/platform/guard.ts'
+import type { OrgInviteFormState } from '@/lib/platform/org-actions.ts'
+
+// The integrations panel on `/platform/orgs/[slug]` (PRD 11 §3.1, §4.4,
+// R-292b): start, re-poll or retire an org's Twilio provisioning. Guarded by
+// `integration.provision`, which wants no step-up; audited in the org as
+// PLATFORM. Nothing here reads the sealed secret, and no audit row carries it.
+
+function str(formData: FormData, key: string): string {
+  return String(formData.get(key) ?? '').trim()
+}
+
+const words = (status: string | undefined) => (status ?? 'unknown').toLowerCase().replaceAll('_', ' ')
+
+/// What an audit row may say about the row: never the secret, which
+/// `TwilioRow` does not carry anyway.
+function shown(row: TwilioRow) {
+  const { accountSid, phoneNumber, brandStatus, campaignStatus } = row.config
+  return { status: row.status, statusReason: row.statusReason, accountSid, phoneNumber, brandStatus, campaignStatus }
+}
+
+export async function provisionTwilio(
+  _previous: OrgInviteFormState,
+  formData: FormData,
+): Promise<OrgInviteFormState> {
+  const slug = str(formData, 'slug')
+  const actor = await requirePlatform({
+    permission: 'integration.provision',
+    next: `/platform/orgs/${encodeURIComponent(slug)}`,
+  })
+  const org = await prisma.organization.findUnique({ where: { slug }, select: { id: true } })
+  if (!org) return { error: 'That organisation no longer exists.' }
+
+  const intent = str(formData, 'intent')
+  const audit = async (action: AuditAction, row: { id: string }, before: Record<string, unknown> | null, after: Record<string, unknown>) =>
+    recordAudit(prisma, {
+      actor: { type: 'PLATFORM', ref: actor.id, ipAddress: (await headers()).get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown' },
+      action,
+      entityType: 'OrgIntegration',
+      entityId: row.id,
+      orgId: org.id,
+      before: before ?? undefined,
+      after,
+    })
+
+  let notice: string
+  if (intent === 'start') {
+    const areaCode = str(formData, 'areaCode')
+    if (!AREA_CODE.test(areaCode)) {
+      return { error: 'Fix the area code.', fieldErrors: { areaCode: 'Three digits, not starting with 0 or 1.' } }
+    }
+    const started = await startTwilioProvisioning(org.id, areaCode)
+    if (!started.ok) return { error: started.error }
+    await audit('integration.provision_started', started.row, null, shown(started.row))
+    notice = `SMS provisioning started on ${started.row.config.phoneNumber}. The brand registration is pending.`
+  } else if (intent === 'poll') {
+    const polled = await pollTwilioProvisioning(org.id).catch((error: unknown) =>
+      error instanceof Error ? error : new Error(String(error)),
+    )
+    if (polled instanceof Error) return { error: `Twilio did not answer the poll: ${polled.message}` }
+    if (!polled) return { notice: 'Nothing to re-poll: provisioning is not in progress.' }
+    await audit('integration.polled', polled.after, shown(polled.before), shown(polled.after))
+    const { brandStatus, campaignStatus } = polled.after.config
+    notice = `Re-polled. Brand ${words(brandStatus)}, campaign ${campaignStatus ? words(campaignStatus) : 'not registered yet'}.`
+  } else if (intent === 'retire') {
+    const retired = await retireTwilioProvisioning(org.id)
+    if (!retired) return { notice: 'SMS was already retired.' }
+    await audit('integration.retired', retired.before, shown(retired.before), { status: 'RETIRED' })
+    notice = 'SMS retired. The subaccount is closed and its number released; no texts go out for this organisation.'
+  } else {
+    return { error: 'That action is not recognised.' }
+  }
+  revalidatePath(`/platform/orgs/${slug}`)
+  revalidatePath('/platform/orgs')
+  return { notice }
+}

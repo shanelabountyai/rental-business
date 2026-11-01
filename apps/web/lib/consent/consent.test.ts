@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { prisma } from '@rental/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { INQUIRY_SMS_DISCLOSURE } from '@rental/core/consent'
+import { inquirySmsDisclosure } from '@rental/core/consent'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 
 // TCPA consent against a real database (COMM-02, R-051b).
@@ -393,7 +393,7 @@ describe('prospects and applicants are gated too (LEGAL-03)', () => {
         channel: 'SMS',
         basis: 'EXPRESS_WRITTEN',
         source: 'WEB_FORM',
-        disclosureText: INQUIRY_SMS_DISCLOSURE,
+        disclosureText: inquirySmsDisclosure('Test Rentals'),
       },
     })
     applicationId = (
