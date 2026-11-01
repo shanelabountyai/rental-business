@@ -7,7 +7,8 @@ import {
   stripQuotedReply,
 } from '@rental/core/comms'
 import { handleInboundEmail } from '@/lib/comms/email-intake.ts'
-import { inboundEmailConfig } from '@/lib/comms/inbound-email-config.ts'
+import { orgIdForHost } from '@/lib/auth/org.ts'
+import { inboundEmailConfig, inboundEmailSecret } from '@/lib/comms/inbound-email-config.ts'
 import type { InboundAttachment } from '@/lib/comms/inbound-attachments.ts'
 
 // The inbound-email webhook (COMM-08, R-097a).
@@ -100,13 +101,21 @@ function secretMatches(provided: string, expected: string): boolean {
 }
 
 export async function POST(request: Request) {
-  const expected = process.env.INBOUND_EMAIL_SECRET
+  // WHICH ORG (R-293, PRD 10 §3.1 step 4's rule for email): the host the
+  // provider posts to, `<slug>.<base>` - the same host every link of the
+  // org's is built on. Taking the org from an unverified Host is safe for the
+  // reason D-374 gives for Twilio's `To`: a forger who names org A's host
+  // still has to present org A's secret. No org is final, not retried.
+  const orgId = await orgIdForHost(request.headers.get('host') ?? new URL(request.url).host)
+  if (!orgId) return new Response('Forbidden', { status: 403 })
+
+  const expected = await inboundEmailSecret(orgId)
   if (!expected) {
     // Refuses everything when unset, exactly as the SMS and cron routes do.
     // 503 rather than 403 so a provider retries once it is configured, since
     // a message lost during a misconfiguration window is a tenant who thinks
     // they told us something.
-    console.error('[inbound-email] INBOUND_EMAIL_SECRET is not set; refusing webhook')
+    console.error(`[inbound-email] no inbound secret for ${orgId}; refusing webhook`)
     return new Response('Not configured', { status: 503 })
   }
 
@@ -153,7 +162,7 @@ export async function POST(request: Request) {
   // so a reply quoting one would otherwise opt somebody out every time.
   const strippedBody = stripQuotedReply(body)
   const recipients = addresses(payload.to, payload.cc, payload.recipient)
-  const inbound = inboundEmailConfig()
+  const inbound = await inboundEmailConfig(orgId)
   const hasReplyKey =
     inbound != null &&
     extractReplyKey({
@@ -164,6 +173,7 @@ export async function POST(request: Request) {
 
   try {
     const result = await handleInboundEmail({
+      orgId,
       from,
       // The quoted tail is cut rather than stored and hidden in the UI:
       // `Message` is append-only, so a third reply would otherwise store the

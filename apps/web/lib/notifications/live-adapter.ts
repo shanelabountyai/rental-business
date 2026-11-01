@@ -1,13 +1,19 @@
 import 'server-only'
 
-import { normalizePhone } from '@rental/core/comms'
+import { fromWithDisplayName, normalizePhone } from '@rental/core/comms'
 import type { NotificationChannel } from '@rental/core/notifications'
 import { ChannelSendError } from './adapter.ts'
 import type { ChannelAdapter, OutboundMessage, SendResult } from './adapter.ts'
 import { LoggingChannelAdapter } from './logging-adapter.ts'
 import { DEFAULT_ORG_ID } from '@/lib/auth/org.ts'
 import { authUrl } from '@/lib/auth/org-url.ts'
-import { orgIdForTwilioNumber, orgIntegration } from '@/lib/integrations/store.ts'
+import { messagingSettings } from '@/lib/comms/messaging-settings.ts'
+import {
+  type OrgIntegrationValue,
+  orgIdForTwilioNumber,
+  orgIntegration,
+  resendSecrets,
+} from '@/lib/integrations/store.ts'
 
 // The real drivers (R-104, closing D-15's seam). Resend for email, Twilio for
 // SMS, behind the one `ChannelAdapter` interface `deliverOverChannel` already
@@ -54,7 +60,8 @@ function env(name: string): string | undefined {
 // row provisioned by R-292/R-293) takes effect on the next send.
 //
 // A row is used whatever its `status`: the 10DLC campaign gate (R-292b) is
-// `smsSendRefusal` in deliver.ts, ahead of this; R-293 adds the domain gate.
+// `smsSendRefusal` in deliver.ts, ahead of this; the domain gate (R-293) is
+// `ownDomainSender` below.
 // A row the SIMULATED provisioner made (`provisionedBy: 'simulated'`) has
 // SIDs no real Twilio knows, so it is no sender: logged off production,
 // `unsupported_channel` on it.
@@ -69,15 +76,42 @@ function configString(config: Record<string, unknown>, key: string): string | un
 // THE PLATFORM (orgId null, R-302b) sends on the env vars too: they are the
 // operator's account. ponytail: it shares org #0's `from`; add a
 // PLATFORM_RESEND_FROM when org #0 stops being the operator's own business.
+//
+// AN ORG (R-293, PRD 10 §4) sends from its own domain only once Resend has
+// VERIFIED it - Resend refuses an unverified `from`, and that refusal would
+// read as a product bug - on the domain-scoped key sealed with the row. Until
+// then it sends from the platform's shared address (RESEND_SHARED_FROM, on
+// the env key: one Resend account holds every domain). Org #0 with no row
+// keeps RESEND_FROM. Every org send carries the org's sender name, so the
+// renter reads their landlord's name on either domain. No own domain and no
+// shared address is no sender.
 async function resendConfig(orgId: string | null): Promise<ResendConfig | null> {
-  const row = orgId === null ? null : await orgIntegration(orgId, 'RESEND')
-  if (row) {
-    const from = configString(row.config, 'from')
-    return row.secret && from ? { apiKey: row.secret, from } : null
-  }
-  if (orgId !== null && orgId !== DEFAULT_ORG_ID) return null
   const apiKey = env('RESEND_API_KEY')
-  const from = env('RESEND_FROM')
+  if (orgId === null) {
+    const from = env('RESEND_FROM')
+    return apiKey && from ? { apiKey, from } : null
+  }
+  const row = await orgIntegration(orgId, 'RESEND')
+  const own = row && ownDomainSender(row)
+  const sender =
+    own ??
+    (!row && orgId === DEFAULT_ORG_ID && apiKey && env('RESEND_FROM')
+      ? { apiKey, from: env('RESEND_FROM')! }
+      : apiKey && env('RESEND_SHARED_FROM')
+        ? { apiKey, from: env('RESEND_SHARED_FROM')! }
+        : null)
+  if (!sender) return null
+  const { businessName } = await messagingSettings(orgId)
+  return { apiKey: sender.apiKey, from: fromWithDisplayName(businessName, sender.from) }
+}
+
+/// The org's own domain, only when verified and only from a real provisioner:
+/// a simulated row's key and domain exist nowhere but here.
+function ownDomainSender(row: OrgIntegrationValue): ResendConfig | null {
+  if (configString(row.config, 'provisionedBy') === 'simulated') return null
+  if (configString(row.config, 'domainStatus') !== 'VERIFIED') return null
+  const apiKey = resendSecrets(row.secret).apiKey
+  const from = configString(row.config, 'from')
   return apiKey && from ? { apiKey, from } : null
 }
 

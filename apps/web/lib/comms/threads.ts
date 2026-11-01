@@ -110,13 +110,14 @@ export async function propertyForTenant(
  * explain both - a tenant with two concurrent leases refuses here for
  * exactly the same reason.
  */
-export async function candidatesForEmail(address: string, db: Db = prisma) {
+/// Within ONE org (R-293), for the reason `candidatesForPhone` gives below.
+export async function candidatesForEmail(address: string, orgId: string, db: Db = prisma) {
   const email = address.trim().toLowerCase()
   if (!email) return []
 
   const [tenants, vendors] = await Promise.all([
     db.tenant.findMany({
-      where: { email: { equals: email, mode: 'insensitive' }, active: true },
+      where: { orgId, email: { equals: email, mode: 'insensitive' }, active: true },
       select: {
         id: true,
         leaseTenants: {
@@ -127,7 +128,7 @@ export async function candidatesForEmail(address: string, db: Db = prisma) {
       },
     }),
     db.vendor.findMany({
-      where: { email: { equals: email, mode: 'insensitive' }, active: true },
+      where: { orgId, email: { equals: email, mode: 'insensitive' }, active: true },
       select: { id: true, workOrders: { take: 1, select: { propertyId: true } } },
     }),
   ])

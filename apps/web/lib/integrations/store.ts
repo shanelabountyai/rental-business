@@ -91,3 +91,18 @@ export async function orgIdForTwilioNumber(e164: string): Promise<string | null>
   })
   return row?.orgId ?? null
 }
+
+/**
+ * What a RESEND row seals (R-293): the sending key, scoped to the org's
+ * domain, and the secret the org's inbound-email webhook presents. One sealed
+ * JSON value, because the row has one `secret` and both are secret.
+ */
+export function resendSecrets(secret: string | null): { apiKey?: string; inboundSecret?: string } {
+  try {
+    const value = JSON.parse(secret ?? '') as Record<string, unknown>
+    const str = (key: string) => (typeof value[key] === 'string' && value[key] ? (value[key] as string) : undefined)
+    return { apiKey: str('apiKey'), inboundSecret: str('inboundSecret') }
+  } catch {
+    return {}
+  }
+}

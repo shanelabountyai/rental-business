@@ -45,7 +45,7 @@ export function platformSettings(env: Record<string, string | undefined>): Setti
     { name: 'STRIPE_WEBHOOK_SECRET', shown: setOrNot(value('STRIPE_WEBHOOK_SECRET')), does: 'Verifies Stripe’s webhooks, which build the ledger.', where: VERCEL },
     { name: 'TWILIO_AUTH_TOKEN', shown: setOrNot(value('TWILIO_AUTH_TOKEN')), does: 'Sends texts and verifies Twilio’s callbacks.', where: VERCEL },
     { name: 'RESEND_WEBHOOK_SECRET', shown: setOrNot(value('RESEND_WEBHOOK_SECRET')), does: 'Verifies Resend’s delivery webhooks.', where: VERCEL },
-    { name: 'INBOUND_EMAIL_SECRET', shown: setOrNot(value('INBOUND_EMAIL_SECRET')), does: 'Authorises inbound email. Unset, the route refuses everything.', where: VERCEL },
+    { name: 'INBOUND_EMAIL_SECRET', shown: setOrNot(value('INBOUND_EMAIL_SECRET')), does: 'Authorises org #0’s inbound email while it has no Resend row. Unset, its mail is refused.', where: VERCEL },
     { name: 'AUTH_SECRET', shown: setOrNot(value('AUTH_SECRET')), does: 'Signs every session and seals stored secrets. Rotating it signs everyone out.', where: VERCEL },
     { name: 'VERCEL_ENV', shown: value('VERCEL_ENV') ?? 'unset (not on Vercel)', does: 'Which Vercel environment this is.', where: 'Set by Vercel' },
     {

@@ -88,6 +88,19 @@ export function emailAddressOnly(raw: string): string {
 }
 
 /**
+ * A `From:` carrying the org's sender name (R-293, PRD 10 §4), so a renter
+ * reads the business they rent from whichever domain it is sent on. The name
+ * is staff-typed: a line break would start a new header, so CR/LF become
+ * spaces, and `"` and `\` are escaped inside the quoted string. Any display
+ * name already on `address` is replaced - the org's is the one that counts.
+ */
+export function fromWithDisplayName(name: string, address: string): string {
+  const bare = emailAddressOnly(address)
+  const clean = name.replace(/[\r\n]+/g, ' ').trim()
+  return clean ? `"${clean.replace(/[\\"]/g, '\\$&')}" <${bare}>` : bare
+}
+
+/**
  * One recipient header split into its individual mailboxes.
  *
  * ==========================================================================

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { prisma } from '@rental/db'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { saveOrgIntegration } from '@/lib/integrations/store.ts'
 import { getPreferences } from '@/lib/notifications/queries.ts'
 import { honourEmailOptOut } from './email-opt-out.ts'
 import { handleInboundEmail } from './email-intake.ts'
@@ -104,7 +105,7 @@ async function tenantAt(propertyIds: readonly string[], email: string) {
 
 const inbound = (over: Partial<Parameters<typeof receiveInboundMessage>[0]> = {}) =>
   receiveInboundMessage({
-    orgId: null,
+    orgId: 'org_0',
     channel: 'EMAIL',
     from: 'nobody@example.test',
     body: 'The boiler is making a noise.',
@@ -343,6 +344,7 @@ describe('"stop emailing me" (R-097e)', () => {
 describe('email-to-ticket (R-097f)', () => {
   const emailFrom = (over: Partial<Parameters<typeof handleInboundEmail>[0]> = {}) =>
     handleInboundEmail({
+      orgId: 'org_0',
       from: 'nobody@example.test',
       body: 'The boiler is making a noise.',
       receivedAt: new Date(),
@@ -429,5 +431,55 @@ describe('email-to-ticket (R-097f)', () => {
     const result = await emailFrom({ from: `nobody-${randomUUID().slice(0, 8)}@example.test` })
     expect(result.outcome).toBe('unrouted')
     expect(await prisma.ticket.count({ where: mine })).toBe(before)
+  })
+})
+
+// R-293. Mail posted to ANOTHER org's webhook never reaches org #0's people or
+// conversations, even with org #0's own reply key and its tenant's From:. The
+// other org deliberately uses the SAME inbound address, so the org filter is
+// the only thing that can tell them apart.
+describe('inbound email within one org (R-293)', () => {
+  let other = ''
+
+  beforeAll(async () => {
+    const slug = `inmail-org-${randomUUID().slice(0, 8)}`
+    other = (await prisma.organization.create({ data: { slug, name: slug } })).id
+    await saveOrgIntegration(other, 'RESEND', { config: { inboundAddress: 'hello@inbound.example.test' } })
+  })
+
+  afterAll(async () => {
+    await prisma.unroutedMessage.deleteMany({ where: { orgId: other } })
+    await prisma.orgIntegration.deleteMany({ where: { orgId: other } })
+    await prisma.organization.deleteMany({ where: { id: other } })
+  })
+
+  it("does not thread org #0's reply key into org #0's conversation", async () => {
+    const email = `xorg-key-${randomUUID().slice(0, 8)}@example.test`
+    const tenant = await tenantAt([propertyA], email)
+    const thread = await prisma.thread.create({
+      data: {
+        key: `tenant:${tenant.id}:property:${propertyA}:${randomUUID().slice(0, 6)}`,
+        propertyId: propertyA,
+        tenantId: tenant.id,
+        replyKey: randomUUID().replace(/-/g, '').slice(0, 24),
+      },
+    })
+    threadIds.push(thread.id)
+
+    const result = await inbound({
+      orgId: other,
+      from: email,
+      recipients: [`hello+${thread.replyKey}@inbound.example.test`],
+    })
+    expect(result.outcome).toBe('unrouted')
+    expect(await prisma.unroutedMessage.count({ where: { orgId: other, fromAddress: email } })).toBe(1)
+  })
+
+  it("does not match org #0's tenant by From:", async () => {
+    const email = `xorg-from-${randomUUID().slice(0, 8)}@example.test`
+    await tenantAt([propertyA], email)
+    expect((await inbound({ orgId: other, from: email })).outcome).toBe('unrouted')
+    // Control: the same mail on org #0's webhook routes.
+    expect((await inbound({ from: email })).outcome).toBe('routed')
   })
 })

@@ -3,6 +3,7 @@ import {
   emailAddressOnly,
   emailOptOutConfirmation,
   extractReplyKey,
+  fromWithDisplayName,
   isEmailOptOutRequest,
   htmlToText,
   isReplyKey,
@@ -293,5 +294,23 @@ describe('the opt-out confirmation', () => {
     })
     expect(none.body).not.toContain('•')
     expect(none.body).toContain('stopped sending you')
+  })
+})
+
+describe('fromWithDisplayName (R-293)', () => {
+  it("puts the org's name on the bare address, replacing any name already there", () => {
+    expect(fromWithDisplayName('Hill Country Homes', 'Notices <notices@mail.example.test>')).toBe(
+      '"Hill Country Homes" <notices@mail.example.test>',
+    )
+  })
+
+  it('cannot start a new header or break out of the quoted name', () => {
+    expect(fromWithDisplayName('A "B" \\ C\r\nBcc: x@evil.test', 'n@example.test')).toBe(
+      '"A \\"B\\" \\\\ C Bcc: x@evil.test" <n@example.test>',
+    )
+  })
+
+  it('is the bare address when there is no name', () => {
+    expect(fromWithDisplayName('  ', 'n@example.test')).toBe('n@example.test')
   })
 })

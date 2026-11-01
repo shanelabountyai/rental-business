@@ -19,7 +19,6 @@ import { candidatesForEmail, candidatesForPhone, resolveThread } from './threads
 import { inboundEmailConfig } from './inbound-email-config.ts'
 import { type InboundAttachment, storeInboundAttachments } from './inbound-attachments.ts'
 import { replyTaskAssignee } from '@/lib/comms/messaging-settings.ts'
-import { DEFAULT_ORG_ID } from '@/lib/auth/org.ts'
 
 // Writing to a thread (COMM-01, R-017).
 //
@@ -40,14 +39,15 @@ type Db = Prisma.TransactionClient | typeof prisma
  * precision, not the feature.
  */
 async function replyAddressForThread(threadId: string): Promise<string | undefined> {
-  const inbound = inboundEmailConfig()
-  if (!inbound) return undefined
-
   const thread = await prisma.thread.findUnique({
     where: { id: threadId },
-    select: { replyKey: true },
+    select: { replyKey: true, orgId: true },
   })
   if (!thread) return undefined
+  // The THREAD's org's address (R-293): a reply goes back to the business
+  // that sent the email, and arrives on that org's webhook.
+  const inbound = await inboundEmailConfig(thread.orgId)
+  if (!inbound) return undefined
 
   let key = thread.replyKey
   if (!key) {
@@ -278,12 +278,11 @@ export type InboundResult =
  * without one.
  */
 export async function receiveInboundMessage(args: {
-  /// R-292a: the org whose number was texted. Candidates come only from it
-  /// and an unrouted text lands in its queue (PRD 10 §3.2). Null is the
-  /// email path, which still has one address for every org.
-  /// ponytail: null routes email across every org and files the unrouted
-  /// ones in org #0; R-293 gives each org its address and passes it here.
-  orgId: string | null
+  /// The org the message was sent to: the number texted (R-292a) or the host
+  /// the inbound-email webhook was posted to (R-293). Candidates and reply
+  /// keys come only from it, and an unrouted message lands in its queue
+  /// (PRD 10 §3.2).
+  orgId: string
   channel: MessageChannel
   from: string
   body: string
@@ -329,16 +328,18 @@ export async function receiveInboundMessage(args: {
   // of them is `decideRoute`'s AMBIGUOUS case, and the key says which. It is
   // only ever trusted to pick between conversations that already exist -
   // never to create one, and never to say who somebody is.
-  const inbound = inboundEmailConfig()
-  if (args.channel === 'EMAIL' && inbound && args.recipients && args.recipients.length > 0) {
+  const inbound = args.channel === 'EMAIL' ? await inboundEmailConfig(args.orgId) : null
+  if (inbound && args.recipients && args.recipients.length > 0) {
     const key = extractReplyKey({
       recipients: args.recipients,
       inboundLocalPart: inbound.localPart,
       inboundDomain: inbound.domain,
     })
     if (key) {
-      const thread = await prisma.thread.findUnique({
-        where: { replyKey: key },
+      // Within the org: another org's key on this org's webhook names no
+      // conversation here, and falls through like any unknown key.
+      const thread = await prisma.thread.findFirst({
+        where: { replyKey: key, orgId: args.orgId },
         select: { id: true, propertyId: true, tenantId: true, vendorId: true },
       })
       // A key naming no thread falls through rather than failing. A deleted
@@ -371,8 +372,8 @@ export async function receiveInboundMessage(args: {
   const e164 = args.channel === 'EMAIL' ? null : normalizePhone(args.from)
   const candidates =
     args.channel === 'EMAIL'
-      ? await candidatesForEmail(args.from)
-      : e164 && args.orgId
+      ? await candidatesForEmail(args.from, args.orgId)
+      : e164
         ? await candidatesForPhone(e164, args.orgId)
         : []
   const decision = decideRoute(candidates)
@@ -380,7 +381,7 @@ export async function receiveInboundMessage(args: {
   if (decision.outcome === 'unrouted') {
     const unrouted = await prisma.unroutedMessage.create({
       data: {
-        orgId: args.orgId ?? DEFAULT_ORG_ID,
+        orgId: args.orgId,
         channel: args.channel,
         // Stored normalized where possible, as received where not - an
         // unparseable number is still evidence of who tried to make contact.

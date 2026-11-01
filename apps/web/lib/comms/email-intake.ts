@@ -46,6 +46,8 @@ export type EmailIntakeResult =
   | { outcome: 'ticket_opened'; threadId: string; ticketId: string }
 
 export async function handleInboundEmail(args: {
+  /// The org whose webhook it arrived on (R-293).
+  orgId: string
   from: string
   body: string
   receivedAt: Date
@@ -55,7 +57,7 @@ export async function handleInboundEmail(args: {
   hasReplyKey: boolean
 }): Promise<EmailIntakeResult> {
   const routed = await receiveInboundMessage({
-    orgId: null,
+    orgId: args.orgId,
     channel: 'EMAIL',
     from: args.from,
     body: args.body,

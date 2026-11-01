@@ -67,7 +67,8 @@ describe('the Resend driver', () => {
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
     expect(url).toBe('https://api.resend.com/emails')
     expect(JSON.parse(String(init.body))).toEqual({
-      from: 'notifications@example.test',
+      // The org's sender name on it (R-293); which name is org #0's setting.
+      from: expect.stringMatching(/^".+" <notifications@example\.test>$/),
       to: ['tenant@example.test'],
       subject: 'Rent is due',
       text: 'Your rent of $1,650.00 is due on the 1st.',
@@ -226,6 +227,43 @@ describe("an org's own credentials (R-275)", () => {
     vi.stubEnv('VERCEL_ENV', 'production')
     expect(await adapter.supports('SMS', orgB)).toBe(false)
     await prisma.orgIntegration.deleteMany({ where: { orgId: orgB } })
+  })
+
+  const resendRow = (config: Record<string, string>) =>
+    saveOrgIntegration(orgA, 'RESEND', {
+      config: { from: 'notices@mail.a.example.test', ...config },
+      secret: JSON.stringify({ apiKey: 're_org_a', inboundSecret: 'in_a' }),
+    })
+  const emailBody = async () => {
+    const fetchMock = stubFetch(response(200, { id: 'e1' }))
+    await adapter.send({ channel: 'EMAIL', to: 'tenant@example.test', subject: 's', body: 'b', orgId: orgA })
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    return { from: JSON.parse(String(init.body)).from, auth: (init.headers as Record<string, string>).authorization }
+  }
+
+  it("sends from the org's own domain, on its own key, once Resend has verified it (R-293)", async () => {
+    await resendRow({ domainStatus: 'VERIFIED' })
+    expect(await emailBody()).toEqual({
+      from: `"${stamp} A" <notices@mail.a.example.test>`,
+      auth: 'Bearer re_org_a',
+    })
+  })
+
+  it('never sends from an unverified domain: the shared address under the org name, or nothing', async () => {
+    await resendRow({ domainStatus: 'PENDING' })
+    vi.stubEnv('RESEND_SHARED_FROM', 'mail@shared.example.test')
+    expect(await emailBody()).toEqual({ from: `"${stamp} A" <mail@shared.example.test>`, auth: 'Bearer re_test_key' })
+    vi.stubEnv('VERCEL_ENV', 'production')
+    expect(await adapter.supports('EMAIL', orgA)).toBe(true)
+    vi.stubEnv('RESEND_SHARED_FROM', '')
+    expect(await adapter.supports('EMAIL', orgA)).toBe(false)
+  })
+
+  it('treats a simulated verified domain as no domain', async () => {
+    await resendRow({ domainStatus: 'VERIFIED', provisionedBy: 'simulated' })
+    vi.stubEnv('VERCEL_ENV', 'production')
+    expect(await adapter.supports('EMAIL', orgA)).toBe(false)
+    await prisma.orgIntegration.deleteMany({ where: { orgId: orgA, provider: 'RESEND' } })
   })
 
   it('stores the secret sealed, never as plaintext', async () => {
