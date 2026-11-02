@@ -643,6 +643,7 @@ model Organization {
   applicantInfoRequests          ApplicantInfoRequest[]
   applicantNotes                 ApplicantNote[]
   integrations                   OrgIntegration[]
+  platformFees                   PlatformFee[]
   health                         OrgHealth?
 }
 
@@ -719,6 +720,42 @@ model SimulatedResendDomain {
   failWith  String?
   closedAt  DateTime?
   createdAt DateTime  @default(now())
+}
+
+/// R-277b: the SIMULATED Stripe's own record of a connected account (D-27,
+/// D-7). Org-less, keyed by Stripe's account id, like a provider's database.
+/// The simulated hosted onboarding page writes it; `account.updated` events
+/// are built from it, never from our `OrgIntegration.config`.
+model SimulatedStripeAccount {
+  accountId        String    @id
+  detailsSubmitted Boolean   @default(false)
+  chargesEnabled   Boolean   @default(false)
+  payoutsEnabled   Boolean   @default(false)
+  /// Stripe's `requirements.currently_due`, as told to the simulator.
+  currentlyDue     String[]
+  disabledReason   String?
+  deauthorizedAt   DateTime?
+  createdAt        DateTime  @default(now())
+}
+
+/// R-277b (D-316, D-322, D-379): the platform's application fee on one
+/// charge, from `application_fee.created`. The OWNER's cost, never the
+/// tenant's, so it is its own table and never a LedgerEntry: every balance in
+/// the product sums LedgerEntry. Append-only by trigger.
+model PlatformFee {
+  id                     String       @id @default(cuid())
+  /// Named by the writer from the fee's connected account; immutable (trigger).
+  orgId                  String
+  organization           Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  stripeApplicationFeeId String
+  stripeAccountId        String
+  stripeChargeId         String?
+  amountCents            Int
+  occurredAt             DateTime
+  stripeEventId          String
+  createdAt              DateTime     @default(now())
+
+  @@unique([orgId, stripeApplicationFeeId])
 }
 
 /// R-303 (PRD 11 §5.5, D-354): what the platform console may know about an

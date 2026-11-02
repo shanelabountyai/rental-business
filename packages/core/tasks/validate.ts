@@ -65,6 +65,8 @@ export const TASK_SUBJECT_TYPES = [
   'Lease',
   'LeasePartyChange',
   'Notification',
+  /// R-277b: about the whole org - its Stripe account cannot collect.
+  'Organization',
   'RenterInsurancePolicy',
   'Showing',
   'Tenant',

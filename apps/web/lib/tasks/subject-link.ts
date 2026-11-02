@@ -73,6 +73,7 @@ export const SUBJECT_ROUTES: Record<TaskSubjectType, SubjectRoute | null> = {
   ComplianceItem: { permission: 'property.read', label: 'Open the compliance item', hrefs: direct((id) => `/compliance/${id}`) },
   Inspection: { permission: 'inspection.read', label: 'Open the inspection', hrefs: direct((id) => `/inspections/${id}`) },
   Thread: { permission: 'message.read', label: 'Open the conversation', hrefs: direct((id) => `/messages/${id}`) },
+  Organization: { permission: 'billing.connect', portfolioWide: true, label: 'Open the Stripe account', hrefs: direct(() => '/money/stripe') },
   JobRun: { permission: 'job.manage', portfolioWide: true, label: 'Open scheduled jobs', hrefs: direct(() => '/jobs') },
 
   // R-170's link, now one row of this table. The disbursement form needs the

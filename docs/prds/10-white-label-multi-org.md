@@ -151,6 +151,8 @@ With Standard accounts the platform makes **direct charges**: every Billing obje
 - **Payouts are not modelled** (they are the org's, visible in their Stripe dashboard); the ledger projection gains one entry kind, `PLATFORM_FEE`, posted from `application_fee.created` so an owner statement shows gross rent, platform fee, net.
 - The org can disconnect (deauthorise) from their Stripe dashboard: `account.application.deauthorized` sets status `DISABLED`, raises an owner Task, and freezes collection. Nothing is deleted.
 
+**Settled by R-277b (D-379, 2026-11-02):** the platform fee is its own append-only `PlatformFee` table, not a `LedgerEntry` kind, because every balance sums `LedgerEntry` and the fee is the owner's cost. `application_fee.created` arrives on the **platform** endpoint (the fee is a platform object) and is routed by the fee's `account`. Onboarding lives at `/money/stripe` (`billing.connect`, owner-only); org #0 cannot connect, since it bills on the platform account.
+
 ## 3. SMS — Twilio subaccount, A2P 10DLC, TCPA, per organisation
 
 **Goal.** Each org texts from its own number, registered under its own brand and campaign, with consent and opt-out that belong to that org.

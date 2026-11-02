@@ -330,6 +330,49 @@ describe('interpretStripeEvent', () => {
     return event('invoice.updated', object, { amount_paid: paidBefore })
   }
 
+  // R-277b: the connected account's own events, none of which names a customer.
+  it('reads an account status from charges_enabled and details_submitted, with Stripe\'s reason', () => {
+    expect(interpretStripeEvent(event('account.updated', { id: 'acct_1', charges_enabled: true }))).toEqual({
+      outcome: 'account_status',
+      status: 'ENABLED',
+      reason: null,
+    })
+    expect(
+      interpretStripeEvent(
+        event('account.updated', {
+          id: 'acct_1',
+          charges_enabled: false,
+          details_submitted: true,
+          requirements: { currently_due: ['external_account'], disabled_reason: 'requirements.past_due' },
+        }),
+      ),
+    ).toEqual({ outcome: 'account_status', status: 'RESTRICTED', reason: 'requirements.past_due' })
+    expect(
+      interpretStripeEvent(
+        event('account.updated', { id: 'acct_1', requirements: { currently_due: ['business_type', 'tos_acceptance.date'] } }),
+      ),
+    ).toEqual({ outcome: 'account_status', status: 'ONBOARDING', reason: 'currently due: business_type, tos_acceptance.date' })
+  })
+
+  it('reads a deauthorisation and an application fee', () => {
+    expect(interpretStripeEvent(event('account.application.deauthorized', { id: 'ca_1' }))).toEqual({
+      outcome: 'account_deauthorized',
+    })
+    expect(
+      interpretStripeEvent(event('application_fee.created', { id: 'fee_1', account: 'acct_1', amount: 250, charge: 'ch_1' })),
+    ).toEqual({
+      outcome: 'platform_fee',
+      fee: {
+        stripeApplicationFeeId: 'fee_1',
+        stripeAccountId: 'acct_1',
+        stripeChargeId: 'ch_1',
+        amountCents: 250,
+        occurredAt: new Date(1_800_000_000_000),
+      },
+    })
+    expect(interpretStripeEvent(event('application_fee.created', { id: 'fee_1', amount: 250 })).outcome).toBe('ignore')
+  })
+
   it('projects a successful invoice payment as money in', () => {
     const result = interpretStripeEvent(
       moneyIn({

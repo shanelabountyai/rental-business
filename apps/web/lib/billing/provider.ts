@@ -5,6 +5,7 @@ import { SimulatedBillingProvider } from './simulated-adapter.ts'
 import { StripeBillingProvider } from './stripe-adapter.ts'
 import { DEFAULT_ORG_ID } from '@/lib/auth/org.ts'
 import { orgIntegration } from '@/lib/integrations/store.ts'
+import { assertCanCollect } from '@/lib/integrations/stripe-onboarding.ts'
 
 // The wired provider, in its own module for the same reason
 // lib/notifications/provider.ts is: so callers can import it without
@@ -33,8 +34,44 @@ import { orgIntegration } from '@/lib/integrations/store.ts'
  */
 export function getBillingProvider(orgId: string): BillingProvider {
   const key = process.env.STRIPE_SECRET_KEY?.trim()
-  if (!key) return new SimulatedBillingProvider(orgId)
-  return new StripeBillingProvider(key, () => stripeAccountFor(orgId))
+  return gated(orgId, key ? new StripeBillingProvider(key, () => stripeAccountFor(orgId)) : new SimulatedBillingProvider(orgId))
+}
+
+/**
+ * The calls that START collecting: a new customer, subscription, saved
+ * method, bill or charge (R-277b, PRD 10 §2.2). Refused, with an owner Task,
+ * until the org's account is ENABLED - on both drivers, so the simulator
+ * cannot collect where Stripe would not. Everything else passes: reads,
+ * cancels and recording cash already in hand must keep working on a
+ * restricted account, and the webhook must still project money that moved
+ * before the restriction (D-11).
+ */
+const COLLECTING: ReadonlySet<string> = new Set<keyof BillingProvider>([
+  'createCustomer',
+  'createSubscription',
+  'createSetupIntent',
+  'resumeSubscription',
+  'addInvoiceItem',
+  'invoiceOneOffCharge',
+  'addSubscriptionItem',
+  'createPaymentIntent',
+  'createApplicationFeeCustomer',
+  'createApplicationFeePaymentIntent',
+])
+
+function gated(orgId: string, driver: BillingProvider): BillingProvider {
+  return new Proxy(driver, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver)
+      if (typeof value !== 'function') return value
+      // Bound to the driver: its `#private` fields refuse a Proxy as `this`.
+      if (typeof prop !== 'string' || !COLLECTING.has(prop)) return value.bind(target)
+      return async (...args: unknown[]) => {
+        await assertCanCollect(orgId)
+        return value.apply(target, args)
+      }
+    },
+  })
 }
 
 export class NoConnectedAccountError extends Error {

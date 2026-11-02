@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { stripeSignatureHeader } from '@rental/core/billing'
 import { prisma } from '@rental/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { getBillingProvider, NoConnectedAccountError } from '@/lib/billing/provider.ts'
+import { getBillingProvider } from '@/lib/billing/provider.ts'
+import { CollectionRefusedError } from '@/lib/integrations/stripe-onboarding.ts'
 import { saveOrgIntegration } from '@/lib/integrations/store.ts'
 import { POST as connect } from './route.ts'
 import { POST as platform } from '../route.ts'
@@ -122,7 +123,8 @@ describe("an org's billing provider", () => {
     process.env.STRIPE_SECRET_KEY = 'sk_test_r277a'
     const orgB = `${orgA}-unconnected`
     await expect(getBillingProvider(orgB).createSetupIntent('cus_x')).rejects.toBeInstanceOf(
-      NoConnectedAccountError,
+      // R-277b: refused by the collection gate before the header is resolved.
+      CollectionRefusedError,
     )
     restore('STRIPE_SECRET_KEY', previous.key)
   })

@@ -144,6 +144,16 @@ export const HANDLED_EVENTS = [
   // did everything asked of them must not end up without autopay because
   // their phone slept.
   'setup_intent.succeeded',
+
+  // ---- The org's connected account (R-277b, PRD 10 §2.2, §2.4) ----
+  //
+  // Connect events, delivered with `event.account`. They move no money: they
+  // say whether the org may collect, which is `OrgIntegration(STRIPE).status`.
+  'account.updated',
+  'account.application.deauthorized',
+  // A PLATFORM event (the fee object lives on the platform account), so it
+  // reaches the platform endpoint with the connected account on the object.
+  'application_fee.created',
 ] as const
 export type HandledEvent = (typeof HANDLED_EVENTS)[number]
 
@@ -245,9 +255,54 @@ export type InterpretResult =
   /// has a payment method on file and the subscription can be switched to
   /// charge automatically.
   | { outcome: 'autopay_enrolled'; enrolment: AutopayEnrolment }
+  /// The connected account's state changed (R-277b). Moves no money.
+  | { outcome: 'account_status'; status: ConnectStatus; reason: string | null }
+  /// The org disconnected this platform from its Stripe dashboard.
+  | { outcome: 'account_deauthorized' }
+  /// The platform's cut of a charge (D-322). The owner's cost, never the
+  /// tenant's, so it is not a ProjectionIntent and never reaches LedgerEntry.
+  | { outcome: 'platform_fee'; fee: PlatformFeeFact }
   /// Recognised, but nothing to project - or unrecognised entirely. Either
   /// way the event is acknowledged so Stripe stops retrying it.
   | { outcome: 'ignore'; reason: string }
+
+/// `OrgIntegration(STRIPE).status` once an account exists (PRD 10 §2.2).
+/// NOT_STARTED and DISABLED are ours, never Stripe's: no account yet, and
+/// deauthorised.
+export type ConnectStatus = 'ONBOARDING' | 'RESTRICTED' | 'ENABLED'
+
+export interface PlatformFeeFact {
+  stripeApplicationFeeId: string
+  /// The connected account the fee came out of; names the org.
+  stripeAccountId: string
+  /// The charge on the connected account, for walking back to Stripe.
+  stripeChargeId: string | null
+  amountCents: number
+  occurredAt: Date
+}
+
+/**
+ * The status an Account object implies. Collection needs `charges_enabled`
+ * only: payouts are the org's (PRD 10 §2.4), so an account Stripe will charge
+ * on but not yet pay out from is still ENABLED. Submitted but not chargeable
+ * is RESTRICTED; anything earlier is ONBOARDING. The reason is Stripe's own:
+ * `disabled_reason`, else the requirements currently due.
+ */
+export function connectAccountStatus(account: Record<string, unknown>): {
+  status: ConnectStatus
+  reason: string | null
+} {
+  const requirements =
+    account.requirements && typeof account.requirements === 'object'
+      ? (account.requirements as Record<string, unknown>)
+      : {}
+  const due = Array.isArray(requirements.currently_due)
+    ? requirements.currently_due.filter((r): r is string => typeof r === 'string')
+    : []
+  const reason = str(requirements, 'disabled_reason') ?? (due.length ? `currently due: ${due.join(', ')}` : null)
+  if (account.charges_enabled === true) return { status: 'ENABLED', reason: null }
+  return { status: account.details_submitted === true ? 'RESTRICTED' : 'ONBOARDING', reason }
+}
 
 function str(source: Record<string, unknown>, key: string): string | null {
   const value = source[key]
@@ -283,6 +338,29 @@ export function interpretStripeEvent(event: StripeEventEnvelope): InterpretResul
   }
 
   const occurredAt = new Date(event.created * 1000)
+
+  // Before the customer check: none of these three carries a customer.
+  if (event.type === 'account.updated') {
+    return { outcome: 'account_status', ...connectAccountStatus(object) }
+  }
+  if (event.type === 'account.application.deauthorized') return { outcome: 'account_deauthorized' }
+  if (event.type === 'application_fee.created') {
+    const amount = int(object, 'amount')
+    const account = str(object, 'account')
+    if (amount == null || amount <= 0 || !account) {
+      return { outcome: 'ignore', reason: 'application fee named no amount or account' }
+    }
+    return {
+      outcome: 'platform_fee',
+      fee: {
+        stripeApplicationFeeId: stripeObjectId,
+        stripeAccountId: account,
+        stripeChargeId: str(object, 'charge'),
+        amountCents: amount,
+        occurredAt,
+      },
+    }
+  }
 
   // Before the customer check, because a Dispute never carries one.
   if (event.type === 'charge.dispute.closed') {

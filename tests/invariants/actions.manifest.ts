@@ -51,6 +51,10 @@ export const manifest: Record<string, Entry> = {
   'lib/auth/actions.ts#completePasswordReset': { public: 'gated by the reset token in the form' },
   'lib/auth/actions.ts#requestTenantMagicLink': { public: 'the tenant sign-in form; same answer whether or not the address is on a lease' },
   'lib/auth/actions.ts#requestGuarantorMagicLink': { public: 'the guarantor sign-in form; same answer whether or not the address is on a guarantee' },
+  // lib/integrations/stripe-actions.ts (R-277b): the org is the session's.
+  // The account id is Stripe's, not a row id; the action 404s one outside the org.
+  'lib/integrations/stripe-actions.ts#connectStripe': {},
+  'lib/integrations/stripe-actions.ts#submitSimulatedStripe': { accountId: 'value' },
   // lib/platform/auth-actions.ts (R-294b): every one refuses off PLATFORM_HOST
   'lib/platform/auth-actions.ts#startPlatformSignIn': { public: 'the platform sign-in form' },
   'lib/platform/auth-actions.ts#completePlatformMfa': { public: 'second step of platform sign-in, gated by the challenge cookie' },

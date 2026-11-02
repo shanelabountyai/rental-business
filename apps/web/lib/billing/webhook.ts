@@ -25,6 +25,7 @@ import { applyPortalPayment, UNPUSHED_CLAIM_WINDOW_MS } from '@/lib/payments/out
 import { assessNsfFee } from '@/lib/ledger/nsf-fees.ts'
 import { leaseBalanceCents } from '@/lib/ledger/queries.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
+import { applyAccountStatus, applyDeauthorized, recordPlatformFee } from '@/lib/integrations/stripe-onboarding.ts'
 
 // The webhook → projection pipeline (D-11, R-034).
 //
@@ -164,6 +165,24 @@ async function projectClaimed(
     const detail = await enrolAutopay(orgId, interpretation.enrolment)
     await recordOutcome(orgId, event.id, 'ignored', detail)
     return { outcome: 'ignored', detail }
+  }
+
+  // The org's connected account (R-277b): its status, its disconnection,
+  // and the platform's fee. None moves the tenant ledger.
+  if (interpretation.outcome === 'account_status') {
+    const detail = await applyAccountStatus(orgId, { ...interpretation, at: new Date(event.created * 1000) })
+    await recordOutcome(orgId, event.id, 'ignored', detail)
+    return { outcome: 'ignored', detail }
+  }
+  if (interpretation.outcome === 'account_deauthorized') {
+    const detail = await applyDeauthorized(orgId)
+    await recordOutcome(orgId, event.id, 'ignored', detail)
+    return { outcome: 'ignored', detail }
+  }
+  if (interpretation.outcome === 'platform_fee') {
+    const detail = await recordPlatformFee(orgId, interpretation.fee, event.id)
+    await recordOutcome(orgId, event.id, 'projected', detail)
+    return { outcome: 'projected', detail }
   }
 
   const intent = await resolveRefundInvoice(orgId, interpretation.intent)
