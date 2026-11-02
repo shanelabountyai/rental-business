@@ -15213,7 +15213,7 @@ Tests: `lib/platform/settings.test.ts` (no secret value in the output, the kill 
 **Gate.** lint (0 errors, 16 warnings, unchanged), typecheck, `check:ship-deps`, `db:drift` and `db:ci` (from scratch, seed and drift) are clean. `npm test`: 3,762 passed + 4 skipped of 3,766. e2e against the production build, `platform-email-provisioning`, `platform-sms-provisioning` and `platform-orgs`, on both projects: 10 passed of 10 listed, none flaky.
 
 ## R-277a — Money routed per org
-**Commit:** `PENDING`  ·  **Date:** 2026-11-02
+**Commit:** `beeb530`  ·  **Date:** 2026-11-02
 
 **What it built.** Migration `20261102120000_stripe_per_org` keys `ProcessedStripeEvent` by `(orgId, stripeEventId)` and drops its `org_0` default. It makes `LeasePayer.stripeCustomerId`/`stripeSubscriptionId` and `Payment.stripePaymentIntentId` unique per org, and adds the `OrgIntegration_stripe_account` expression index (one connected account, one org). `getBillingProvider(orgId)` is built per call. The Stripe driver adds `Stripe-Account` to every request, resolved lazily from the org's STRIPE row. `processStripeEvent(orgId, event)` scopes the claim and every lookup that starts from a Stripe id: payer, applicant, payment, refund invoice, dispute and autopay enrolment. `lib/billing/webhook-route.ts` holds the verify-parse-resolve-project handler that two endpoints share. The platform endpoint is org #0's and drops events that name an account; `/api/webhooks/stripe/connect` (`STRIPE_CONNECT_WEBHOOK_SECRET`) resolves the org from the signed `event.account`. `/portal/pay` and `/apply/[token]` pass `stripeAccount` to `loadStripe`. All ~30 billing callers pass the org of the row they bill.
 
