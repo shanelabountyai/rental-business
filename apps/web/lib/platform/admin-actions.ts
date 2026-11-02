@@ -218,8 +218,17 @@ export async function managePlatformAdmin(
           where: { id: target.id },
           data: { active: false, deactivatedAt: now, sessionsValidFrom: now },
         })
-        // ponytail: support grants arrive with R-295, which ends them here.
-        await audit(tx, 'platform_admin.deactivated', { active: false })
+        // §2.7 (R-295a): every grant they hold ends in the same transaction.
+        // One already past its window is stamped EXPIRY, as the sweep would.
+        await tx.supportAccessGrant.updateMany({
+          where: { platformAdminId: target.id, endedAt: null, deniedAt: null, expiresAt: { lte: now } },
+          data: { endedAt: now, endedByType: 'EXPIRY' },
+        })
+        const { count: grantsEnded } = await tx.supportAccessGrant.updateMany({
+          where: { platformAdminId: target.id, endedAt: null, deniedAt: null },
+          data: { endedAt: now, endedByType: 'SYSTEM' },
+        })
+        await audit(tx, 'platform_admin.deactivated', { active: false, grantsEnded })
       })
       return done(`${target.name} is deactivated. Every session they held has ended.`)
     }

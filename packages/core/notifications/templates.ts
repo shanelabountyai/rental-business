@@ -2506,7 +2506,73 @@ export const jurisdictionRulePublishedTemplate: NotificationTemplate<Jurisdictio
   },
 }
 
+/// Context for the two `support_access` templates (R-295a, PRD 11 §4.16).
+/// Times are rendered by the caller in the org's zone, as `expiresIn` is for
+/// an auth link: only the caller knows which zone the org reads.
+export interface SupportAccessContext {
+  orgName: string
+  adminName: string
+  /// The admin's words, verbatim (§4.7).
+  reason: string
+  /// "4 hours".
+  duration: string
+  /// Break-glass only: when it opened and when it ends.
+  openedAt?: string
+  endsAt?: string
+  /// `/settings/support-access` on the org's own host.
+  url: string
+}
+
+/**
+ * Break-glass (§4.16): sent at once to every active owner on every channel
+ * their preferences allow. Says what happened before anything else, because
+ * the owner reading it did not ask for it.
+ */
+export const supportBreakGlassTemplate: NotificationTemplate<SupportAccessContext> = {
+  key: 'support.break_glass',
+  category: 'support_access',
+  channels: ['EMAIL', 'SMS'],
+  render: (c, channel) =>
+    channel === 'SMS'
+      ? {
+          body: `Platform support opened emergency access to ${c.orgName} at ${c.openedAt}. Reason: ${c.reason} It ends at ${c.endsAt}. You can end it now: ${c.url}`,
+        }
+      : {
+          subject: `Platform support opened emergency access to ${c.orgName}`,
+          body: [
+            `Platform support (${c.adminName}) opened emergency access to ${c.orgName} at ${c.openedAt}.`,
+            '',
+            `Reason: ${c.reason}`,
+            '',
+            `It is read-only and ends at ${c.endsAt}. You can end it now: ${c.url}`,
+          ].join('\n'),
+        },
+}
+
+/**
+ * A normal request (§4.7): the owners are asked, and nothing opens until one
+ * approves. Email only - "Task, not text" (§4.16): the Task is the prompt to
+ * act, and a request is not an emergency worth a text.
+ */
+export const supportRequestedTemplate: NotificationTemplate<SupportAccessContext> = {
+  key: 'support.requested',
+  category: 'support_access',
+  channels: ['EMAIL'],
+  render: (c) => ({
+    subject: `Platform support is asking to view ${c.orgName}`,
+    body: [
+      `Platform support (${c.adminName}) is asking for ${c.duration} of read-only access to ${c.orgName}.`,
+      '',
+      `Reason: ${c.reason}`,
+      '',
+      `Nothing opens until an owner approves. Approve or deny it here: ${c.url}`,
+    ].join('\n'),
+  }),
+}
+
 export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = {
+  [supportBreakGlassTemplate.key]: supportBreakGlassTemplate as unknown as NotificationTemplate<never>,
+  [supportRequestedTemplate.key]: supportRequestedTemplate as unknown as NotificationTemplate<never>,
   [jurisdictionRulePublishedTemplate.key]:
     jurisdictionRulePublishedTemplate as unknown as NotificationTemplate<never>,
   [tenantMagicLinkTemplate.key]:

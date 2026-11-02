@@ -124,6 +124,15 @@ export const AUDIT_ACTIONS = [
   'integration.polled',
   'integration.retired',
   'platform_role.revoked',
+  /// R-295a (PRD 11 §4.7, §4.14, §4.16): a support grant's lifecycle. The
+  /// platform's rows carry `supportGrantId`; an owner's are STAFF rows about
+  /// the grant (entityType SupportAccessGrant), which the CHECK keeps off it.
+  'support_grant.requested',
+  'support_grant.break_glass_opened',
+  'support_grant.approved',
+  'support_grant.denied',
+  'support_grant.ended',
+  'support_grant.acknowledged',
   /// R-302b: the other platform owners were emailed about a lockout (§2.5);
   /// `after.sent` is each recipient and outcome.
   'auth.lockout_notified',
@@ -1127,6 +1136,9 @@ export function isReasonCode(value: string): value is ReasonCode {
  * would be useless in the dispute it exists for.
  */
 export const REASON_REQUIRED: ReadonlySet<AuditAction> = new Set([
+  // R-295a: the org reads why support asked, or broke the glass, verbatim.
+  'support_grant.requested',
+  'support_grant.break_glass_opened',
   'ledger.adjusted',
   // R-031. Billing a tenant for a repair is a judgement — that this damage
   // was theirs, and that this share of the cost is fair. A chargeback with no

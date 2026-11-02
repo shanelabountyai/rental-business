@@ -52,6 +52,9 @@ interface AuditFields {
   after?: Snapshot
   reasonCode?: ReasonCode | null
   reason?: string | null
+  /// R-295a (PRD 11 §5.4): the support grant a PLATFORM act was done under or
+  /// about. The database refuses it on any other actor's row.
+  supportGrantId?: string | null
 }
 
 /**
@@ -132,6 +135,7 @@ export async function recordAudit(
       after: (change.after ?? undefined) as Prisma.InputJsonValue | undefined,
       reasonCode: input.reasonCode ?? null,
       reason: reason || null,
+      supportGrantId: input.supportGrantId ?? null,
     },
   })
 }

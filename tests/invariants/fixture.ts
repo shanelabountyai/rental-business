@@ -165,6 +165,14 @@ async function seedOrg(key: string): Promise<Org> {
     },
   })
   o.rows.set('StaffUser', staff.id)
+  // A support grant's admin (R-295a). Org-less and undeletable, so one shared
+  // admin who never signs in (no credential) serves every harness org.
+  const admin = await prisma.platformAdmin.upsert({
+    where: { email: 'org-harness-admin@example.test' },
+    create: { email: 'org-harness-admin@example.test', name: 'Harness admin' },
+    update: {},
+  })
+  o.rows.set('PlatformAdmin', admin.id)
 
   // The tenant is on the lease, so a tenant action has a tenancy to act on.
   await rowOf(o, 'leaseTenant')

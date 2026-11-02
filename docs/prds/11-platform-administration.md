@@ -216,7 +216,7 @@ Refusals name the missing permission (same `/no-access` pattern as `guard.ts:104
 
 **While acting: the banner.** Every page on the org host under a support session renders, above the header, an `<aside aria-label="Support session">`: "You are viewing **{org}** as platform support · read-only · ends at {time, org's timezone} · [End now]". Not `role="alert"` (the route announcer already is one, CLAUDE.md), contrast ≥ 4.5:1 in both themes, stays visible at 375 px (wraps, never truncates the end time).
 
-**Ending.** "End now" (either side), owner revoke, expiry, or admin deactivation sets `endedAt`/`endedByType`; the next request on the support session fails `principalIsStillValid` and lands on a page saying the session ended and why. `/platform/grants` lists the admin's own grants (live, pending, ended) and, with `audit.read`, every admin's.
+**Ending.** "End now" (either side), owner revoke, expiry, or admin deactivation sets `endedAt`/`endedByType`; the next request on the support session fails `principalIsStillValid` and lands on a page saying the session ended and why. `/platform/grants` lists the admin's own grants (live, pending, ended) and, with `audit.read`, every admin's. *(2026-11-02, D-380: the console's permission is `platformAudit.read`, D-366. "End now" from the console ends only the admin's own grant.)*
 
 ### 4.8 Platform admins and roles — `/platform/admins`, `/platform/admins/new`, `/platform/admins/[id]`
 
@@ -259,6 +259,7 @@ A frozen or offboarding org is still listed and readable; its actions are only t
 
 - **Who:** an owner-role member (`staff.manage` and `audit.read` both held portfolio-wide — today's owner); read-only for `audit.read` holders.
 - **Shows:** pending requests (admin name, reason, requested duration, requested at) with **Approve** (duration picker capped at the requested one, step-up) and **Deny** (optional note); live grants with time left and **Revoke now**; history of every grant with "What was viewed" linking to §4.15 filtered to that grant.
+- **Step-up (2026-11-02, D-380):** no org step-up existed, so Approve asks for the owner's authenticator code in the same form and verifies it at the press.
 - **Rules:** approving needs an owner with a live membership in this org (DB-checked, §5.3); a support session can never reach this page (the actor lacks `staff.manage`), so support cannot approve itself.
 - **Empty:** "Platform support has never asked to view your organisation."
 - **AA / mobile:** each request is a card with its buttons labelled with the admin's name ("Approve request from Dana"), so two pending requests never share an accessible name (CLAUDE.md).
@@ -272,7 +273,7 @@ A frozen or offboarding org is still listed and readable; its actions are only t
 ### 4.16 Org side: break-glass notification and banner
 
 - **Notification:** new locked category `support_access` (beside `account_access`, `packages/core/notifications/categories.ts:149,262-277`): "Platform support opened emergency access to {org} at {time}. Reason: {reason}. It ends at {time}. You can end it now: {link}." Email and SMS per preferences; locked because an owner who muted it could never learn their org was entered. Also sent (Task, not text) for a normal request.
-- **Banner:** on every owner's dashboard until one owner presses "Seen": "Platform support used emergency access on {date} — see what was viewed." `<aside>`, not an alert.
+- **Banner:** on every owner's dashboard until one owner presses "Seen": "Platform support used emergency access on {date} — see what was viewed." `<aside>`, not an alert. *(2026-11-02, D-380: built in R-295a; the link goes to `/settings/support-access` until R-295b's `/settings/audit?grant=` exists. While the org's notifications are off the notice is held and sent on switch-on, D-359.)*
 
 ### 4.17 Org side: accept an invitation — `/invite/[token]` (R-304)
 
@@ -325,7 +326,7 @@ Invariants (trigger unless stated):
 - Transitions only forward: pending → approved | denied | ended; approved → ended; once `endedAt`/`deniedAt` is set nothing else changes except the acknowledgement columns.
 - CHECK: `kind = 'BREAK_GLASS'` ⇒ `approvedByStaffId IS NULL` and `expiresAt - startsAt <= interval '60 minutes'`; `kind = 'REQUESTED'` ⇒ `expiresAt - startsAt <= interval '24 hours'` and `startsAt` set only with `approvedAt`.
 - Approval: `approvedByStaffId` must hold a live `OrgMembership` in `orgId` and a live owner-role `StaffAssignment` there with null property and entity (checked at commit).
-- Partial unique: one live grant per `(orgId, platformAdminId)`; one live `BREAK_GLASS` per `orgId`.
+- Partial unique: one live grant per `(orgId, platformAdminId)`; one live `BREAK_GLASS` per `orgId`. *(2026-11-02, D-380: an index cannot read `now()`, so both are over OPEN rows - not ended, not denied, a pending request included - and every writer that opens a grant first stamps EXPIRY on that org's expired rows in the same transaction.)*
 - `orgId` here is the grant's subject, so the table is org-owned for ORG-06 and carries `orgId NOT NULL`; it is written only by platform code and by the org's approve/deny/revoke actions.
 - Expiry needs no job: liveness is `endedAt IS NULL AND now() < expiresAt`, read on every request. A nightly sweep stamps `endedByType: EXPIRY` for the record.
 

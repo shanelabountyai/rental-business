@@ -13,6 +13,7 @@ import { pollResendProvisioning } from '@/lib/integrations/resend-provisioning.t
 import { sweepPendingDelists } from '@/lib/listings/delist-sweep.ts'
 import { dispatchPendingNotifications } from '@/lib/notifications/send.ts'
 import { sweepShowingReminders } from '@/lib/showings/reminders.ts'
+import { expireSupportGrants } from '@/lib/support/grants.ts'
 import { sweepUnansweredDispatches } from '@/lib/vendors/no-response.ts'
 import { sweepEntryReminders } from '@/lib/workorders/entry-reminders.ts'
 
@@ -85,6 +86,9 @@ async function runDaily(orgId: string) {
   const smsProvisioning = await repoll(orgId, pollTwilioProvisioning)
   // R-293b (PRD 10 §4): the same for the org's email domain verification.
   const emailProvisioning = await repoll(orgId, pollResendProvisioning)
+  // R-295a (PRD 11 §5.3): stamps EXPIRY on support grants past their window,
+  // for the record. Liveness never waited for it - it is computed.
+  const supportGrantsExpired = await expireSupportGrants(orgId)
 
   const ran = runs.filter((r) => r.outcome === 'ran')
   // R-174. A run that filled a business date an earlier tick missed, counted
@@ -146,6 +150,7 @@ async function runDaily(orgId: string) {
     storageDurable: storageIsDurable,
     smsProvisioning,
     emailProvisioning,
+    supportGrantsExpired,
     durationMs: Date.now() - startedAt,
   }
 }

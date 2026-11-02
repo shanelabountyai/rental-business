@@ -609,3 +609,153 @@ describe('platform roles (R-302a, PLAT-08)', () => {
     expect(roles.flatMap((r) => r.permissions).filter((p) => !isPlatformPermission(p))).toEqual([])
   })
 })
+
+describe('support access grants (R-295a, PLAT-08)', () => {
+  // Inside transactions that never commit: a grant can never be deleted.
+  // Only the approver trigger is made IMMEDIATE, so the membership trigger
+  // on the fixture's own assignments never runs against a removal below.
+  async function setup(tx: Tx) {
+    const tag = `plat08g-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const org = await tx.organization.create({ data: { slug: tag, name: tag } })
+    const admin = await tx.platformAdmin.create({ data: { email: `${tag}@example.test`, name: tag } })
+    const roles = Object.fromEntries((await tx.role.findMany({ where: { key: { in: ['owner', 'manager'] } } })).map((r) => [r.key, r.id]))
+    const staff = async (name: string, role: string) =>
+      tx.staffUser.create({
+        data: {
+          email: `${tag}-${name}@example.test`,
+          name,
+          orgMemberships: { create: { orgId: org.id } },
+          assignments: { create: { orgId: org.id, roleId: roles[role]! } },
+        },
+      })
+    const owner = await staff('owner', 'owner')
+    const manager = await staff('manager', 'manager')
+    const removed = await staff('removed', 'owner')
+    await tx.orgMembership.update({
+      where: { orgId_staffUserId: { orgId: org.id, staffUserId: removed.id } },
+      data: { removedAt: new Date() },
+    })
+    const request = await tx.supportAccessGrant.create({
+      data: { orgId: org.id, platformAdminId: admin.id, kind: 'REQUESTED', reason: 'Looking at a ledger question', requestedMinutes: 240 },
+    })
+    // Break-glass is opened by admins other than the requester: one OPEN grant
+    // per admin per org is its own unique.
+    const glass = await tx.platformAdmin.create({ data: { email: `${tag}-glass@example.test`, name: 'glass' } })
+    return { org, admin: glass, owner, manager, removed, request }
+  }
+
+  const approve = (tx: Tx, grantId: string, staffId: string, minutes = 60) =>
+    tx.$executeRaw`UPDATE "SupportAccessGrant" SET "approvedByStaffId" = ${staffId}, "approvedAt" = now(), "startsAt" = now(), "expiresAt" = now() + ${minutes} * interval '1 minute' WHERE "id" = ${grantId}`
+  const immediate = (tx: Tx) => tx.$executeRaw`SET CONSTRAINTS "SupportAccessGrant_approver" IMMEDIATE`
+  const breakGlass = (tx: Tx, orgId: string, adminId: string, minutes: number) =>
+    tx.$executeRaw`INSERT INTO "SupportAccessGrant" ("id", "orgId", "platformAdminId", "kind", "reason", "requestedMinutes", "startsAt", "expiresAt")
+      VALUES (${`bg-${Math.random()}`}, ${orgId}, ${adminId}, 'BREAK_GLASS', 'Incident', 60, now(), now() + ${minutes} * interval '1 minute')`
+
+  it('refuses deleting a grant', async () => {
+    await expect(
+      prisma.$transaction(async (tx) => {
+        const { request } = await setup(tx)
+        await tx.$executeRaw`DELETE FROM "SupportAccessGrant" WHERE "id" = ${request.id}`
+      }),
+    ).rejects.toThrow(/never deleted/)
+  })
+
+  it('refuses a 61-minute break-glass, and allows exactly 60 (control)', async () => {
+    await expect(
+      prisma.$transaction(async (tx) => {
+        const { org, admin } = await setup(tx)
+        await breakGlass(tx, org.id, admin.id, 61)
+      }),
+    ).rejects.toThrow(/SupportAccessGrant_break_glass_check/)
+    await expect(
+      prisma.$transaction(async (tx) => {
+        const { org, admin } = await setup(tx)
+        await breakGlass(tx, org.id, admin.id, 60)
+        throw new Rollback()
+      }),
+    ).rejects.toThrow(Rollback)
+  })
+
+  it('refuses approval by a non-owner and by a removed member, and allows a live owner (control)', async () => {
+    for (const who of ['manager', 'removed'] as const) {
+      await expect(
+        prisma.$transaction(async (tx) => {
+          const f = await setup(tx)
+          await approve(tx, f.request.id, f[who].id)
+          await immediate(tx)
+        }),
+      ).rejects.toThrow(/Only a live owner/)
+    }
+    await expect(
+      prisma.$transaction(async (tx) => {
+        const f = await setup(tx)
+        await approve(tx, f.request.id, f.owner.id)
+        await immediate(tx)
+        throw new Rollback()
+      }),
+    ).rejects.toThrow(Rollback)
+  })
+
+  it('refuses approving for longer than requested or than 24 hours', async () => {
+    await expect(
+      prisma.$transaction(async (tx) => {
+        const f = await setup(tx)
+        await approve(tx, f.request.id, f.owner.id, 241)
+      }),
+    ).rejects.toThrow(/SupportAccessGrant_requested_check/)
+  })
+
+  it('refuses a second live break-glass in one org, and allows one once the first ended (control)', async () => {
+    await expect(
+      prisma.$transaction(async (tx) => {
+        const { org, admin } = await setup(tx)
+        const other = await tx.platformAdmin.create({ data: { email: `${org.slug}-b@example.test`, name: 'b' } })
+        await breakGlass(tx, org.id, admin.id, 60)
+        await breakGlass(tx, org.id, other.id, 60)
+      }),
+    ).rejects.toThrow(/:break-glass.*already exists/)
+    await expect(
+      prisma.$transaction(async (tx) => {
+        const { org, admin } = await setup(tx)
+        const other = await tx.platformAdmin.create({ data: { email: `${org.slug}-b@example.test`, name: 'b' } })
+        await breakGlass(tx, org.id, admin.id, 60)
+        await tx.$executeRaw`UPDATE "SupportAccessGrant" SET "endedAt" = now(), "endedByType" = 'PLATFORM' WHERE "orgId" = ${org.id} AND "kind" = 'BREAK_GLASS'`
+        await breakGlass(tx, org.id, other.id, 60)
+        throw new Rollback()
+      }),
+    ).rejects.toThrow(Rollback)
+  })
+
+  it('moves only forward: identity fixed, an approved grant is never denied, an ended one never reopens', async () => {
+    await expect(
+      prisma.$transaction(async (tx) => {
+        const { request } = await setup(tx)
+        await tx.$executeRaw`UPDATE "SupportAccessGrant" SET "reason" = 'something else entirely' WHERE "id" = ${request.id}`
+      }),
+    ).rejects.toThrow(/identity cannot change/)
+    await expect(
+      prisma.$transaction(async (tx) => {
+        const f = await setup(tx)
+        await approve(tx, f.request.id, f.owner.id)
+        await tx.$executeRaw`UPDATE "SupportAccessGrant" SET "deniedAt" = now(), "deniedByStaffId" = ${f.owner.id}, "approvedAt" = NULL, "approvedByStaffId" = NULL WHERE "id" = ${f.request.id}`
+      }),
+    ).rejects.toThrow(/recorded step cannot change/)
+    await expect(
+      prisma.$transaction(async (tx) => {
+        const f = await setup(tx)
+        await tx.$executeRaw`UPDATE "SupportAccessGrant" SET "endedAt" = now(), "endedByType" = 'PLATFORM' WHERE "id" = ${f.request.id}`
+        await approve(tx, f.request.id, f.owner.id)
+      }),
+    ).rejects.toThrow(/ended or denied support grant cannot change/)
+  })
+
+  it('refuses supportGrantId on an audit row that is not PLATFORM', async () => {
+    await expect(
+      prisma.$transaction(async (tx) => {
+        const f = await setup(tx)
+        await tx.$executeRaw`INSERT INTO "AuditLog" ("id", "orgId", "actorType", "actorStaffId", "entityType", "entityId", "action", "supportGrantId")
+          VALUES (${`a-${Math.random()}`}, ${f.org.id}, 'STAFF', ${f.owner.id}, 'SupportAccessGrant', ${f.request.id}, 'support_grant.approved', ${f.request.id})`
+      }),
+    ).rejects.toThrow(/AuditLog_support_grant_platform_check/)
+  })
+})

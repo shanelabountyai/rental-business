@@ -19,8 +19,7 @@ export const metadata = { title: 'Organisation' }
 // PRD 11 §4.4 (R-303): what the platform may know about one organisation,
 // and a stated line that nothing inside it shows without a grant (D-320).
 // Read side only. Not here yet, each with the row that builds it: status and
-// its history (R-300), the checklist (R-291), grants and "Request access"
-// (R-295), the fee (R-296). Pending invites
+// its history (R-300), the checklist (R-291), the fee (R-296). Pending invites
 // with "Resend" and "Revoke" are R-304a's. "Re-run" is on /platform/jobs (R-303b, PRD 11 §4.10).
 export default async function PlatformOrgPage({
   params,
@@ -91,7 +90,10 @@ export default async function PlatformOrgPage({
 
       <p className="rounded-md border p-4 text-sm">
         Viewing inside this organisation needs a support grant. Its properties, tenants, leases, money, messages,
-        documents, staff and audit log are not shown here.
+        documents, staff and audit log are not shown here.{' '}
+        <Link href={`/platform/orgs/${org.slug}/support`} className="underline underline-offset-4">
+          Support access
+        </Link>
       </p>
 
       <section aria-labelledby="owners-heading" className="flex flex-col gap-2 rounded-md border p-4 text-sm">

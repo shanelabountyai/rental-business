@@ -279,4 +279,14 @@ export const NAV_ITEMS: readonly NavItem[] = [
     portfolioOnly: true,
     ownedBy: 'R-138',
   },
+  {
+    href: '/settings/support-access',
+    label: 'Support access',
+    group: 'Admin',
+    /// PRD 11 §4.14: readable by portfolio-wide `audit.read`; answering a
+    /// request also needs `staff.manage`, which the page checks per control.
+    permission: 'audit.read',
+    portfolioOnly: true,
+    ownedBy: 'R-295a',
+  },
 ]

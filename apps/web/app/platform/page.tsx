@@ -58,6 +58,9 @@ export default async function PlatformHomePage() {
               Settings
             </Link>
           )}
+          <Link href="/platform/grants" className="underline underline-offset-4">
+            Support grants
+          </Link>
           <Link href="/platform/admins" className="underline underline-offset-4">
             Platform admins
           </Link>

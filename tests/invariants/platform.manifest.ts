@@ -34,4 +34,8 @@ export const platformManifest: Record<string, PlatformEntry> = {
   'lib/platform/integration-actions.ts#provisionResend': { guard: 'session', permission: 'integration.provision' },
   'lib/platform/job-actions.ts#rerunCronChild': { guard: 'session', permission: 'job.rerun' },
   'lib/platform/jurisdiction-actions.ts#createRuleVersion': { guard: 'step-up', permission: 'jurisdiction.publish' },
+  'lib/platform/support-actions.ts#requestSupportAccess': { guard: 'session', permission: 'grant.request' },
+  'lib/platform/support-actions.ts#openBreakGlass': { guard: 'step-up', permission: 'grant.breakGlass' },
+  // Ends only the admin's own grant: it removes access, so a session is enough.
+  'lib/platform/support-actions.ts#endSupportGrant': { guard: 'session' },
 }

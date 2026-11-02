@@ -147,6 +147,13 @@ export const NOTIFICATION_CATEGORIES = [
   /// which is why it is on LOCKED_CATEGORIES with the bluntest explanation on
   /// that list.
   'account_access',
+
+  /// R-295a (PRD 11 §4.7, §4.16): platform support asked to view the
+  /// organisation, or opened emergency (break-glass) access to it. Sent to the
+  /// org's active owners only. Locked because an owner who muted it could
+  /// never learn their organisation had been entered. HELD by the org's kill
+  /// switch rather than suppressed (D-359, D-380): see HELD_WHEN_SWITCHED_OFF.
+  'support_access',
 ] as const
 
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number]
@@ -191,6 +198,9 @@ const CATEGORY_CHANNELS: Partial<Record<NotificationCategory, readonly Notificat
   /// only be read by somebody who did not need it. SMS since R-216, for the
   /// tenant or guarantor with a phone and no email.
   account_access: ['EMAIL', 'SMS'],
+  /// R-295a. An owner has no portal inbox; the dashboard banner (§4.16) is
+  /// the on-screen half.
+  support_access: ['EMAIL', 'SMS'],
   /// Never PORTAL - a prospect has no account and no portal to read one in
   /// (NotificationRecipientType.PROSPECT's own schema comment).
   prospect_prescreening: ['EMAIL', 'SMS'],
@@ -274,6 +284,8 @@ export const LOCKED_CATEGORIES: Readonly<
     'This is how you review and sign your lease. Turning it off would leave nobody able to reach you to finish signing.',
   account_access:
     'This is how you sign in. Turning it off would lock you out of your account, including out of this page to turn it back on.',
+  support_access:
+    'This is how you learn that platform support asked to view, or entered, your organisation. Turning it off would let that happen without you knowing.',
 }
 
 export function isLockedCategory(category: NotificationCategory): boolean {
@@ -407,6 +419,7 @@ export const CATEGORY_LABELS: Record<NotificationCategory, string> = {
   prospect_showing: 'Showing bookings and reminders',
   inspection_signature: 'Inspection reports ready to review and sign',
   account_access: 'Sign-in and password links',
+  support_access: 'Platform support access to your organisation',
 }
 
 /**
@@ -504,7 +517,20 @@ export const CATEGORY_AUDIENCE: Record<
   prospect_showing: new Set(['PROSPECT']),
   inspection_signature: new Set(['TENANT']),
   account_access: new Set(['STAFF', 'TENANT', 'GUARANTOR']),
+  support_access: new Set(['STAFF']),
 }
+
+/**
+ * Categories the ORG's kill switch holds rather than suppresses (D-359,
+ * D-380). D-347's `notify()` records a send decided while an org is switched
+ * off as SUPPRESSED/kill_switch, so it never goes; D-359 says break-glass's
+ * owner notice is "held like every other send" and goes out on switch-on. For
+ * these the row is recorded QUEUED instead, and the drain - which skips a
+ * switched-off org - sends it once the org is switched back on. Not a bypass:
+ * nothing is sent while the switch is off, and the platform-wide env switch
+ * still suppresses.
+ */
+export const HELD_WHEN_SWITCHED_OFF: ReadonlySet<NotificationCategory> = new Set(['support_access'])
 
 export function isInAudience(
   category: NotificationCategory,

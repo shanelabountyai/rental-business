@@ -4,6 +4,11 @@ import { PageHeader } from '@/components/page-header.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { dashboardSummary, type DashboardSummary } from '@/lib/dashboard/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
+import { can } from '@rental/core/rbac'
+import { friendlyTimestamp } from '@rental/core/scheduling'
+import { BreakGlassBanners } from '@/components/support/support-access.tsx'
+import { answerSupportAccess } from '@/lib/support/actions.ts'
+import { orgTimezone, unacknowledgedBreakGlass } from '@/lib/support/grants.ts'
 
 export const metadata = { title: 'Dashboard' }
 
@@ -115,6 +120,13 @@ export default async function DashboardPage() {
   const now = new Date()
   const summary = await dashboardSummary(scope, now)
   const needsAction = actionItems(summary)
+  // PRD 11 §4.16 (R-295a): break-glass stays on every owner's dashboard until
+  // one presses "Seen". Shown to portfolio-wide audit readers; pressed by an
+  // owner. Mounted even when empty, so "Seen" can report after it goes.
+  const auditReader = can(actor, 'audit.read').allowed
+  const [breakGlass, zone] = auditReader
+    ? await Promise.all([unacknowledgedBreakGlass(actor.orgId), orgTimezone(actor.orgId)])
+    : [[], 'UTC']
   const collectedPct =
     summary.collectedVsBilled.billedCents > 0
       ? Math.min(
@@ -134,6 +146,18 @@ export default async function DashboardPage() {
           {scope.propertyIds.length === 1 ? 'y' : 'ies'}.
         </p>
       </PageHeader>
+
+      {auditReader && (
+        <BreakGlassBanners
+          action={answerSupportAccess}
+          canAcknowledge={can(actor, 'staff.manage').allowed}
+          notices={breakGlass.map((g) => ({
+            id: g.id,
+            adminName: g.platformAdmin.name,
+            dateLabel: friendlyTimestamp(g.startsAt!, zone),
+          }))}
+        />
+      )}
 
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold">Needs action today</h2>

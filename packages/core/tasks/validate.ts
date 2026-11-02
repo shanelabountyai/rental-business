@@ -69,6 +69,8 @@ export const TASK_SUBJECT_TYPES = [
   'Organization',
   'RenterInsurancePolicy',
   'Showing',
+  /// R-295a: platform support is asking to view the org (PRD 11 §4.7).
+  'SupportAccessGrant',
   'Tenant',
   'Thread',
   'Ticket',

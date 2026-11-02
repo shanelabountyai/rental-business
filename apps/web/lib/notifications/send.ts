@@ -25,7 +25,7 @@ import {
 import { businessDate } from '@rental/core/scheduling'
 import { isOptedOut } from '@/lib/comms/opt-out-store.ts'
 import { consentVerdict } from '@rental/core/consent'
-import { categoryPurpose } from '@rental/core/notifications'
+import { HELD_WHEN_SWITCHED_OFF, categoryPurpose } from '@rental/core/notifications'
 import { isUniqueViolation } from '@/lib/db/unique-violation.ts'
 import { createTask } from '@/lib/tasks/create.ts'
 import { notificationConfig } from './config.ts'
@@ -71,6 +71,13 @@ export interface NotifyInput {
   /// Drives quiet hours, which are property-local (D-3). A notification with
   /// no property never defers.
   propertyId?: string | null
+  /**
+   * The org, for a message about the WHOLE org with no property or event to
+   * derive it from (R-295a: support access, sent to an org that may have no
+   * property yet). Ignored when either is given - the `org_scope` trigger
+   * derives the row's org from those. With none of the three, org #0.
+   */
+  orgId?: string | null
   /**
    * This PARTICULAR send is an emergency, whatever its category is (R-207).
    *
@@ -184,7 +191,7 @@ export async function notify(
       ? { properties: { some: { id: input.propertyId } } }
       : input.eventId
         ? { outboxEvents: { some: { id: input.eventId } } }
-        : { id: 'org_0' },
+        : { id: input.orgId ?? 'org_0' },
     select: { id: true, notificationsEnabled: true },
   })
   const orgEnabled = org?.notificationsEnabled === true
@@ -349,7 +356,9 @@ export async function notify(
       // "batched" for a message that was never going out at all.
       status = 'SUPPRESSED'
       reason = 'digest_batched'
-    } else if (!config.enabled || !orgEnabled) {
+    } else if (!config.enabled || (!orgEnabled && !HELD_WHEN_SWITCHED_OFF.has(input.category))) {
+      // A held category (D-359, D-380) falls through to QUEUED while its org
+      // is off, and the drain - which skips a switched-off org - holds it.
       status = 'SUPPRESSED'
       reason = 'kill_switch'
     } else if (!org || !(await notificationAdapter.supports(channel, org.id))) {
@@ -563,6 +572,8 @@ async function record(db: Db, args: RecordInput): Promise<ChannelOutcome> {
         body: args.body,
         propertyId: args.input.propertyId ?? null,
         eventId: args.input.eventId ?? null,
+        // Only when nothing else names the org; the trigger derives it otherwise.
+        ...(!args.input.propertyId && !args.input.eventId && args.input.orgId ? { orgId: args.input.orgId } : {}),
         urgent: args.input.urgent ?? false,
         delivery: {
           create: {

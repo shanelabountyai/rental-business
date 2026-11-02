@@ -55,6 +55,9 @@ export const manifest: Record<string, Entry> = {
   // The account id is Stripe's, not a row id; the action 404s one outside the org.
   'lib/integrations/stripe-actions.ts#connectStripe': {},
   'lib/integrations/stripe-actions.ts#submitSimulatedStripe': { accountId: 'value' },
+  // lib/support/actions.ts (R-295a): an owner answering platform support.
+  // One action, four intents; `deny` reaches a write on the fixture's pending grant.
+  'lib/support/actions.ts#answerSupportAccess': { 'form.grantId': 'supportAccessGrant', 'form.intent': '=deny' },
   // lib/platform/auth-actions.ts (R-294b): every one refuses off PLATFORM_HOST
   'lib/platform/auth-actions.ts#startPlatformSignIn': { public: 'the platform sign-in form' },
   'lib/platform/auth-actions.ts#completePlatformMfa': { public: 'second step of platform sign-in, gated by the challenge cookie' },
@@ -88,6 +91,11 @@ export const manifest: Record<string, Entry> = {
   'lib/platform/integration-actions.ts#provisionResend': { 'form.slug': 'value', 'form.intent': '=poll' },
   // R-305 (D-355): a statute version is org-less, so nothing names an org.
   'lib/platform/jurisdiction-actions.ts#createRuleVersion': {},
+  // R-295a: the console names any org by slug, and ends only its own admin's
+  // grant, whatever org it is in - a `value`, as the console's ids are.
+  'lib/platform/support-actions.ts#requestSupportAccess': { 'form.slug': 'value' },
+  'lib/platform/support-actions.ts#openBreakGlass': { 'form.slug': 'value' },
+  'lib/platform/support-actions.ts#endSupportGrant': { 'form.grantId': 'value' },
   // lib/auth/invite-actions.ts (R-304a)
   'lib/auth/invite-actions.ts#acceptOrgInvite': { 'form.token': 'token', public: 'gated by the invite token in the form, on its org host only' },
   // lib/billing/actions.ts

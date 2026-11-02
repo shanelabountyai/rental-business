@@ -168,6 +168,9 @@ const RESOURCE_LESS_GUARDS: Record<string, string> = {
     "The org's Stripe account (R-277b, PRD 10 §2.2) banks every property's rent at once, so there is no property to scope it to. `billing.connect` is owner-only by construction.",
   'app/(admin)/money/stripe/simulated/[accountId]/page.tsx': 'Same as the Stripe account page above: the simulated hosted onboarding for that one org-wide account.',
   'lib/integrations/stripe-actions.ts': 'Same as the Stripe account pages above. The org is the session\'s, never a form field.',
+  'app/(admin)/settings/support-access/page.tsx':
+    'A support grant is about the whole organisation (PRD 11 §4.14, R-295a), not a property: `audit.read` portfolio-wide reads it, and answering needs `staff.manage` as well, which only an owner holds.',
+  'lib/support/actions.ts': 'Same as the support-access page above. The org is the session\'s, never a form field.',
   'app/(admin)/jobs/page.tsx':
     'A JobRun belongs to a property, but "did last night\'s work happen" does not (R-174): the panel answers a question about the whole deployment - every job, every property, and the jobs that have never run anywhere. Half that answer is worse than none, so refusing a scoped actor is the intended result.',
   'lib/jobs/actions.ts':

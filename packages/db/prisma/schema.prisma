@@ -492,6 +492,66 @@ model OrgInvite {
   @@index([orgId])
 }
 
+/// R-295a (PRD 11 §4.7, §5.3, D-353, D-380): a platform admin's access to one
+/// organisation. Append-only identity, forward-only lifecycle, never deleted
+/// (triggers); the CHECKs cap break-glass at 60 minutes with no approver and a
+/// request at 24 hours, and an approval at the minutes asked for. An approver
+/// must be a live owner-member of `orgId` (deferred trigger). Liveness is
+/// COMPUTED - approved or break-glass, not ended, not denied, `now() <
+/// expiresAt` - and the nightly sweep only stamps EXPIRY for the record.
+/// The two partial uniques ("one open grant per admin per org", "one open
+/// break-glass per org") are expression indexes in the migration over OPEN
+/// rows (not ended, not denied), because an index cannot read `now()`.
+model SupportAccessGrant {
+  id                    String               @id @default(cuid())
+  orgId                 String
+  organization          Organization         @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  platformAdminId       String
+  platformAdmin         PlatformAdmin        @relation(fields: [platformAdminId], references: [id], onDelete: Restrict)
+  kind                  SupportGrantKind
+  /// Shown to the org verbatim.
+  reason                String
+  requestedAt           DateTime             @default(now())
+  /// 60, 240 or 1440 for a request; 60 for break-glass. An approval may grant
+  /// less, never more (CHECK).
+  requestedMinutes      Int
+  approvedByStaffId     String?
+  approvedBy            StaffUser?           @relation("SupportGrantApprovedBy", fields: [approvedByStaffId], references: [id], onDelete: Restrict)
+  approvedAt            DateTime?
+  deniedByStaffId       String?
+  deniedBy              StaffUser?           @relation("SupportGrantDeniedBy", fields: [deniedByStaffId], references: [id], onDelete: Restrict)
+  deniedAt              DateTime?
+  denialNote            String?
+  startsAt              DateTime?
+  expiresAt             DateTime?
+  endedAt               DateTime?
+  endedByType           SupportGrantEndedBy?
+  /// The admin (PLATFORM) or staff member (STAFF) who ended it; null for
+  /// SYSTEM and EXPIRY.
+  endedById             String?
+  /// Break-glass only: the first owner to press "Seen" on the banner (§4.16).
+  ownersAcknowledgedAt  DateTime?
+  acknowledgedByStaffId String?
+  acknowledgedBy        StaffUser?           @relation("SupportGrantAcknowledgedBy", fields: [acknowledgedByStaffId], references: [id], onDelete: Restrict)
+
+  auditRows AuditLog[]
+
+  @@index([orgId, requestedAt])
+  @@index([platformAdminId, requestedAt])
+}
+
+enum SupportGrantKind {
+  REQUESTED
+  BREAK_GLASS
+}
+
+enum SupportGrantEndedBy {
+  PLATFORM
+  STAFF
+  SYSTEM
+  EXPIRY
+}
+
 model OrgMembership {
   orgId       String
   staffUserId String
@@ -645,6 +705,7 @@ model Organization {
   integrations                   OrgIntegration[]
   platformFees                   PlatformFee[]
   health                         OrgHealth?
+  supportGrants                  SupportAccessGrant[]
 }
 
 enum IntegrationProvider {
@@ -2600,6 +2661,9 @@ model StaffUser {
   applicantInfoRequests                   ApplicantInfoRequest[]          @relation("ApplicantInfoRequestedBy")
   applicantNotes                          ApplicantNote[]
   acceptedOrgInvites                      OrgInvite[]
+  supportGrantsApproved                   SupportAccessGrant[]            @relation("SupportGrantApprovedBy")
+  supportGrantsDenied                     SupportAccessGrant[]            @relation("SupportGrantDeniedBy")
+  supportGrantsAcknowledged               SupportAccessGrant[]            @relation("SupportGrantAcknowledgedBy")
 
   @@index([active])
 }
@@ -4699,12 +4763,13 @@ model PlatformAdmin {
   createdById       String?
   deactivatedAt     DateTime?
 
-  createdBy  PlatformAdmin?           @relation("PlatformAdminCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  created    PlatformAdmin[]          @relation("PlatformAdminCreatedBy")
-  credential PlatformCredential?
-  roles      PlatformRoleAssignment[] @relation("PlatformRoleHolder")
-  granted    PlatformRoleAssignment[] @relation("PlatformRoleGrantedBy")
-  revoked    PlatformRoleAssignment[] @relation("PlatformRoleRevokedBy")
+  createdBy     PlatformAdmin?           @relation("PlatformAdminCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  created       PlatformAdmin[]          @relation("PlatformAdminCreatedBy")
+  credential    PlatformCredential?
+  roles         PlatformRoleAssignment[] @relation("PlatformRoleHolder")
+  granted       PlatformRoleAssignment[] @relation("PlatformRoleGrantedBy")
+  revoked       PlatformRoleAssignment[] @relation("PlatformRoleRevokedBy")
+  supportGrants SupportAccessGrant[]
 }
 
 /// A platform role (PRD 11 §3.2, R-302a). Rows, seeded from
@@ -7534,29 +7599,34 @@ model JurisdictionRule {
 /// tenant, a vendor on a magic link and a nightly job are all legitimate
 /// authors of an audit row and none of them is a StaffUser.
 model AuditLog {
-  id           String        @id @default(cuid())
+  id             String              @id @default(cuid())
   /// Derived from the property by trigger and immutable (D-339); with no
   /// property the writer names it. No default (D-352): null only for a
   /// PLATFORM act about the platform itself, by CHECK.
-  orgId        String?
-  organization Organization? @relation(fields: [orgId], references: [id], onDelete: Restrict)
-  propertyId   String?
-  actorType    ActorType
-  actorStaffId String?
+  orgId          String?
+  organization   Organization?       @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  propertyId     String?
+  actorType      ActorType
+  actorStaffId   String?
   /// Non-staff actor identity - tenant id, vendor id, or job name.
-  actorRef     String?
-  entityType   String
-  entityId     String
-  action       String
-  before       Json?
-  after        Json?
+  actorRef       String?
+  entityType     String
+  entityId       String
+  action         String
+  before         Json?
+  after          Json?
   /// Why, where the action demands a reason: a fee waiver, an entry-notice
   /// override, a deviation from order-of-completed-application.
-  reasonCode   String?
-  reason       String?
-  ipAddress    String?
-  userAgent    String?
-  occurredAt   DateTime      @default(now())
+  reasonCode     String?
+  reason         String?
+  ipAddress      String?
+  userAgent      String?
+  occurredAt     DateTime            @default(now())
+  /// R-295a (PRD 11 §5.4): the support grant a PLATFORM act was done under or
+  /// about (CHECK: PLATFORM rows only). Restrict, because this table is
+  /// append-only and a SetNull could never fire (CLAUDE.md).
+  supportGrantId String?
+  supportGrant   SupportAccessGrant? @relation(fields: [supportGrantId], references: [id], onDelete: Restrict)
 
   property   Property?  @relation(fields: [propertyId], references: [id])
   actorStaff StaffUser? @relation("AuditLogActor", fields: [actorStaffId], references: [id])
@@ -7565,6 +7635,7 @@ model AuditLog {
   @@index([propertyId, occurredAt])
   @@index([actorStaffId, occurredAt])
   @@index([orgId])
+  @@index([supportGrantId])
 }
 
 /// A carrier-level SMS opt-out (R-040e, D-38).
