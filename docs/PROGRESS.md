@@ -15285,7 +15285,7 @@ Tests: `lib/platform/settings.test.ts` (no secret value in the output, the kill 
 
 ## R-291b — Step 9's test text and test payment
 
-**SHA:** `PENDING`
+**SHA:** `28f88cd`
 
 **What it built.** Migration `20261105100000_setup_test_payment` adds `SetupTestPayment` (append-only by trigger, unique per org and invoice, `org_scope`). `interpretStripeEvent` reads a paid `invoice.updated` whose invoice carries `metadata.purpose = setup_test` as `setup_test_paid`, and `processStripeEvent` records it through `recordSetupTestPayment` (`lib/setup/test-payment.ts`), never into `LedgerEntry`. The adapter gains `invoiceSetupTest` (owner customer, one $1 send-invoice, finalized; inside the collecting gate). The simulator points it at `/settings/setup/simulated-invoice/[invoiceId]`, whose "Pay" (`paySimulatedTestInvoice`) emits the paid event as the actor's org, and the page 404s once a key is set. On `/settings/setup`, "Send a test text" (`sendTestText`, `staff.manage`, owners only) saves the typed number as the owner's `StaffUser.phone`, sends `setup.test_text` (new locked `setup_test` category, SMS only) through `notify()`, dispatches only its own delivery, and reports SENT or the suppression reason. "Bill me $1" (`billTestDollar`, `billing.connect`) opens the hosted invoice page. Both are audited (`org.test_text_sent`, `org.test_invoice_sent`). Step 9 now reads `SetupTestPayment` or any tenant `PAYMENT`. The presses disappear once step 9 is done.
 

@@ -1,4 +1,4 @@
-**2026-11-05 (latest): R-291b done (D-384).** Step 9's "Send a test text" and "Bill me $1" are on `/settings/setup`. The paid $1 lands in `SetupTestPayment` (never `LedgerEntry`), from the paid `invoice.updated` marked `metadata.purpose = setup_test`. The e2e now walks to a successful go-live.
+**2026-11-05 (latest): R-291b done (`28f88cd`, D-384).** Step 9's "Send a test text" and "Bill me $1" are on `/settings/setup`. The paid $1 lands in `SetupTestPayment` (never `LedgerEntry`), from the paid `invoice.updated` marked `metadata.purpose = setup_test`. The e2e now walks to a successful go-live.
 
 A bare `go` is **R-299** (backlog row 276): the full organisation export. R-297 is gated on OQ-16, and R-298 depends on R-278, which is gated on OQ-14. Recommend Opus, because the export reads every org-owned table and must not leak another org's rows.
 
