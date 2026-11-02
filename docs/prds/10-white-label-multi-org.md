@@ -210,6 +210,8 @@ The checklist lives on the org side at `/settings/setup` and on the platform sid
 
 A step that fails names why (Twilio's rejection text, Stripe's `requirements.currently_due`). The checklist is the owner's first screen until step 10, then a settings page.
 
+*(2026-11-04, D-383, as built in R-291a: `Organization.status` is `PROVISIONING | ACTIVE` and gates only the slug; crons run for a provisioning org too, so "crons include it" is R-300's FROZEN skip. Step 4 is the owner's mark; step 8 reads the platform-published rule with a reviewer until R-298; step 9's facts are an SMS delivered to an active owner and any projected payment, and R-291b adds the buttons that make them. "First screen" is a dashboard banner, not a redirect.)*
+
 ## 6. Platform billing — open
 
 The platform has no billing of its own today. The mechanism, when decided, is the foundation's `BillingAccount` pattern on the **platform's** Stripe account (the org is a Customer with one Subscription; `invoice.paid` / `payment_failed` on the existing platform webhook) plus a nightly per-org **meter** (active units, active leases) written to a `OrgUsage(orgId, day, units, leases, smsSegments)` row. Options for OQ-23, each with its consequence:

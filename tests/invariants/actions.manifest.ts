@@ -58,6 +58,8 @@ export const manifest: Record<string, Entry> = {
   // lib/support/actions.ts (R-295a): an owner answering platform support.
   // One action, four intents; `deny` reaches a write on the fixture's pending grant.
   'lib/support/actions.ts#answerSupportAccess': { 'form.grantId': 'supportAccessGrant', 'form.intent': '=deny' },
+  // R-291a: the owner's checklist statements; the org is the session's.
+  'lib/setup/actions.ts#markSetupStep': { 'form.mark': '=just_me', 'form.intent': '=on' },
   // lib/support/session-actions.ts (R-295b): the support session acting on
   // itself. No id from the form: the grant is the cookie's, re-checked.
   'lib/support/session-actions.ts#endSupportSession': {},
@@ -88,6 +90,8 @@ export const manifest: Record<string, Entry> = {
   'lib/platform/org-actions.ts#changeOrgSlug': { 'form.slug': 'value' },
   // R-306: the kill switch names the org the same way.
   'lib/platform/org-actions.ts#switchOrgNotifications': { 'form.slug': 'value', 'form.intent': '=off', 'form.reason': '=invariant' },
+  // R-291a: go-live names the org by slug, typed back to confirm.
+  'lib/platform/org-actions.ts#markOrgLive': { 'form.slug': 'value', 'form.confirmLive': 'value' },
   // R-292b: SMS provisioning names the org by slug; `poll` reaches the lookup
   // and, with no row, does nothing.
   'lib/platform/integration-actions.ts#provisionTwilio': { 'form.slug': 'value', 'form.intent': '=poll' },

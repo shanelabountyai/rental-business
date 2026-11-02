@@ -260,3 +260,43 @@ export function OrgNotificationsPanel({
     </section>
   )
 }
+
+/// "Go live" (R-291a, PRD 10 §5 step 10). Offered only while the org is
+/// provisioning; the action re-reads every step from fresh facts, so a stale
+/// checklist above cannot let an org through.
+export function OrgGoLivePanel({
+  action,
+  slug,
+  live,
+  canConfigure,
+}: {
+  action: OrgAction
+  slug: string
+  live: boolean
+  canConfigure: boolean
+}) {
+  const [state, formAction] = useActionState<OrgInviteFormState, FormData>(action, {})
+  const errors = state.fieldErrors ?? {}
+  if (!canConfigure) return null
+  return (
+    <div className="flex flex-col gap-3">
+      <FormAlerts state={state} />
+      {!live && (
+        <form action={formAction} className="flex flex-col gap-4">
+          <p>
+            Going live fixes the slug for good. Every step is checked again at the press, and it asks for a fresh
+            code.
+          </p>
+          <input type="hidden" name="slug" value={slug} />
+          <TextField
+            label="Type the slug to confirm going live"
+            name="confirmLive"
+            required
+            error={errors.confirmLive}
+          />
+          <SubmitButton label="Mark the organisation live" />
+        </form>
+      )}
+    </div>
+  )
+}

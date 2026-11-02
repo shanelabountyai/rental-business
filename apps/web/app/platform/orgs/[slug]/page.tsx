@@ -1,9 +1,11 @@
 import { friendlyTimestamp } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { notFound } from 'next/navigation'
-import { OrgConfigurePanel, OrgInvitesPanel, OrgNotificationsPanel, OrgSlugPanel } from '@/components/platform/create-org-form.tsx'
+import { OrgConfigurePanel, OrgGoLivePanel, OrgInvitesPanel, OrgNotificationsPanel, OrgSlugPanel } from '@/components/platform/create-org-form.tsx'
+import { ChecklistSteps } from '@/components/setup/checklist.tsx'
+import { isChecklist } from '@/lib/setup/checklist.ts'
 import { platformDecision, requirePlatform } from '@/lib/platform/guard.ts'
-import { changeOrgSlug, configureOrganization, manageOrgInvite, switchOrgNotifications } from '@/lib/platform/org-actions.ts'
+import { changeOrgSlug, configureOrganization, manageOrgInvite, markOrgLive, switchOrgNotifications } from '@/lib/platform/org-actions.ts'
 import { INTEGRATION_SELECT, orgOwners, providerName } from '@/lib/platform/orgs.ts'
 import { OrgHealthPanel } from '@/components/platform/org-health.tsx'
 import { SmsProvisioningPanel, type SmsProvisioningView } from '@/components/platform/sms-provisioning.tsx'
@@ -21,8 +23,9 @@ export const metadata = { title: 'Organisation' }
 
 // PRD 11 §4.4 (R-303): what the platform may know about one organisation,
 // and a stated line that nothing inside it shows without a grant (D-320).
-// Read side only. Not here yet, each with the row that builds it: status and
-// its history (R-300), the checklist (R-291), the fee (R-296). Pending invites
+// Not here yet, each with the row that builds it: status history (R-300), the
+// fee (R-296). The checklist (R-291a) is OrgHealth's booleans, never a count
+// the console ran itself. Pending invites
 // with "Resend" and "Revoke" are R-304a's. "Re-run" is on /platform/jobs (R-303b, PRD 11 §4.10).
 export default async function PlatformOrgPage({
   params,
@@ -43,6 +46,7 @@ export default async function PlatformOrgPage({
       colorPrimary: true,
       colorAccent: true,
       notificationsEnabled: true,
+      status: true,
       createdAt: true,
       health: true,
       integrations: { select: INTEGRATION_SELECT, orderBy: { provider: 'asc' } },
@@ -77,7 +81,8 @@ export default async function PlatformOrgPage({
       <header className="flex flex-col gap-2 break-words">
         <h1 className="text-2xl font-semibold tracking-tight">{org.name}</h1>
         <p className="text-muted-foreground text-sm">
-          {org.slug} · created {friendlyTimestamp(org.createdAt, 'UTC')} · notifications{' '}
+          {org.slug} · {org.status === 'ACTIVE' ? 'live' : 'being set up'} · created{' '}
+          {friendlyTimestamp(org.createdAt, 'UTC')} · notifications{' '}
           {org.notificationsEnabled ? 'on' : 'switched off'}
         </p>
         <Link href="/platform/orgs" className="text-sm underline underline-offset-4">
@@ -126,7 +131,32 @@ export default async function PlatformOrgPage({
         canConfigure={canConfigure}
       />
 
-      <OrgSlugPanel action={changeOrgSlug} slug={org.slug} canConfigure={canConfigure} />
+      <section aria-labelledby="checklist-heading" className="flex flex-col gap-3 rounded-md border p-4 text-sm">
+        <h2 id="checklist-heading" className="text-lg font-semibold">
+          Provisioning checklist
+        </h2>
+        {isChecklist(org.health?.checklist) ? (
+          <>
+            <p className="text-muted-foreground">
+              As the organisation last reported it, {friendlyTimestamp(org.health.computedAt, 'UTC')}. Why a step is
+              not done is on the organisation&apos;s own setup page, and on the integration panels below.
+            </p>
+            <ChecklistSteps checklist={org.health.checklist} />
+          </>
+        ) : (
+          <p>Not reported yet. It is written by the organisation&apos;s nightly run and whenever its owner opens setup.</p>
+        )}
+        <OrgGoLivePanel
+          action={markOrgLive}
+          slug={org.slug}
+          live={org.status === 'ACTIVE'}
+          canConfigure={canConfigure}
+        />
+      </section>
+
+      {org.status === 'PROVISIONING' && (
+        <OrgSlugPanel action={changeOrgSlug} slug={org.slug} canConfigure={canConfigure} />
+      )}
 
       <OrgNotificationsPanel
         action={switchOrgNotifications}

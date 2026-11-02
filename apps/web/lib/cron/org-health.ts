@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@rental/db'
 import { MAX_ATTEMPTS } from '@/lib/jobs/outbox.ts'
+import { setupChecklist, setupFacts } from '@/lib/setup/checklist.ts'
 
 // R-303 (PRD 11 §5.5, D-354): the console's only view of an org's running.
 // Counted HERE, by the org's own cron child and scoped to its org, so the
@@ -59,16 +60,23 @@ export async function orgHealthCounts(orgId: string, now: Date) {
  * throws: the cron's own result is what Vercel needs to see, and a health
  * row that failed to write reads as "not reported since", which is true.
  */
-export async function recordOrgHealth(orgId: string, child: CronChild, ok: boolean, now = new Date()) {
+export async function recordOrgHealth(orgId: string, child: CronChild | null, ok: boolean, now = new Date()) {
   try {
-    const counts = await orgHealthCounts(orgId, now)
-    const run = { [`${child}At`]: now, [`${child}Ok`]: ok }
+    const [counts, facts] = await Promise.all([orgHealthCounts(orgId, now), setupFacts(orgId, now)])
+    // R-291a: the checklist's booleans ride along, so the console reads them.
+    const checklist = setupChecklist(facts)
+    const run = child ? { [`${child}At`]: now, [`${child}Ok`]: ok } : {}
     await prisma.orgHealth.upsert({
       where: { orgId },
-      create: { orgId, computedAt: now, ...run, ...counts },
-      update: { computedAt: now, ...run, ...counts },
+      create: { orgId, computedAt: now, ...run, ...counts, checklist },
+      update: { computedAt: now, ...run, ...counts, checklist },
     })
   } catch {
     // See above.
   }
 }
+
+/// The same row, written outside a cron child (no run recorded): the org's
+/// setup page and the go-live press refresh it so the console is not a day
+/// behind what the owner just did.
+export const refreshOrgHealth = (orgId: string, now = new Date()) => recordOrgHealth(orgId, null, true, now)

@@ -117,6 +117,10 @@ export const AUDIT_ACTIONS = [
   'org.slug_changed',
   /// R-306 (D-347): the org's notification kill switch flipped; `after.reason` says why.
   'org.notifications_switched',
+  /// R-291a (PRD 10 §5): an owner's checklist statement (`after.mark`, `after.on`),
+  /// and the platform marking the org live (PROVISIONING → ACTIVE).
+  'org.setup_marked',
+  'org.went_live',
   /// R-292b, R-293b (PRD 11 §3.1): an org's Twilio provisioning or Resend
   /// domain started, re-polled (by an admin, or by the nightly cron when the
   /// status moved) or retired. Never the sealed secret.

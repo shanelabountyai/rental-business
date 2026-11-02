@@ -280,6 +280,16 @@ export const NAV_ITEMS: readonly NavItem[] = [
     ownedBy: 'R-138',
   },
   {
+    href: '/settings/setup',
+    label: 'Setup',
+    group: 'Admin',
+    /// PRD 10 §5 (R-291a): the provisioning checklist is the owner's job, and
+    /// it is about the whole organisation, so `staff.manage` portfolio-wide.
+    permission: 'staff.manage',
+    portfolioOnly: true,
+    ownedBy: 'R-291a',
+  },
+  {
     href: '/settings/support-access',
     label: 'Support access',
     group: 'Admin',

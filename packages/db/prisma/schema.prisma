@@ -572,8 +572,8 @@ model OrgMembership {
 /// reads it to SCOPE until R-285b.
 /// Never deleted (D-319): offboarding is export, freeze, purge.
 model Organization {
-  id                   String   @id @default(cuid())
-  slug                 String   @unique
+  id                   String    @id @default(cuid())
+  slug                 String    @unique
   /// The brand name (R-289): page titles, the SMS footer default, the opt-out page.
   name                 String
   /// `#rrggbb` (CHECK-enforced) over Homestead's `--primary` / `--accent`; null = default.
@@ -584,12 +584,18 @@ model Organization {
   supportEmail         String?
   /// R-290b: false stops every send for this org, recorded as `kill_switch`.
   /// Beside the global NOTIFICATIONS_ENABLED, never instead of it.
-  notificationsEnabled Boolean  @default(true)
+  notificationsEnabled Boolean   @default(true)
   /// R-276: the host that names this org, set only once Vercel verifies it
   /// (CHECK: a lower-case bare hostname). Read by `orgIdForHost` and `authUrl`.
-  customDomain         String?  @unique
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  customDomain         String?   @unique
+  /// R-291a (D-383): PROVISIONING until the platform marks it live from the
+  /// checklist; then the slug is fixed. R-300 adds FROZEN and OFFBOARDED.
+  status               OrgStatus @default(PROVISIONING)
+  /// R-291a: what the owner states rather than the database shows - `just_me`
+  /// (step 2), `templates_reviewed` (4), `shared_email` (7). CHECK-enforced set.
+  setupMarks           String[]  @default([])
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   legalEntities LegalEntity[]
   properties    Property[]
@@ -709,6 +715,11 @@ model Organization {
   platformFees                   PlatformFee[]
   health                         OrgHealth?
   supportGrants                  SupportAccessGrant[]
+}
+
+enum OrgStatus {
+  PROVISIONING
+  ACTIVE
 }
 
 enum IntegrationProvider {
@@ -863,6 +874,8 @@ model OrgHealth {
   activeMembers       Int
   properties          Int
   states              String[]
+  /// R-291a: the checklist's step booleans by key, no names (PRD 11 §5.5).
+  checklist           Json?
 }
 
 model LegalEntity {

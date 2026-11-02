@@ -171,6 +171,9 @@ const RESOURCE_LESS_GUARDS: Record<string, string> = {
   'app/(admin)/settings/support-access/page.tsx':
     'A support grant is about the whole organisation (PRD 11 §4.14, R-295a), not a property: `audit.read` portfolio-wide reads it, and answering needs `staff.manage` as well, which only an owner holds.',
   'lib/support/actions.ts': 'Same as the support-access page above. The org is the session\'s, never a form field.',
+  'app/(admin)/settings/setup/page.tsx':
+    'The provisioning checklist (PRD 10 §5, R-291a) is about the whole organisation - its owners, Stripe, texting, email domain - not a property. Owner-only through `staff.manage`.',
+  'lib/setup/actions.ts': 'Same as the setup page above. The org is the session\'s, never a form field.',
   'app/(admin)/jobs/page.tsx':
     'A JobRun belongs to a property, but "did last night\'s work happen" does not (R-174): the panel answers a question about the whole deployment - every job, every property, and the jobs that have never run anywhere. Half that answer is worse than none, so refusing a scoped actor is the intended result.',
   'lib/jobs/actions.ts':

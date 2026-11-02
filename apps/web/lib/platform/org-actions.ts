@@ -11,6 +11,8 @@ import { usableColor } from '@/lib/brand.ts'
 import { authUrl } from '@/lib/auth/delivery.ts'
 import { deliverOverChannel } from '@/lib/notifications/deliver.ts'
 import { requirePlatform } from '@/lib/platform/guard.ts'
+import { refreshOrgHealth } from '@/lib/cron/org-health.ts'
+import { STEP_LABELS, SETUP_STEPS, readyToGoLive, setupChecklist, setupFacts } from '@/lib/setup/checklist.ts'
 import { minutesUntil, orgInviteEmail } from '@/lib/platform/mail.ts'
 
 // `/platform/orgs/new` and the invites panel on `/platform/orgs/[slug]`
@@ -252,8 +254,8 @@ export async function configureOrganization(
 
 /**
  * "Change slug" (PRD 11 §4.6, R-304b): the organisation's host changes, so it
- * asks for a fresh code and the old slug typed back. Always allowed until
- * R-300 adds a status column to say the org is live. Cookies are host-only, so
+ * asks for a fresh code and the old slug typed back. Only while the org is
+ * PROVISIONING (R-291a). Cookies are host-only, so
  * signed-in staff are signed out of the old host, and a pending invitation's
  * link names the old host: both are said so rather than left as a surprise.
  */
@@ -267,8 +269,10 @@ export async function changeOrgSlug(
     stepUp: true,
     next: `/platform/orgs/${encodeURIComponent(oldSlug)}`,
   })
-  const org = await prisma.organization.findUnique({ where: { slug: oldSlug }, select: { id: true } })
+  const org = await prisma.organization.findUnique({ where: { slug: oldSlug }, select: { id: true, status: true } })
   if (!org) return { error: 'That organisation no longer exists.' }
+  // PRD 11 §4.6: only before go-live. A live org's links are in tenants' inboxes.
+  if (org.status !== 'PROVISIONING') return { error: 'The slug cannot change once the organisation is live.' }
 
   if (str(formData, 'confirmSlug') !== oldSlug) {
     return { error: 'Type the current slug exactly to confirm.', fieldErrors: { confirmSlug: 'Does not match.' } }
@@ -351,4 +355,58 @@ export async function switchOrgNotifications(
       ? 'Notifications are on. Anything held in the queue goes out on the next drain.'
       : 'Notifications are switched off. Nothing is sent for this organisation until they are switched back on.',
   }
+}
+
+/**
+ * "Go live" (PRD 10 §5 step 10, R-291a). `org.configure` with step-up and the
+ * slug typed back, because it fixes the slug for good. The steps are read from
+ * FRESH facts at the press, in the org's own code - never from the console's
+ * copy in `OrgHealth`, which can be a day old. The update is conditional on
+ * PROVISIONING, so two admins pressing at once audit one go-live.
+ */
+export async function markOrgLive(_previous: OrgInviteFormState, formData: FormData): Promise<OrgInviteFormState> {
+  const slug = str(formData, 'slug')
+  const actor = await requirePlatform({
+    permission: 'org.configure',
+    stepUp: true,
+    next: `/platform/orgs/${encodeURIComponent(slug)}`,
+  })
+  const org = await prisma.organization.findUnique({ where: { slug }, select: { id: true, status: true } })
+  if (!org) return { error: 'That organisation no longer exists.' }
+  if (org.status !== 'PROVISIONING') return { notice: 'The organisation is already live.' }
+  // Not `confirmSlug`: the slug panel on the same page owns that name, and
+  // TextField derives the input's id from it, so the two labels would collide.
+  if (str(formData, 'confirmLive') !== slug) {
+    return { error: 'Type the slug exactly to confirm.', fieldErrors: { confirmLive: 'Does not match.' } }
+  }
+
+  const checklist = setupChecklist(await setupFacts(org.id))
+  if (!readyToGoLive(checklist)) {
+    await refreshOrgHealth(org.id)
+    revalidatePath(`/platform/orgs/${slug}`)
+    const open = SETUP_STEPS.filter((step) => step !== 'live' && !checklist[step]).map((step) => STEP_LABELS[step].label)
+    return { error: `Not every step is done: ${open.join('; ')}.` }
+  }
+
+  const live = await prisma.$transaction(async (tx) => {
+    const { count } = await tx.organization.updateMany({
+      where: { id: org.id, status: 'PROVISIONING' },
+      data: { status: 'ACTIVE' },
+    })
+    if (count === 0) return false
+    await recordAudit(tx, {
+      actor: { type: 'PLATFORM', ref: actor.id, ipAddress: await clientIp() },
+      action: 'org.went_live',
+      entityType: 'Organization',
+      entityId: org.id,
+      orgId: org.id,
+      before: { status: 'PROVISIONING' },
+      after: { status: 'ACTIVE' },
+    })
+    return true
+  })
+  await refreshOrgHealth(org.id)
+  revalidatePath(`/platform/orgs/${slug}`)
+  revalidatePath('/platform/orgs')
+  return { notice: live ? 'The organisation is live. Its slug is now fixed.' : 'The organisation is already live.' }
 }

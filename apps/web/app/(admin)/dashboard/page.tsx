@@ -1,5 +1,6 @@
 import { formatCents } from '@rental/core/money'
 import Link from 'next/link'
+import { prisma } from '@rental/db'
 import { PageHeader } from '@/components/page-header.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { dashboardSummary, type DashboardSummary } from '@/lib/dashboard/queries.ts'
@@ -127,6 +128,12 @@ export default async function DashboardPage() {
   const [breakGlass, zone] = auditReader
     ? await Promise.all([unacknowledgedBreakGlass(actor.orgId), orgTimezone(actor.orgId)])
     : [[], 'UTC']
+  // PRD 10 §5 (R-291a): until the platform marks the org live, its owners'
+  // first stop is the setup checklist.
+  const provisioning =
+    can(actor, 'staff.manage').allowed &&
+    (await prisma.organization.findUnique({ where: { id: actor.orgId }, select: { status: true } }))?.status ===
+      'PROVISIONING'
   const collectedPct =
     summary.collectedVsBilled.billedCents > 0
       ? Math.min(
@@ -146,6 +153,15 @@ export default async function DashboardPage() {
           {scope.propertyIds.length === 1 ? 'y' : 'ies'}.
         </p>
       </PageHeader>
+
+      {provisioning && (
+        <p className="rounded-md border p-4 text-sm">
+          This organisation is still being set up.{' '}
+          <Link href="/settings/setup" className="underline underline-offset-4">
+            Finish the setup checklist
+          </Link>
+        </p>
+      )}
 
       {auditReader && (
         <BreakGlassBanners
