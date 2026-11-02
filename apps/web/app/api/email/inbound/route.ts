@@ -8,6 +8,7 @@ import {
 } from '@rental/core/comms'
 import { handleInboundEmail } from '@/lib/comms/email-intake.ts'
 import { orgIdForHost } from '@/lib/auth/org.ts'
+import { requestHost } from '@/lib/auth/platform-host.ts'
 import { inboundEmailConfig, inboundEmailSecret } from '@/lib/comms/inbound-email-config.ts'
 import type { InboundAttachment } from '@/lib/comms/inbound-attachments.ts'
 
@@ -106,7 +107,7 @@ export async function POST(request: Request) {
   // org's is built on. Taking the org from an unverified Host is safe for the
   // reason D-374 gives for Twilio's `To`: a forger who names org A's host
   // still has to present org A's secret. No org is final, not retried.
-  const orgId = await orgIdForHost(request.headers.get('host') ?? new URL(request.url).host)
+  const orgId = await orgIdForHost(requestHost(request.headers) ?? new URL(request.url).host)
   if (!orgId) return new Response('Forbidden', { status: 403 })
 
   const expected = await inboundEmailSecret(orgId)

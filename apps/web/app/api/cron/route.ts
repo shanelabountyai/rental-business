@@ -10,6 +10,7 @@ import { storageIsDurable } from '@/lib/storage/index.ts'
 import { sweepUnansweredTenantMessages } from '@/lib/comms/unanswered-sweep.ts'
 import { pollTwilioProvisioning } from '@/lib/integrations/twilio-provisioning.ts'
 import { pollResendProvisioning } from '@/lib/integrations/resend-provisioning.ts'
+import { pollDomainProvisioning } from '@/lib/integrations/vercel-domain.ts'
 import { sweepPendingDelists } from '@/lib/listings/delist-sweep.ts'
 import { dispatchPendingNotifications } from '@/lib/notifications/send.ts'
 import { sweepShowingReminders } from '@/lib/showings/reminders.ts'
@@ -86,6 +87,8 @@ async function runDaily(orgId: string) {
   const smsProvisioning = await repoll(orgId, pollTwilioProvisioning)
   // R-293b (PRD 10 §4): the same for the org's email domain verification.
   const emailProvisioning = await repoll(orgId, pollResendProvisioning)
+  // R-276: and for the org's custom domain.
+  const domainProvisioning = await repoll(orgId, pollDomainProvisioning)
   // R-295a (PRD 11 §5.3): stamps EXPIRY on support grants past their window,
   // for the record. Liveness never waited for it - it is computed.
   const supportGrantsExpired = await expireSupportGrants(orgId)
@@ -150,6 +153,7 @@ async function runDaily(orgId: string) {
     storageDurable: storageIsDurable,
     smsProvisioning,
     emailProvisioning,
+    domainProvisioning,
     supportGrantsExpired,
     durationMs: Date.now() - startedAt,
   }

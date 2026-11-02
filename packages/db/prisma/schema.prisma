@@ -585,6 +585,9 @@ model Organization {
   /// R-290b: false stops every send for this org, recorded as `kill_switch`.
   /// Beside the global NOTIFICATIONS_ENABLED, never instead of it.
   notificationsEnabled Boolean  @default(true)
+  /// R-276: the host that names this org, set only once Vercel verifies it
+  /// (CHECK: a lower-case bare hostname). Read by `orgIdForHost` and `authUrl`.
+  customDomain         String?  @unique
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
@@ -712,6 +715,8 @@ enum IntegrationProvider {
   STRIPE
   TWILIO
   RESEND
+  /// R-276: the org's custom domain on the Vercel project.
+  VERCEL
   QUICKBOOKS
   ESIGN
 }
@@ -781,6 +786,20 @@ model SimulatedResendDomain {
   failWith  String?
   closedAt  DateTime?
   createdAt DateTime  @default(now())
+}
+
+/// R-276: the SIMULATED Vercel's own record of a project domain (D-27, D-7),
+/// org-less and keyed by the name, as Vercel keys it. Only
+/// lib/integrations/vercel-domain.ts reads it.
+model SimulatedVercelDomain {
+  name         String   @id
+  verified     Boolean  @default(false)
+  reason       String?
+  /// The TXT record Vercel asks for when the domain is held elsewhere.
+  verification Json
+  /// Test seam: the next verification fails with exactly this reason.
+  failWith     String?
+  createdAt    DateTime @default(now())
 }
 
 /// R-277b: the SIMULATED Stripe's own record of a connected account (D-27,

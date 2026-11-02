@@ -433,6 +433,8 @@ describe('orgId on every org-owned table (R-285a)', () => {
     'SimulatedTwilioAccount',
     // R-293b: the simulated Resend's own state, the same way.
     'SimulatedResendDomain',
+    // R-276: the simulated Vercel's project domains, the same way.
+    'SimulatedVercelDomain',
     // R-277b: the simulated Stripe's own state, the same way.
     'SimulatedStripeAccount',
   ]

@@ -18,12 +18,18 @@ import {
   retireResendProvisioning,
   startResendProvisioning,
 } from '@/lib/integrations/resend-provisioning.ts'
+import {
+  type DomainRow,
+  pollDomainProvisioning,
+  retireDomainProvisioning,
+  startDomainProvisioning,
+} from '@/lib/integrations/vercel-domain.ts'
 import { requirePlatform } from '@/lib/platform/guard.ts'
 import type { OrgInviteFormState } from '@/lib/platform/org-actions.ts'
 
 // The integrations panel on `/platform/orgs/[slug]` (PRD 11 §3.1, §4.4,
-// R-292b, R-293b): start, re-poll or retire an org's Twilio provisioning or
-// its Resend sending domain. Guarded by
+// R-292b, R-293b, R-276): start, re-poll or retire an org's Twilio
+// provisioning, its Resend sending domain or its custom domain. Guarded by
 // `integration.provision`, which wants no step-up; audited in the org as
 // PLATFORM. Nothing here reads the sealed secret, and no audit row carries it.
 
@@ -150,6 +156,57 @@ export async function provisionResend(
     if (!retired) return { notice: 'The email domain was already retired.' }
     await audit('integration.retired', retired.before, shownDomain(retired.before), { status: 'RETIRED' })
     notice = 'Email domain retired. Email now goes from the shared address under this organisation\'s name.'
+  } else {
+    return { error: 'That action is not recognised.' }
+  }
+  revalidatePath(`/platform/orgs/${slug}`)
+  revalidatePath('/platform/orgs')
+  return { notice }
+}
+
+/// What an audit row may say about a VERCEL row. It has no secret.
+function shownCustomDomain(row: DomainRow) {
+  const { domain, verifiedAt } = row.config
+  return { status: row.status, statusReason: row.statusReason, domain, verifiedAt }
+}
+
+/// The custom domain panel (R-276): start, re-poll or retire, as for Resend.
+export async function provisionDomain(
+  _previous: OrgInviteFormState,
+  formData: FormData,
+): Promise<OrgInviteFormState> {
+  const slug = str(formData, 'slug')
+  const target = await provisionTarget(slug)
+  if (!target) return { error: 'That organisation no longer exists.' }
+  const { org, audit } = target
+  const intent = str(formData, 'intent')
+
+  let notice: string
+  if (intent === 'start') {
+    const domain = str(formData, 'domain').toLowerCase()
+    if (!DOMAIN.test(domain)) {
+      return { error: 'Fix the custom domain.', fieldErrors: { domain: 'A hostname such as portal.example.com.' } }
+    }
+    const started = await startDomainProvisioning(org.id, domain)
+    if (!started.ok) return { error: started.error }
+    await audit('integration.provision_started', started.row, null, shownCustomDomain(started.row))
+    notice = `Domain ${domain} added. Publish the DNS records below, then re-poll.`
+  } else if (intent === 'poll') {
+    const polled = await pollDomainProvisioning(org.id).catch((error: unknown) =>
+      error instanceof Error ? error : new Error(String(error)),
+    )
+    if (polled instanceof Error) return { error: `Vercel did not answer the poll: ${polled.message}` }
+    if (!polled) return { notice: 'Nothing to re-poll: provisioning is not in progress.' }
+    await audit('integration.polled', polled.after, shownCustomDomain(polled.before), shownCustomDomain(polled.after))
+    notice =
+      polled.after.status === 'VERIFIED'
+        ? `Re-polled. ${polled.after.config.domain} is verified and now serves this organisation.`
+        : `Re-polled. Not verified yet${polled.after.statusReason ? `: ${polled.after.statusReason}` : '.'}`
+  } else if (intent === 'retire') {
+    const retired = await retireDomainProvisioning(org.id)
+    if (!retired) return { notice: 'The custom domain was already retired.' }
+    await audit('integration.retired', retired.before, shownCustomDomain(retired.before), { status: 'RETIRED' })
+    notice = 'Custom domain retired. Links now go to this organisation’s subdomain.'
   } else {
     return { error: 'That action is not recognised.' }
   }

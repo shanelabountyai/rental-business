@@ -187,6 +187,7 @@ Inbound: `To` → number → org; then `candidatesForPhone` runs **within the or
 *(2026-11-01, D-376: R-293a built. An org sends from its own domain only once Resend has verified it, else from the shared `RESEND_SHARED_FROM` under its sender name. The inbound-email webhook takes the org from its host and checks that org's own secret. The delivery webhook keeps one platform secret, because there is one Resend account. Domain provisioning is R-293b.)*
 *(2026-11-02, D-377: R-293b built on a simulated Resend. The console adds the domain, shows its DNS records and polls verification, nightly too. The row is `VERIFIED` once Resend verifies it, which is when it gains its `from` and inbound address; a simulated row never sends from its domain or receives at it.)*
 - **Custom domain** stays R-276 and stays later: it needs the org to own DNS, a Vercel domain per org, and a cookie/`AUTH_URL` per domain, none of which org #1 needs on day one.
+*(2026-11-03, D-382: R-276 built on a simulated Vercel. The console adds the domain and polls verification, nightly too; `Organization.customDomain` is set only once verified, and then names the org and carries its links. Auth.js redirects are relative, so sign-in stays on whichever host it started on.)*
 
 ## 5. Provisioning — org signup to go-live, with a checklist
 

@@ -24,3 +24,18 @@ export function platformRouteRefused(
   const consolePath = pathname === '/platform' || pathname.startsWith('/platform/')
   return isPlatformHost(host, platform) ? !consolePath && pathname !== '/' : consolePath
 }
+
+/// The host the BROWSER asked for (R-276, D-379): `x-forwarded-host` first,
+/// then `host`. A server action that calls `redirect()` has Next render the
+/// target in the same response, by fetching it from the server's own origin
+/// (`initURL`, `localhost` under `next start`). That fetch forwards the
+/// request's headers but not its Host, so a page read off `host` alone ran as
+/// org #0 and bounced an org's session to /login. Next sets
+/// `x-forwarded-host` from the real Host only when it is absent, and Vercel's
+/// edge sets it on every request, so it names the browser's host on both legs.
+/// A client can send its own on a bare `next start`; nothing trusts the host
+/// alone, since every check behind it still needs that org's session, token
+/// or secret.
+export function requestHost(headers: { get(name: string): string | null }): string | null {
+  return headers.get('x-forwarded-host')?.split(',')[0]?.trim() || headers.get('host')
+}

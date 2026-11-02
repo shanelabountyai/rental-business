@@ -75,19 +75,7 @@ export function EmailProvisioningPanel({
                 Publish these records at the domain&rsquo;s DNS host. Until Resend verifies them, email goes from the
                 shared address under this organisation&rsquo;s name.
               </p>
-              <ul className="flex flex-col gap-2" aria-label="DNS records">
-                {view.records.map((r) => (
-                  <li key={`${r.type} ${r.name} ${r.value}`} className="flex min-w-0 flex-col rounded border p-2">
-                    <span className="font-medium">
-                      {r.type}
-                      {r.priority !== undefined && <> · priority {r.priority}</>}
-                    </span>
-                    <span className="break-all">{r.name}</span>
-                    {/* A DKIM key has no break opportunity: break-all, or it widens a phone's page. */}
-                    <code className="break-all">{r.value}</code>
-                  </li>
-                ))}
-              </ul>
+              <DnsRecordList records={view.records} />
             </>
           )}
         </>
@@ -129,5 +117,25 @@ export function EmailProvisioningPanel({
         </div>
       )}
     </div>
+  )
+}
+
+/// The records a provider asks the org to publish, shared by the Resend and
+/// custom domain panels.
+export function DnsRecordList({ records }: { records: DnsRecord[] }) {
+  return (
+    <ul className="flex flex-col gap-2" aria-label="DNS records">
+      {records.map((r) => (
+        <li key={`${r.type} ${r.name} ${r.value}`} className="flex min-w-0 flex-col rounded border p-2">
+          <span className="font-medium">
+            {r.type}
+            {r.priority !== undefined && <> · priority {r.priority}</>}
+          </span>
+          <span className="break-all">{r.name}</span>
+          {/* A DKIM key has no break opportunity: break-all, or it widens a phone's page. */}
+          <code className="break-all">{r.value}</code>
+        </li>
+      ))}
+    </ul>
   )
 }

@@ -93,6 +93,8 @@ export const manifest: Record<string, Entry> = {
   'lib/platform/integration-actions.ts#provisionTwilio': { 'form.slug': 'value', 'form.intent': '=poll' },
   // R-293b: the email domain the same way.
   'lib/platform/integration-actions.ts#provisionResend': { 'form.slug': 'value', 'form.intent': '=poll' },
+  // R-276: the custom domain the same way.
+  'lib/platform/integration-actions.ts#provisionDomain': { 'form.slug': 'value', 'form.intent': '=poll' },
   // R-305 (D-355): a statute version is org-less, so nothing names an org.
   'lib/platform/jurisdiction-actions.ts#createRuleVersion': {},
   // R-295a: the console names any org by slug, and ends only its own admin's

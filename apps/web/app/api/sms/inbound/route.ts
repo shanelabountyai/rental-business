@@ -1,5 +1,6 @@
 import { verifyTwilioSignature } from '@rental/core/comms'
 import { handleInboundSms } from '@/lib/comms/sms-intake.ts'
+import { signedWebhookUrl } from '@/lib/auth/org-url.ts'
 import { twilioWebhookAccount } from '@/lib/notifications/live-adapter.ts'
 import { fetchTwilioMedia, parseTwilioMedia } from '@/lib/comms/twilio-media.ts'
 
@@ -22,25 +23,13 @@ import { fetchTwilioMedia, parseTwilioMedia } from '@/lib/comms/twilio-media.ts'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-/**
- * The URL Twilio signed.
- *
- * Built from AUTH_URL - the same deliberately-not-derived-from-headers
- * constant R-003 uses for auth links - rather than from the request's own
- * Host header. Behind a proxy, `request.url` is the INTERNAL address
- * (http://localhost:3000/...) while Twilio signed the PUBLIC one, so a
- * signature check against `request.url` would fail every real request in
- * production and pass every one in development, which is the worst possible
- * split. Taking the host from an X-Forwarded-Host header instead would hand
- * an attacker control of a value inside the signature payload.
- */
-function signedUrl(request: Request): string {
-  const base = process.env.AUTH_URL
-  if (!base) return request.url
-  const incoming = new URL(request.url)
-  return new URL(incoming.pathname + incoming.search, base).toString()
-}
-
+// The URL Twilio signed is the org's host as WE registered it (`authUrl`,
+// R-276), never the request's own Host header. Behind a proxy `request.url`
+// is the INTERNAL address while Twilio signed the PUBLIC one, so checking
+// against it fails every real request in production and passes every one in
+// development, the worst possible split; and X-Forwarded-Host would hand an
+// attacker a value inside the signature payload. Before R-276 this was
+// AUTH_URL's host for every org, which no org but org #0 was ever posted at.
 export async function POST(request: Request) {
   const form = await request.formData()
   const params: Record<string, string> = {}
@@ -67,7 +56,7 @@ export async function POST(request: Request) {
 
   const valid = verifyTwilioSignature({
     authToken,
-    url: signedUrl(request),
+    url: await signedWebhookUrl(request, orgId),
     params,
     signature: request.headers.get('x-twilio-signature'),
   })

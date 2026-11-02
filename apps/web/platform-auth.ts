@@ -13,7 +13,7 @@ import NextAuth from 'next-auth'
 import Credentials from 'next-auth/providers/credentials'
 import { headers } from 'next/headers'
 import { MfaRateLimited } from './auth.ts'
-import { isPlatformHost } from './lib/auth/platform-host.ts'
+import { isPlatformHost, requestHost } from './lib/auth/platform-host.ts'
 import { PLATFORM_IDLE_SECONDS, PLATFORM_SESSION_COOKIE } from './lib/auth/platform-session.ts'
 import { consumeRateLimit, redeemToken } from './lib/auth/store.ts'
 
@@ -74,7 +74,7 @@ export const {
         const challengeToken = asString(raw.challengeToken)
         const code = asString(raw.code)
         if (!challengeToken || !code) return null
-        if (!isPlatformHost((await headers()).get('host'))) return null
+        if (!isPlatformHost(requestHost(await headers()))) return null
 
         const adminId = await peekPlatformChallenge(challengeToken)
         if (!adminId) return null
@@ -188,7 +188,7 @@ export async function platformSessionIsStillValid(
 ): Promise<boolean> {
   if (!id || kind !== 'platform' || !authenticatedAt) return false
   if (now - authenticatedAt > ABSOLUTE_MS) return false
-  if (!isPlatformHost((await headers()).get('host'))) return false
+  if (!isPlatformHost(requestHost(await headers()))) return false
   const admin = await prisma.platformAdmin.findUnique({
     where: { id },
     select: { active: true, sessionsValidFrom: true },

@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server'
 
-import { isPlatformHost, platformRouteRefused } from '@/lib/auth/platform-host.ts'
+import { isPlatformHost, platformRouteRefused, requestHost } from '@/lib/auth/platform-host.ts'
 import { rollPlatformSession } from '@/lib/auth/platform-session.ts'
 import { demoGate } from '@/lib/demo-gate'
 
@@ -94,7 +94,7 @@ export async function proxy(request: NextRequest) {
   // console exists only on PLATFORM_HOST, and that host serves nothing else
   // (PRD 11 §2.2, R-294b). A bare 404, so neither host admits the other's
   // pages exist.
-  if (platformRouteRefused(request.headers.get('host'), request.nextUrl.pathname)) {
+  if (platformRouteRefused(requestHost(request.headers), request.nextUrl.pathname)) {
     return new NextResponse('Not Found', { status: 404 })
   }
   // The paths the matcher used to exclude outright. They reach the proxy only
@@ -134,7 +134,7 @@ export async function proxy(request: NextRequest) {
 
   const response = NextResponse.next({ request: { headers } })
   response.headers.set('Content-Security-Policy', csp)
-  if (isPlatformHost(request.headers.get('host'))) await rollPlatformSession(request, response)
+  if (isPlatformHost(requestHost(request.headers))) await rollPlatformSession(request, response)
   return response
 }
 

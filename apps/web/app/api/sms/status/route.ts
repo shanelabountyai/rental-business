@@ -6,6 +6,7 @@ import {
 } from '@rental/core/comms'
 import { prisma } from '@rental/db'
 import { recordOptOut } from '@/lib/comms/opt-out-store.ts'
+import { signedWebhookUrl } from '@/lib/auth/org-url.ts'
 import { twilioWebhookAccount } from '@/lib/notifications/live-adapter.ts'
 
 // Twilio's delivery status callback (NOTIF-01, R-040e; D-38).
@@ -31,13 +32,6 @@ import { twilioWebhookAccount } from '@/lib/notifications/live-adapter.ts'
 // `SmsOptOutSource.CARRIER_CALLBACK` would otherwise be a value nothing can
 // produce.
 
-function signedUrl(request: Request): string {
-  const base = process.env.AUTH_URL
-  if (!base) return request.url
-  const incoming = new URL(request.url)
-  return new URL(incoming.pathname + incoming.search, base).toString()
-}
-
 export async function POST(request: Request) {
   const form = await request.formData()
   const params: Record<string, string> = {}
@@ -59,7 +53,7 @@ export async function POST(request: Request) {
   if (
     !verifyTwilioSignature({
       authToken,
-      url: signedUrl(request),
+      url: await signedWebhookUrl(request, orgId),
       params,
       signature: request.headers.get('x-twilio-signature'),
     })

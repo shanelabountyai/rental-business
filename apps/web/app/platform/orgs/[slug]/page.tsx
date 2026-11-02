@@ -7,10 +7,13 @@ import { changeOrgSlug, configureOrganization, manageOrgInvite, switchOrgNotific
 import { INTEGRATION_SELECT, orgOwners, providerName } from '@/lib/platform/orgs.ts'
 import { OrgHealthPanel } from '@/components/platform/org-health.tsx'
 import { SmsProvisioningPanel, type SmsProvisioningView } from '@/components/platform/sms-provisioning.tsx'
+import { DomainProvisioningPanel, type DomainProvisioningView } from '@/components/platform/domain-provisioning.tsx'
 import { EmailProvisioningPanel, type EmailProvisioningView } from '@/components/platform/email-provisioning.tsx'
 import { twilioRow } from '@/lib/integrations/twilio-provisioning.ts'
 import { dnsRecords, resendRow } from '@/lib/integrations/resend-provisioning.ts'
-import { provisionResend, provisionTwilio } from '@/lib/platform/integration-actions.ts'
+import { domainRow } from '@/lib/integrations/vercel-domain.ts'
+import { authUrl } from '@/lib/auth/org-url.ts'
+import { provisionDomain, provisionResend, provisionTwilio } from '@/lib/platform/integration-actions.ts'
 import Link from 'next/link'
 
 export const dynamic = 'force-dynamic'
@@ -59,8 +62,9 @@ export default async function PlatformOrgPage({
   const canProvision = (await platformDecision(admin, 'integration.provision')).allowed
   const sms = smsView(await twilioRow(org.id), now)
   const email = emailView(await resendRow(org.id), now)
-  // Twilio and Resend each have their own panel below.
-  const others = org.integrations.filter((i) => i.provider !== 'TWILIO' && i.provider !== 'RESEND')
+  const domain = await domainView(org.id, now)
+  // Twilio, Resend and Vercel each have their own panel below.
+  const others = org.integrations.filter((i) => !['TWILIO', 'RESEND', 'VERCEL'].includes(i.provider))
   const invites = org.invites.map((i) => ({
     id: i.id,
     email: i.email,
@@ -160,6 +164,7 @@ export default async function PlatformOrgPage({
         )}
         <SmsProvisioningPanel action={provisionTwilio} slug={org.slug} view={sms} canProvision={canProvision} />
         <EmailProvisioningPanel action={provisionResend} slug={org.slug} view={email} canProvision={canProvision} />
+        <DomainProvisioningPanel action={provisionDomain} slug={org.slug} view={domain} canProvision={canProvision} />
       </section>
 
       <OrgHealthPanel health={org.health} now={now} />
@@ -203,6 +208,23 @@ function emailView(row: Awaited<ReturnType<typeof resendRow>>, now: Date): Email
     records: dnsRecords(row),
     from: c.from ?? null,
     inboundAddress: c.inboundAddress ?? null,
+    startedLabel: daysAgo(c.startedAt, now),
+    polledLabel: c.polledAt ? friendlyTimestamp(new Date(c.polledAt), 'UTC') : null,
+  }
+}
+
+/// The VERCEL row as the panel shows it (R-276). "Served on" is the host
+/// `authUrl` builds links on, so the panel says what the org's mail says.
+async function domainView(orgId: string, now: Date): Promise<DomainProvisioningView> {
+  const row = await domainRow(orgId)
+  const c = row?.config ?? {}
+  const servedOn = process.env.AUTH_URL ? new URL(await authUrl(orgId, '/')).host : 'not configured (AUTH_URL is unset)'
+  return {
+    status: row?.status ?? null,
+    statusReason: row?.statusReason ?? null,
+    domain: c.domain ?? null,
+    records: dnsRecords(row),
+    servedOn,
     startedLabel: daysAgo(c.startedAt, now),
     polledLabel: c.polledAt ? friendlyTimestamp(new Date(c.polledAt), 'UTC') : null,
   }

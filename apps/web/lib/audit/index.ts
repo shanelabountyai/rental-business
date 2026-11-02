@@ -11,7 +11,7 @@ import type { Session } from 'next-auth'
 import { headers } from 'next/headers'
 import { auth } from '@/auth.ts'
 import { hostOrgId } from '@/lib/auth/org.ts'
-import { isPlatformHost } from '@/lib/auth/platform-host.ts'
+import { isPlatformHost, requestHost } from '@/lib/auth/platform-host.ts'
 import { currentSupportSession } from '@/lib/support/session.ts'
 
 // Request-aware wrapper around the shared audit service.
@@ -48,7 +48,7 @@ async function requestAuditContext(): Promise<{ actor: AuditActor; orgId?: strin
   // R-294c). Only on the console's host, so no org request pays the lookup,
   // and imported there only: a static import loads a second Auth.js into
   // every module that audits, which unit tests mocking `@/auth.ts` cannot.
-  if (!session?.principal && isPlatformHost(headerList.get('host'))) {
+  if (!session?.principal && isPlatformHost(requestHost(headerList))) {
     const { currentPlatformPrincipal } = await import('@/platform-auth.ts')
     const admin = await currentPlatformPrincipal()
     if (admin) return { actor: { ...requestMeta(headerList), type: 'PLATFORM', ref: admin.id } }

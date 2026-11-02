@@ -73,12 +73,8 @@ async function ownerSignsIn(page: Page, host: string, owner: { email: string; se
   await page.waitForURL(/\/login\/mfa/)
   await page.getByLabel(/code/i).fill(code(owner.secret))
   await page.getByRole('button', { name: 'Verify' }).click()
-  // Auth.js sends the browser to AUTH_URL's host (bare localhost, org #0;
-  // R-276, D-379), which has no session and bounces to its own /login. The
-  // cookie is the org host's all the same, so wait only to leave this host's
-  // MFA page.
-  const orgHost = new URL(host).hostname
-  await page.waitForURL((url) => url.hostname !== orgHost)
+  // On the org host, not AUTH_URL's: R-276's relative redirect (D-379).
+  await page.waitForURL(`${host}/dashboard`)
 }
 
 test('a request waits for an owner, who approves it on the org host for less than was asked', async ({ page, browser }, testInfo) => {

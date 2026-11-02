@@ -31,7 +31,7 @@ import {
 } from '@/platform-auth.ts'
 import { requirePlatform } from '@/lib/platform/guard.ts'
 import { notifyOwnersOfLockout } from '@/lib/platform/mail.ts'
-import { isPlatformHost } from '@/lib/auth/platform-host.ts'
+import { isPlatformHost, requestHost } from '@/lib/auth/platform-host.ts'
 import { consumeRateLimit, issueToken, redeemToken } from '@/lib/auth/store.ts'
 
 // Platform console sign-in (PRD 11 §2.3-2.5, R-294b). The staff flow in
@@ -58,7 +58,7 @@ const GENERIC_RATE_LIMIT_ERROR = 'Too many attempts. Wait a few minutes and try 
 const EXPIRED = 'That sign-in attempt expired. Start again.'
 
 async function onPlatformHost(): Promise<boolean> {
-  return isPlatformHost((await headers()).get('host'))
+  return isPlatformHost(requestHost(await headers()))
 }
 
 async function clientIp(): Promise<string> {

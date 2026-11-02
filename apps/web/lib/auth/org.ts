@@ -1,6 +1,6 @@
 import { prisma } from '@rental/db'
 import { headers } from 'next/headers'
-import { isPlatformHost } from './platform-host.ts'
+import { isPlatformHost, requestHost } from './platform-host.ts'
 
 // Which organisation a request is for, and whether a signed-in principal still
 // belongs to it (R-288, PRD 10 §1.4).
@@ -37,7 +37,7 @@ export function orgSlugFromHost(
 
 /// The org this request's host names, or null for none.
 export async function hostOrgId(): Promise<string | null> {
-  return orgIdForHost((await headers()).get('host'))
+  return orgIdForHost(requestHost(await headers()))
 }
 
 /// The org a host names, or null for none. Separate so a webhook can read the
@@ -47,7 +47,16 @@ export async function orgIdForHost(host: string | null): Promise<string | null> 
   // under ORG_BASE_DOMAIN and would otherwise fall through to org #0.
   if (isPlatformHost(host)) return null
   const slug = orgSlugFromHost(host)
-  if (slug === undefined) return DEFAULT_ORG_ID
+  if (slug === undefined) {
+    // R-276: a verified custom domain names its org; any other host outside
+    // the base is still org #0. The column is written only on verification
+    // and can never be a base, console or AUTH_URL host (`reservedDomain`).
+    const name = (host ?? '').split(':')[0].trim().toLowerCase()
+    const custom = name
+      ? await prisma.organization.findUnique({ where: { customDomain: name }, select: { id: true } })
+      : null
+    return custom?.id ?? DEFAULT_ORG_ID
+  }
   if (slug === null) return null
   const org = await prisma.organization.findUnique({ where: { slug }, select: { id: true } })
   return org?.id ?? null

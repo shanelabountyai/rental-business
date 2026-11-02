@@ -9,6 +9,7 @@ import {
 import { prisma } from '@rental/db'
 import NextAuth, { CredentialsSignin } from 'next-auth'
 import Credentials from 'next-auth/providers/credentials'
+import { relativeRedirect } from './lib/auth/redirect.ts'
 import { hostOrgId, principalIsStillValid } from './lib/auth/org.ts'
 import { consumeRateLimit, redeemToken } from './lib/auth/store.ts'
 
@@ -281,6 +282,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
 
   callbacks: {
+    // Post-sign-in and sign-out redirects stay RELATIVE (R-276, D-379).
+    // next-auth rewrites every request it handles onto AUTH_URL's origin
+    // (`reqWithEnvURL`), so an absolute redirect lands on org #0's host while
+    // the session cookie was set, host-only, on the org's subdomain or custom
+    // domain. A relative Location resolves against the host the browser is
+    // on. See `relativeRedirect`.
+    redirect: ({ url, baseUrl }) => relativeRedirect(url, baseUrl),
+
     jwt: async ({ token, user }) => {
       if (user) {
         const principal = user as unknown as Principal & { id: string }

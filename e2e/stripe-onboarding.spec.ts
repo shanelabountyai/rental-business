@@ -64,10 +64,8 @@ test('an owner connects Stripe through onboarding, and collection turns on only 
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Password').fill(PASSWORD)
   await page.getByRole('button', { name: 'Sign in' }).click()
-  // Auth.js builds its post-sign-in redirect on AUTH_URL (bare localhost, org
-  // #0), not the org host - per-domain AUTH_URL is R-276. The session cookie
-  // is the org host's all the same, so wait only for the press to land.
-  await page.waitForURL((url) => !(url.hostname === `${slug}.orgs.localhost` && url.pathname === '/login'))
+  // On the org host, not AUTH_URL's: R-276's relative redirect (D-379).
+  await page.waitForURL(`${host}/dashboard`)
 
   await page.goto(`${host}/money/stripe`)
   await expect(page.getByText('Not connected')).toBeVisible()
