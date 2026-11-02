@@ -15271,7 +15271,7 @@ Tests: `lib/platform/settings.test.ts` (no secret value in the output, the kill 
 
 ## R-291a — Provisioning checklist and go-live
 
-**SHA:** (recorded in the follow-up commit)
+**SHA:** `180e9a4`
 
 **What it built.** Migration `20261104100000_org_go_live` adds `OrgStatus` (`PROVISIONING`, `ACTIVE`) as `Organization.status`, backfilled `ACTIVE` for every existing org and defaulting `PROVISIONING` for new ones. It also adds `Organization.setupMarks` (CHECK-closed to `just_me`, `templates_reviewed`, `shared_email`) and `OrgHealth.checklist`. `lib/setup/checklist.ts` derives PRD 10 §5's ten steps from facts (`setupFacts` gathers them, `setupChecklist` decides, `stepReason` says why in the owner's words, with the provider's reason verbatim), and `readyToGoLive` gates step 10. `recordOrgHealth` writes the step booleans on every cron child; `refreshOrgHealth` writes them from `/settings/setup` and from each mark. `/settings/setup` (`staff.manage`) shows the ten steps and the owner's three marks (`markSetupStep`, audited `org.setup_marked`). The dashboard shows a "Finish the setup checklist" banner to owners while the org is provisioning. On the console, `/platform/orgs/[slug]` gains a checklist panel that reads `OrgHealth.checklist` only, plus "Go live" (`markOrgLive`: `org.configure`, step-up, slug typed back, every step re-read from fresh facts, a conditional `PROVISIONING → ACTIVE`, audited `org.went_live` as PLATFORM). The slug change is refused, and its panel hidden, once the org is live.
 
