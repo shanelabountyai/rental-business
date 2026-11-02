@@ -7,8 +7,10 @@ import { changeOrgSlug, configureOrganization, manageOrgInvite, switchOrgNotific
 import { INTEGRATION_SELECT, orgOwners, providerName } from '@/lib/platform/orgs.ts'
 import { OrgHealthPanel } from '@/components/platform/org-health.tsx'
 import { SmsProvisioningPanel, type SmsProvisioningView } from '@/components/platform/sms-provisioning.tsx'
+import { EmailProvisioningPanel, type EmailProvisioningView } from '@/components/platform/email-provisioning.tsx'
 import { twilioRow } from '@/lib/integrations/twilio-provisioning.ts'
-import { provisionTwilio } from '@/lib/platform/integration-actions.ts'
+import { dnsRecords, resendRow } from '@/lib/integrations/resend-provisioning.ts'
+import { provisionResend, provisionTwilio } from '@/lib/platform/integration-actions.ts'
 import Link from 'next/link'
 
 export const dynamic = 'force-dynamic'
@@ -57,6 +59,9 @@ export default async function PlatformOrgPage({
   const canConfigure = configure.allowed
   const canProvision = (await platformDecision(admin, 'integration.provision')).allowed
   const sms = smsView(await twilioRow(org.id), now)
+  const email = emailView(await resendRow(org.id), now)
+  // Twilio and Resend each have their own panel below.
+  const others = org.integrations.filter((i) => i.provider !== 'TWILIO' && i.provider !== 'RESEND')
   const invites = org.invites.map((i) => ({
     id: i.id,
     email: i.email,
@@ -135,11 +140,11 @@ export default async function PlatformOrgPage({
         <h2 id="integrations-heading" className="text-lg font-semibold">
           Integrations
         </h2>
-        {org.integrations.filter((i) => i.provider !== 'TWILIO').length === 0 ? (
+        {others.length === 0 ? (
           <p>No other integrations started.</p>
         ) : (
           <ul className="flex flex-col gap-2 break-words">
-            {org.integrations.filter((i) => i.provider !== 'TWILIO').map((i) => (
+            {others.map((i) => (
               <li key={i.provider} className="flex flex-col">
                 <span className="font-medium">
                   {providerName(i.provider)}: {i.status.toLowerCase().replaceAll('_', ' ')}
@@ -152,6 +157,7 @@ export default async function PlatformOrgPage({
           </ul>
         )}
         <SmsProvisioningPanel action={provisionTwilio} slug={org.slug} view={sms} canProvision={canProvision} />
+        <EmailProvisioningPanel action={provisionResend} slug={org.slug} view={email} canProvision={canProvision} />
       </section>
 
       <OrgHealthPanel health={org.health} now={now} />
@@ -166,16 +172,36 @@ function smsView(row: Awaited<ReturnType<typeof twilioRow>>, now: Date): SmsProv
   if (!row) return { status: null, statusReason: null, phoneNumber: null, brand: null, campaign: null, startedLabel: null, polledLabel: null }
   const c = row.config
   const review = (status?: string, reason?: string) => (status ? { status, reason: reason ?? null } : null)
-  const startedAt = c.startedAt ? new Date(c.startedAt) : null
-  const days = startedAt ? Math.floor((now.getTime() - startedAt.getTime()) / 86_400_000) : null
   return {
     status: row.status,
     statusReason: row.statusReason,
     phoneNumber: c.phoneNumber ?? null,
     brand: review(c.brandStatus, c.brandReason),
     campaign: review(c.campaignStatus, c.campaignReason),
-    startedLabel:
-      days === null ? null : days === 0 ? 'today' : `${days} day${days === 1 ? '' : 's'} ago`,
+    startedLabel: daysAgo(c.startedAt, now),
+    polledLabel: c.polledAt ? friendlyTimestamp(new Date(c.polledAt), 'UTC') : null,
+  }
+}
+
+function daysAgo(iso: string | undefined, now: Date): string | null {
+  if (!iso) return null
+  const days = Math.floor((now.getTime() - new Date(iso).getTime()) / 86_400_000)
+  return days === 0 ? 'today' : `${days} day${days === 1 ? '' : 's'} ago`
+}
+
+/// The RESEND row as the panel shows it (R-293b): named config keys only,
+/// never the sealed key or inbound secret (`resendRow` does not read them).
+function emailView(row: Awaited<ReturnType<typeof resendRow>>, now: Date): EmailProvisioningView {
+  const c = row?.config ?? {}
+  return {
+    status: row?.status ?? null,
+    statusReason: row?.statusReason ?? null,
+    domain: c.domain ?? null,
+    domainStatus: c.domainStatus ?? null,
+    records: dnsRecords(row),
+    from: c.from ?? null,
+    inboundAddress: c.inboundAddress ?? null,
+    startedLabel: daysAgo(c.startedAt, now),
     polledLabel: c.polledAt ? friendlyTimestamp(new Date(c.polledAt), 'UTC') : null,
   }
 }

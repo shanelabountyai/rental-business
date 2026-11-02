@@ -700,6 +700,27 @@ model SimulatedTwilioAccount {
   createdAt           DateTime  @default(now())
 }
 
+/// R-293b: the SIMULATED Resend's own records (D-27, D-7), org-less for the
+/// reason `SimulatedTwilioAccount` is: it is the provider's database, not
+/// ours. It knows a domain by Resend's id and remembers the DNS records it
+/// asked for and where verification stands. Only
+/// lib/integrations/resend-provisioning.ts reads it; the sender reads our
+/// `OrgIntegration.config`, so the two can disagree until a poll tells us.
+/// One OPEN domain per name (`closedAt` null) is the provisioner's check, not
+/// an index: a closed domain's name may be added again.
+model SimulatedResendDomain {
+  domainId  String    @id
+  name      String
+  status    String
+  reason    String?
+  records   Json
+  /// Test seam: the next verification fails with exactly this reason, which
+  /// must reach the console verbatim.
+  failWith  String?
+  closedAt  DateTime?
+  createdAt DateTime  @default(now())
+}
+
 /// R-303 (PRD 11 §5.5, D-354): what the platform console may know about an
 /// org's running, upserted by the org's own cron child at the end of every
 /// per-org invocation. Counts, booleans, timestamps and state codes only -

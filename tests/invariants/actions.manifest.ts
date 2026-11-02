@@ -80,6 +80,8 @@ export const manifest: Record<string, Entry> = {
   // R-292b: SMS provisioning names the org by slug; `poll` reaches the lookup
   // and, with no row, does nothing.
   'lib/platform/integration-actions.ts#provisionTwilio': { 'form.slug': 'value', 'form.intent': '=poll' },
+  // R-293b: the email domain the same way.
+  'lib/platform/integration-actions.ts#provisionResend': { 'form.slug': 'value', 'form.intent': '=poll' },
   // R-305 (D-355): a statute version is org-less, so nothing names an org.
   'lib/platform/jurisdiction-actions.ts#createRuleVersion': {},
   // lib/auth/invite-actions.ts (R-304a)

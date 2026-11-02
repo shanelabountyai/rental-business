@@ -117,9 +117,9 @@ export const AUDIT_ACTIONS = [
   'org.slug_changed',
   /// R-306 (D-347): the org's notification kill switch flipped; `after.reason` says why.
   'org.notifications_switched',
-  /// R-292b (PRD 11 §3.1): an org's Twilio provisioning started, re-polled
-  /// (by an admin, or by the nightly cron when the status moved) or retired.
-  /// Never the sealed secret.
+  /// R-292b, R-293b (PRD 11 §3.1): an org's Twilio provisioning or Resend
+  /// domain started, re-polled (by an admin, or by the nightly cron when the
+  /// status moved) or retired. Never the sealed secret.
   'integration.provision_started',
   'integration.polled',
   'integration.retired',

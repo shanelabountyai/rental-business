@@ -431,6 +431,8 @@ describe('orgId on every org-owned table (R-285a)', () => {
     'PlatformAdmin', 'PlatformCredential', 'PlatformRole', 'PlatformRoleAssignment',
     // R-292b: the simulated Twilio's own state - another company's database.
     'SimulatedTwilioAccount',
+    // R-293b: the simulated Resend's own state, the same way.
+    'SimulatedResendDomain',
   ]
 
   it('every model but the org-less list has orgId and an org_scope trigger', async () => {

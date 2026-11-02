@@ -11,11 +11,19 @@ import {
   retireTwilioProvisioning,
   startTwilioProvisioning,
 } from '@/lib/integrations/twilio-provisioning.ts'
+import {
+  DOMAIN,
+  type ResendRow,
+  pollResendProvisioning,
+  retireResendProvisioning,
+  startResendProvisioning,
+} from '@/lib/integrations/resend-provisioning.ts'
 import { requirePlatform } from '@/lib/platform/guard.ts'
 import type { OrgInviteFormState } from '@/lib/platform/org-actions.ts'
 
 // The integrations panel on `/platform/orgs/[slug]` (PRD 11 §3.1, §4.4,
-// R-292b): start, re-poll or retire an org's Twilio provisioning. Guarded by
+// R-292b, R-293b): start, re-poll or retire an org's Twilio provisioning or
+// its Resend sending domain. Guarded by
 // `integration.provision`, which wants no step-up; audited in the org as
 // PLATFORM. Nothing here reads the sealed secret, and no audit row carries it.
 
@@ -32,20 +40,22 @@ function shown(row: TwilioRow) {
   return { status: row.status, statusReason: row.statusReason, accountSid, phoneNumber, brandStatus, campaignStatus }
 }
 
-export async function provisionTwilio(
-  _previous: OrgInviteFormState,
-  formData: FormData,
-): Promise<OrgInviteFormState> {
-  const slug = str(formData, 'slug')
+type Audit = (
+  action: AuditAction,
+  row: { id: string },
+  before: Record<string, unknown> | null,
+  after: Record<string, unknown>,
+) => Promise<unknown>
+
+/// The guard, the org by slug, and an audit writer in that org as PLATFORM.
+async function provisionTarget(slug: string): Promise<{ org: { id: string }; audit: Audit } | null> {
   const actor = await requirePlatform({
     permission: 'integration.provision',
     next: `/platform/orgs/${encodeURIComponent(slug)}`,
   })
   const org = await prisma.organization.findUnique({ where: { slug }, select: { id: true } })
-  if (!org) return { error: 'That organisation no longer exists.' }
-
-  const intent = str(formData, 'intent')
-  const audit = async (action: AuditAction, row: { id: string }, before: Record<string, unknown> | null, after: Record<string, unknown>) =>
+  if (!org) return null
+  const audit: Audit = async (action, row, before, after) =>
     recordAudit(prisma, {
       actor: { type: 'PLATFORM', ref: actor.id, ipAddress: (await headers()).get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown' },
       action,
@@ -55,6 +65,18 @@ export async function provisionTwilio(
       before: before ?? undefined,
       after,
     })
+  return { org, audit }
+}
+
+export async function provisionTwilio(
+  _previous: OrgInviteFormState,
+  formData: FormData,
+): Promise<OrgInviteFormState> {
+  const slug = str(formData, 'slug')
+  const target = await provisionTarget(slug)
+  if (!target) return { error: 'That organisation no longer exists.' }
+  const { org, audit } = target
+  const intent = str(formData, 'intent')
 
   let notice: string
   if (intent === 'start') {
@@ -80,6 +102,54 @@ export async function provisionTwilio(
     if (!retired) return { notice: 'SMS was already retired.' }
     await audit('integration.retired', retired.before, shown(retired.before), { status: 'RETIRED' })
     notice = 'SMS retired. The subaccount is closed and its number released; no texts go out for this organisation.'
+  } else {
+    return { error: 'That action is not recognised.' }
+  }
+  revalidatePath(`/platform/orgs/${slug}`)
+  revalidatePath('/platform/orgs')
+  return { notice }
+}
+
+/// What an audit row may say about a RESEND row: never the sealed key or
+/// inbound secret, which `ResendRow` does not carry anyway.
+function shownDomain(row: ResendRow) {
+  const { domain, domainId, domainStatus, from, inboundAddress } = row.config
+  return { status: row.status, statusReason: row.statusReason, domain, domainId, domainStatus, from, inboundAddress }
+}
+
+export async function provisionResend(
+  _previous: OrgInviteFormState,
+  formData: FormData,
+): Promise<OrgInviteFormState> {
+  const slug = str(formData, 'slug')
+  const target = await provisionTarget(slug)
+  if (!target) return { error: 'That organisation no longer exists.' }
+  const { org, audit } = target
+  const intent = str(formData, 'intent')
+
+  let notice: string
+  if (intent === 'start') {
+    const domain = str(formData, 'domain').toLowerCase()
+    if (!DOMAIN.test(domain)) {
+      return { error: 'Fix the sending domain.', fieldErrors: { domain: 'A hostname such as mail.example.com.' } }
+    }
+    const started = await startResendProvisioning(org.id, domain)
+    if (!started.ok) return { error: started.error }
+    await audit('integration.provision_started', started.row, null, shownDomain(started.row))
+    notice = `Domain ${domain} added. Publish the DNS records below, then re-poll.`
+  } else if (intent === 'poll') {
+    const polled = await pollResendProvisioning(org.id).catch((error: unknown) =>
+      error instanceof Error ? error : new Error(String(error)),
+    )
+    if (polled instanceof Error) return { error: `Resend did not answer the poll: ${polled.message}` }
+    if (!polled) return { notice: 'Nothing to re-poll: provisioning is not in progress.' }
+    await audit('integration.polled', polled.after, shownDomain(polled.before), shownDomain(polled.after))
+    notice = `Re-polled. Domain ${words(polled.after.config.domainStatus)}.`
+  } else if (intent === 'retire') {
+    const retired = await retireResendProvisioning(org.id)
+    if (!retired) return { notice: 'The email domain was already retired.' }
+    await audit('integration.retired', retired.before, shownDomain(retired.before), { status: 'RETIRED' })
+    notice = 'Email domain retired. Email now goes from the shared address under this organisation\'s name.'
   } else {
     return { error: 'That action is not recognised.' }
   }

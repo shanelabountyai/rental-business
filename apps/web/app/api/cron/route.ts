@@ -9,6 +9,7 @@ import { reconcileLedger } from '@/lib/ledger/reconcile.ts'
 import { storageIsDurable } from '@/lib/storage/index.ts'
 import { sweepUnansweredTenantMessages } from '@/lib/comms/unanswered-sweep.ts'
 import { pollTwilioProvisioning } from '@/lib/integrations/twilio-provisioning.ts'
+import { pollResendProvisioning } from '@/lib/integrations/resend-provisioning.ts'
 import { sweepPendingDelists } from '@/lib/listings/delist-sweep.ts'
 import { dispatchPendingNotifications } from '@/lib/notifications/send.ts'
 import { sweepShowingReminders } from '@/lib/showings/reminders.ts'
@@ -81,7 +82,9 @@ async function runDaily(orgId: string) {
   // R-292b (PRD 10 §3.1): the nightly 10DLC re-poll of a PROVISIONING row.
   // A provider error is reported, not thrown: it is not this org's tick
   // failing, and the console's "Re-poll" is there to try again.
-  const smsProvisioning = await repollSms(orgId)
+  const smsProvisioning = await repoll(orgId, pollTwilioProvisioning)
+  // R-293b (PRD 10 §4): the same for the org's email domain verification.
+  const emailProvisioning = await repoll(orgId, pollResendProvisioning)
 
   const ran = runs.filter((r) => r.outcome === 'ran')
   // R-174. A run that filled a business date an earlier tick missed, counted
@@ -142,13 +145,19 @@ async function runDaily(orgId: string) {
     // opens a photo months later and it is gone.
     storageDurable: storageIsDurable,
     smsProvisioning,
+    emailProvisioning,
     durationMs: Date.now() - startedAt,
   }
 }
 
-async function repollSms(orgId: string): Promise<string | null> {
+type Poll = { id: string; status: string; statusReason: string | null }
+
+async function repoll(
+  orgId: string,
+  pollProvisioning: (orgId: string) => Promise<{ before: Poll; after: Poll } | null>,
+): Promise<string | null> {
   try {
-    const poll = await pollTwilioProvisioning(orgId)
+    const poll = await pollProvisioning(orgId)
     if (!poll) return null
     if (poll.after.status !== poll.before.status) {
       await auditAsSystem('cron', {

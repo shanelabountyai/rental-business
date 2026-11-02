@@ -28,7 +28,10 @@ export interface InboundEmailConfig {
 
 export async function inboundEmailConfig(orgId: string): Promise<InboundEmailConfig | null> {
   const row = await orgIntegration(orgId, 'RESEND')
-  const raw = row ? row.config.inboundAddress : orgId === DEFAULT_ORG_ID ? process.env.INBOUND_EMAIL_ADDRESS : null
+  // A SIMULATED domain (R-293b) has no MX anywhere: a Reply-To there loses
+  // the renter's reply, which is worse than routing it by From:.
+  const simulated = row?.config.provisionedBy === 'simulated'
+  const raw = row ? (simulated ? null : row.config.inboundAddress) : orgId === DEFAULT_ORG_ID ? process.env.INBOUND_EMAIL_ADDRESS : null
   const address = typeof raw === 'string' ? raw.trim() : ''
   if (!address) return null
   const [localPart, domain] = address.toLowerCase().split('@')
