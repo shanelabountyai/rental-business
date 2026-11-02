@@ -128,7 +128,7 @@ export async function exportLedgerStatement(
     ...new Set(period.lines.map(invoiceRefOf).filter((id): id is string => id !== null)),
   ]
 
-  const provider = getBillingProvider()
+  const provider = getBillingProvider(lease.orgId)
   const fetched = await Promise.all(
     citedInvoiceIds.map(async (id) => {
       try {

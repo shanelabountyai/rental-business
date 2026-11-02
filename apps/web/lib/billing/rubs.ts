@@ -67,6 +67,7 @@ export async function allocateBill(
       allocatedAt: true,
       property: {
         select: {
+          orgId: true,
           state: true,
           county: true,
           units: {
@@ -217,7 +218,7 @@ export async function allocateBill(
 }
 
 async function chargeShare(
-  bill: { id: string; propertyId: string; periodStart: Date; periodEnd: Date },
+  bill: { id: string; propertyId: string; property: { orgId: string }; periodStart: Date; periodEnd: Date },
   share: RubsShare,
   stripeCustomerId: string | null,
 ): Promise<void> {
@@ -243,7 +244,7 @@ async function chargeShare(
   if (!stripeCustomerId) return
 
   try {
-    const item = await getBillingProvider().addInvoiceItem({
+    const item = await getBillingProvider(bill.property.orgId).addInvoiceItem({
       stripeCustomerId,
       amountCents: share.amountCents,
       currency: 'usd',

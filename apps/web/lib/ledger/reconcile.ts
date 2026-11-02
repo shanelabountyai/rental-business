@@ -175,7 +175,7 @@ export async function reconcileLedger(
       select: { leaseId: true, stripeSubscriptionId: true },
     })
 
-    const provider = getBillingProvider()
+    const provider = getBillingProvider(orgId)
     const stripeBalanceByLease = new Map<string, number | null>()
     for (const payer of payers) {
       // Null means Stripe could not be asked, not "nothing owed" - the same

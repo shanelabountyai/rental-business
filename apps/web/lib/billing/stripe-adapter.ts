@@ -103,8 +103,13 @@ function formEncode(params: Record<string, string | number | undefined | null>):
 export class StripeBillingProvider implements BillingProvider {
   readonly name = 'stripe-test'
   readonly #secretKey: string
+  readonly #resolveAccount: () => Promise<string | null>
+  #account: Promise<string | null> | null = null
 
-  constructor(secretKey: string) {
+  /// `account` names the connected account every request is made ON (direct
+  /// charges, D-316); null means the platform account itself. Resolved on the
+  /// first request, not here, so constructing a provider costs nothing.
+  constructor(secretKey: string, account: () => Promise<string | null> = async () => null) {
     if (secretKey.startsWith('sk_live_') || secretKey.startsWith('rk_live_')) {
       throw new LiveModeRefusedError()
     }
@@ -114,6 +119,17 @@ export class StripeBillingProvider implements BillingProvider {
       )
     }
     this.#secretKey = secretKey
+    this.#resolveAccount = account
+  }
+
+  async #auth(): Promise<Record<string, string>> {
+    this.#account ??= this.#resolveAccount()
+    const account = await this.#account
+    return {
+      Authorization: `Bearer ${this.#secretKey}`,
+      'Stripe-Version': STRIPE_VERSION,
+      ...(account ? { 'Stripe-Account': account } : {}),
+    }
   }
 
   async #post(
@@ -124,9 +140,8 @@ export class StripeBillingProvider implements BillingProvider {
     const response = await fetch(`${STRIPE_API}${path}`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${this.#secretKey}`,
+        ...(await this.#auth()),
         'Content-Type': 'application/x-www-form-urlencoded',
-        'Stripe-Version': STRIPE_VERSION,
         // Only on writes that CREATE something. An update is already
         // idempotent by nature - setting a price to X twice leaves it at X -
         // and a stale key on an update would make a legitimate second change
@@ -152,8 +167,7 @@ export class StripeBillingProvider implements BillingProvider {
     const response = await fetch(`${STRIPE_API}${path}`, {
       method: 'DELETE',
       headers: {
-        Authorization: `Bearer ${this.#secretKey}`,
-        'Stripe-Version': STRIPE_VERSION,
+        ...(await this.#auth()),
       },
     })
     // Already gone is the outcome the caller wanted. Stripe answers 404 for a
@@ -172,8 +186,7 @@ export class StripeBillingProvider implements BillingProvider {
   async #get(path: string): Promise<Record<string, unknown> | null> {
     const response = await fetch(`${STRIPE_API}${path}`, {
       headers: {
-        Authorization: `Bearer ${this.#secretKey}`,
-        'Stripe-Version': STRIPE_VERSION,
+        ...(await this.#auth()),
       },
     })
     if (response.status === 404) return null
@@ -343,8 +356,7 @@ export class StripeBillingProvider implements BillingProvider {
     const response = await fetch(`${STRIPE_API}/subscriptions/${input.stripeSubscriptionId}`, {
       method: 'DELETE',
       headers: {
-        Authorization: `Bearer ${this.#secretKey}`,
-        'Stripe-Version': STRIPE_VERSION,
+        ...(await this.#auth()),
       },
     })
     if (!response.ok && response.status !== 404) {

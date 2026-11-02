@@ -166,6 +166,9 @@ export interface StripeEventEnvelope {
   /// database round trip, which is what keeps this module pure.
   data: { object: Record<string, unknown>; previous_attributes?: Record<string, unknown> }
   livemode?: boolean
+  /// The connected account the event happened on (Connect only, R-277a).
+  /// Absent on the platform account's own events.
+  account?: string
 }
 
 export type ProjectionKind =

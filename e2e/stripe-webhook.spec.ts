@@ -315,7 +315,7 @@ test.describe('the projection pipeline', () => {
     expect(await response.json()).toMatchObject({ outcome: 'ignored' })
 
     const row = await prisma.processedStripeEvent.findUniqueOrThrow({
-      where: { stripeEventId: id },
+      where: { orgId_stripeEventId: { orgId: 'org_0', stripeEventId: id } },
     })
     expect(row.outcome).toBe('ignored')
   })

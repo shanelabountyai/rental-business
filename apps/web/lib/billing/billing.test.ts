@@ -1,3 +1,4 @@
+import { SimulatedBillingProvider } from '@/lib/billing/simulated-adapter.ts'
 import { randomUUID } from 'node:crypto'
 import { prisma } from '@rental/db'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -222,7 +223,7 @@ describe('the subscription anchor and the move-in proration agree', () => {
     leaseIds.push(lease.id)
     await prisma.leaseTenant.create({ data: { leaseId: lease.id, tenantId, isPrimary: true } })
 
-    const spy = vi.spyOn(getBillingProvider(), 'createSubscription')
+    const spy = vi.spyOn(SimulatedBillingProvider.prototype, 'createSubscription')
     let anchor: Date
     try {
       expect((await provisionLeaseBilling(lease.id)).outcome).toBe('provisioned')
@@ -368,7 +369,7 @@ describe('processStripeEvent', () => {
       data: { collectionMethod: 'send_invoice', defaultPaymentMethodId: null },
     })
 
-    const result = await processStripeEvent({
+    const result = await processStripeEvent('org_0', {
       id: `evt_${randomUUID().replace(/-/g, '')}`,
       type: 'setup_intent.succeeded',
       created: Math.floor(Date.now() / 1000),
@@ -396,7 +397,7 @@ describe('processStripeEvent', () => {
     const { lease, customerId } = await provisionedLease()
     const before = await prisma.ledgerEntry.count({ where: { leaseId: lease.id } })
 
-    await processStripeEvent({
+    await processStripeEvent('org_0', {
       id: `evt_${randomUUID().replace(/-/g, '')}`,
       type: 'setup_intent.succeeded',
       created: Math.floor(Date.now() / 1000),
@@ -417,7 +418,7 @@ describe('processStripeEvent', () => {
     // There would be nothing to make default, so "succeeded" would be a
     // success that changed nothing.
     const { customerId } = await provisionedLease()
-    const result = await processStripeEvent({
+    const result = await processStripeEvent('org_0', {
       id: `evt_${randomUUID().replace(/-/g, '')}`,
       type: 'setup_intent.succeeded',
       created: Math.floor(Date.now() / 1000),
@@ -437,7 +438,7 @@ describe('processStripeEvent', () => {
     const { lease, customerId } = await provisionedLease()
     const event = invoiceEvent({ customer: customerId, amountPaid: 150_000 })
 
-    expect(await processStripeEvent(event)).toEqual({
+    expect(await processStripeEvent('org_0', event)).toEqual({
       outcome: 'projected',
       detail: 'payment_succeeded',
     })
@@ -481,7 +482,7 @@ describe('processStripeEvent', () => {
     })
 
     // Rent: the subscription's own line, which mints no Charge row (D-11).
-    await processStripeEvent(
+    await processStripeEvent('org_0', 
       invoiceEvent({ customer: customerId, type: 'invoice.finalized', amountDue: 150_000 }),
     )
     // The fee, raised as its own invoice item and linked back by metadata.
@@ -493,7 +494,7 @@ describe('processStripeEvent', () => {
     ;(feeInvoice.data.object as Record<string, unknown>).lines = {
       data: [{ metadata: { chargeId: fee.id } }],
     }
-    await processStripeEvent(feeInvoice)
+    await processStripeEvent('org_0', feeInvoice)
     expect(await leaseBalanceCents(lease.id)).toBe(200_000)
 
     // The payment names the fee on its line, exactly as the old code needed
@@ -502,7 +503,7 @@ describe('processStripeEvent', () => {
     ;(payment.data.object as Record<string, unknown>).lines = {
       data: [{ metadata: { chargeId: fee.id } }],
     }
-    expect(await processStripeEvent(payment)).toEqual({
+    expect(await processStripeEvent('org_0', payment)).toEqual({
       outcome: 'projected',
       detail: 'payment_succeeded',
     })
@@ -557,14 +558,14 @@ describe('processStripeEvent', () => {
     ;(raised.data.object as Record<string, unknown>).lines = {
       data: charges.map((charge) => ({ metadata: { chargeId: charge.id } })),
     }
-    await processStripeEvent(raised)
+    await processStripeEvent('org_0', raised)
     expect(await leaseBalanceCents(lease.id)).toBe(80_000)
 
     const payment = invoiceEvent({ customer: customerId, amountPaid: 60_000 })
     ;(payment.data.object as Record<string, unknown>).lines = {
       data: charges.map((charge) => ({ metadata: { chargeId: charge.id } })),
     }
-    await processStripeEvent(payment)
+    await processStripeEvent('org_0', payment)
 
     const outstanding = await outstandingCharges(lease.id)
     expect(outstanding).toEqual([
@@ -587,7 +588,7 @@ describe('processStripeEvent', () => {
     // alone, so a single-entry ledger is a wrong balance everywhere.
     const { lease, customerId } = await provisionedLease()
 
-    await processStripeEvent(
+    await processStripeEvent('org_0', 
       invoiceEvent({ customer: customerId, type: 'invoice.finalized', amountDue: 150_000 }),
     )
 
@@ -607,12 +608,12 @@ describe('processStripeEvent', () => {
     const { lease, customerId } = await provisionedLease()
     const invoiceId = `in_${randomUUID().slice(0, 12)}`
 
-    await processStripeEvent(
+    await processStripeEvent('org_0', 
       invoiceEvent({ customer: customerId, type: 'invoice.finalized', amountDue: 150_000, invoiceId }),
     )
     expect(await leaseBalanceCents(lease.id)).toBe(150_000)
 
-    await processStripeEvent(
+    await processStripeEvent('org_0', 
       invoiceEvent({ customer: customerId, amountPaid: 150_000, invoiceId }),
     )
     expect(await leaseBalanceCents(lease.id)).toBe(0)
@@ -627,12 +628,12 @@ describe('processStripeEvent', () => {
     const { lease, customerId } = await provisionedLease()
     const invoiceId = `in_${randomUUID().slice(0, 12)}`
 
-    await processStripeEvent(
+    await processStripeEvent('org_0', 
       invoiceEvent({ customer: customerId, type: 'invoice.finalized', amountDue: 150_000, invoiceId }),
     )
     expect(await leaseBalanceCents(lease.id)).toBe(150_000)
 
-    const voided = await processStripeEvent(
+    const voided = await processStripeEvent('org_0', 
       invoiceEvent({ customer: customerId, type: 'invoice.voided', amountDue: 150_000, invoiceId }),
     )
     expect(voided).toEqual({ outcome: 'projected', detail: 'charge_voided' })
@@ -674,7 +675,7 @@ describe('processStripeEvent', () => {
     ;(event.data.object as Record<string, unknown>).lines = {
       data: [{ metadata: { chargeId: fee.id } }],
     }
-    await processStripeEvent(event)
+    await processStripeEvent('org_0', event)
 
     const entry = await prisma.ledgerEntry.findFirstOrThrow({
       where: { leaseId: lease.id, type: 'CHARGE' },
@@ -687,7 +688,7 @@ describe('processStripeEvent', () => {
     // Rent comes from the subscription itself and has no `Charge` row of its
     // own, so an unlinked entry is the correct answer rather than a gap.
     const { lease, customerId } = await provisionedLease()
-    await processStripeEvent(
+    await processStripeEvent('org_0', 
       invoiceEvent({ customer: customerId, type: 'invoice.finalized', amountDue: 150_000 }),
     )
     const entry = await prisma.ledgerEntry.findFirstOrThrow({
@@ -702,7 +703,7 @@ describe('processStripeEvent', () => {
     // goes on the ledger - projecting `total` instead of `amount_due` would
     // charge the tenant for something they were never asked to pay.
     const { lease, customerId } = await provisionedLease()
-    const result = await processStripeEvent(
+    const result = await processStripeEvent('org_0', 
       invoiceEvent({ customer: customerId, type: 'invoice.finalized', amountDue: 0 }),
     )
     expect(result.outcome).toBe('ignored')
@@ -719,12 +720,12 @@ describe('processStripeEvent', () => {
     const paymentIntentId = `pi_${randomUUID().slice(0, 12)}`
     const invoiceId = `in_${randomUUID().slice(0, 12)}`
 
-    await processStripeEvent(
+    await processStripeEvent('org_0', 
       invoiceEvent({ customer: customerId, amountPaid: 150_000, paymentIntentId, invoiceId }),
     )
     expect(await leaseBalanceCents(lease.id)).toBe(-150_000)
 
-    const returned = await processStripeEvent(
+    const returned = await processStripeEvent('org_0', 
       invoiceEvent({
         customer: customerId,
         type: 'invoice.payment_failed',
@@ -788,7 +789,7 @@ describe('processStripeEvent', () => {
     ;(paid.data.object as Record<string, unknown>).lines = {
       data: [{ metadata: { chargeId: fee.id } }],
     }
-    await processStripeEvent(paid)
+    await processStripeEvent('org_0', paid)
 
     // Two rows: one linked to the fee, one remainder for the rent.
     expect(
@@ -796,7 +797,7 @@ describe('processStripeEvent', () => {
     ).toBe(2)
     expect(await leaseBalanceCents(lease.id)).toBe(-120_000)
 
-    await processStripeEvent(
+    await processStripeEvent('org_0', 
       invoiceEvent({
         customer: customerId,
         type: 'invoice.payment_failed',
@@ -830,7 +831,7 @@ describe('processStripeEvent', () => {
     const paymentIntentId = `pi_${randomUUID().slice(0, 12)}`
 
     // The retry succeeds and is processed first.
-    await processStripeEvent(
+    await processStripeEvent('org_0', 
       invoiceEvent({
         customer: customerId,
         amountPaid: 150_000,
@@ -842,7 +843,7 @@ describe('processStripeEvent', () => {
     expect(await leaseBalanceCents(lease.id)).toBe(-150_000)
 
     // The earlier decline arrives late.
-    const stale = await processStripeEvent(
+    const stale = await processStripeEvent('org_0', 
       invoiceEvent({
         customer: customerId,
         type: 'invoice.payment_failed',
@@ -867,7 +868,7 @@ describe('processStripeEvent', () => {
     // Nothing was credited here, so there is nothing to take back - and
     // writing a reversal would invent money the tenant never owed.
     const { lease, customerId } = await provisionedLease()
-    await processStripeEvent(
+    await processStripeEvent('org_0', 
       invoiceEvent({ customer: customerId, type: 'invoice.payment_failed', amountDue: 150_000 }),
     )
 
@@ -885,7 +886,7 @@ describe('processStripeEvent', () => {
     // tenant whose autopay card was simply declined learned about it, if at
     // all, from a phone call.
     const { customerId } = await provisionedLease()
-    await processStripeEvent(
+    await processStripeEvent('org_0', 
       invoiceEvent({ customer: customerId, type: 'invoice.payment_failed', amountDue: 150_000 }),
     )
 
@@ -906,10 +907,10 @@ describe('processStripeEvent', () => {
     const paymentIntentId = `pi_${randomUUID().slice(0, 12)}`
     const invoiceId = `in_${randomUUID().slice(0, 12)}`
 
-    await processStripeEvent(
+    await processStripeEvent('org_0', 
       invoiceEvent({ customer: customerId, amountPaid: 150_000, paymentIntentId, invoiceId }),
     )
-    await processStripeEvent(
+    await processStripeEvent('org_0', 
       invoiceEvent({
         customer: customerId,
         type: 'invoice.payment_failed',
@@ -917,7 +918,7 @@ describe('processStripeEvent', () => {
         invoiceId,
       }),
     )
-    const second = await processStripeEvent(
+    const second = await processStripeEvent('org_0', 
       invoiceEvent({
         customer: customerId,
         type: 'invoice.payment_failed',
@@ -940,8 +941,8 @@ describe('processStripeEvent', () => {
     const { lease, customerId } = await provisionedLease()
     const event = invoiceEvent({ customer: customerId })
 
-    const first = await processStripeEvent(event)
-    const second = await processStripeEvent(event)
+    const first = await processStripeEvent('org_0', event)
+    const second = await processStripeEvent('org_0', event)
 
     expect(first.outcome).toBe('projected')
     expect(second).toEqual({ outcome: 'duplicate' })
@@ -957,9 +958,9 @@ describe('processStripeEvent', () => {
     const event = invoiceEvent({ customer: customerId })
 
     const results = await Promise.all([
-      processStripeEvent(event),
-      processStripeEvent(event),
-      processStripeEvent(event),
+      processStripeEvent('org_0', event),
+      processStripeEvent('org_0', event),
+      processStripeEvent('org_0', event),
     ])
 
     expect(results.filter((r) => r.outcome === 'projected')).toHaveLength(1)
@@ -983,18 +984,18 @@ describe('processStripeEvent', () => {
         throw new Error('connection reset mid-projection')
       })
     try {
-      await expect(processStripeEvent(event)).rejects.toThrow(/mid-projection/)
+      await expect(processStripeEvent('org_0', event)).rejects.toThrow(/mid-projection/)
     } finally {
       client.$transaction = original
     }
     expect(await prisma.ledgerEntry.count({ where: { leaseId: lease.id } })).toBe(0)
     expect(
-      (await prisma.processedStripeEvent.findUniqueOrThrow({ where: { stripeEventId: event.id } })).outcome,
+      (await prisma.processedStripeEvent.findUniqueOrThrow({ where: { orgId_stripeEventId: { orgId: 'org_0', stripeEventId: event.id } } })).outcome,
     ).toBe('failed')
 
     // Stripe's retry after the 500. It used to answer `duplicate` here.
-    expect((await processStripeEvent(event)).outcome).toBe('projected')
-    expect(await processStripeEvent(event)).toEqual({ outcome: 'duplicate' })
+    expect((await processStripeEvent('org_0', event)).outcome).toBe('projected')
+    expect(await processStripeEvent('org_0', event)).toEqual({ outcome: 'duplicate' })
     expect(await prisma.ledgerEntry.count({ where: { leaseId: lease.id } })).toBe(1)
     expect(await prisma.payment.count({ where: { leaseId: lease.id } })).toBe(1)
   }, 20_000)
@@ -1006,6 +1007,7 @@ describe('processStripeEvent', () => {
     for (const [event, ageMs] of [[live, 0], [dead, 20 * 60_000]] as const) {
       await prisma.processedStripeEvent.create({
         data: {
+          orgId: 'org_0',
           stripeEventId: event.id,
           type: event.type,
           outcome: 'received',
@@ -1015,8 +1017,8 @@ describe('processStripeEvent', () => {
       })
     }
 
-    expect(await processStripeEvent(live)).toEqual({ outcome: 'duplicate' })
-    expect((await processStripeEvent(dead)).outcome).toBe('projected')
+    expect(await processStripeEvent('org_0', live)).toEqual({ outcome: 'duplicate' })
+    expect((await processStripeEvent('org_0', dead)).outcome).toBe('projected')
     expect(await prisma.ledgerEntry.count({ where: { leaseId: lease.id } })).toBe(1)
   }, 20_000)
 
@@ -1029,7 +1031,7 @@ describe('processStripeEvent', () => {
       amountDue: 150_000,
     })
 
-    expect((await processStripeEvent(event)).outcome).toBe('projected')
+    expect((await processStripeEvent('org_0', event)).outcome).toBe('projected')
 
     const payment = await prisma.payment.findFirstOrThrow({ where: { leaseId: lease.id } })
     expect(payment.status).toBe('FAILED')
@@ -1042,12 +1044,12 @@ describe('processStripeEvent', () => {
     const { lease, customerId } = await provisionedLease()
     const paymentIntentId = `pi_${randomUUID().slice(0, 12)}`
 
-    await processStripeEvent(
+    await processStripeEvent('org_0', 
       invoiceEvent({ customer: customerId, paymentIntentId, amountPaid: 150_000 }),
     )
 
     const refundId = `evt_${randomUUID().replace(/-/g, '')}`
-    await processStripeEvent({
+    await processStripeEvent('org_0', {
       id: refundId,
       type: 'charge.refunded',
       created: 1_800_100_000,
@@ -1080,14 +1082,14 @@ describe('processStripeEvent', () => {
     // Guessing which lease it belongs to would write money against the wrong
     // tenancy, and retrying would not make the customer appear.
     const event = invoiceEvent({ customer: 'cus_nobody_knows_this_one' })
-    const result = await processStripeEvent(event)
+    const result = await processStripeEvent('org_0', event)
     expect(result.outcome).toBe('ignored')
     expect(result.detail).toContain('no lease payer')
   })
 
   it('ignores an event type nobody has thought about, and says so', async () => {
     const id = `evt_${randomUUID().replace(/-/g, '')}`
-    const result = await processStripeEvent({
+    const result = await processStripeEvent('org_0', {
       id,
       type: 'customer.discount.created',
       created: 1_800_000_000,
@@ -1098,7 +1100,7 @@ describe('processStripeEvent', () => {
     // Recorded anyway. "We saw it and deliberately did nothing" is the
     // answer to a support question that silence cannot give.
     const row = await prisma.processedStripeEvent.findUniqueOrThrow({
-      where: { stripeEventId: id },
+      where: { orgId_stripeEventId: { orgId: 'org_0', stripeEventId: id } },
     })
     expect(row.outcome).toBe('ignored')
     expect(row.detail).toContain('customer.discount.created')
@@ -1107,9 +1109,9 @@ describe('processStripeEvent', () => {
   it('keeps a claim row even for an event it ignored', async () => {
     const { customerId } = await provisionedLease()
     const event = invoiceEvent({ customer: customerId })
-    await processStripeEvent(event)
+    await processStripeEvent('org_0', event)
     const row = await prisma.processedStripeEvent.findUniqueOrThrow({
-      where: { stripeEventId: event.id },
+      where: { orgId_stripeEventId: { orgId: 'org_0', stripeEventId: event.id } },
     })
     expect(row.outcome).toBe('projected')
     expect(row.occurredAt.toISOString()).toBe(new Date(event.created * 1000).toISOString())
@@ -1157,7 +1159,7 @@ describe('out-of-band money already recorded at the counter (D-177)', () => {
   it('CLAIMS the row the counter already wrote instead of minting a second', async () => {
     const { lease, payment, stripeInvoiceId, customerId } = await counterPayment()
 
-    const result = await processStripeEvent(
+    const result = await processStripeEvent('org_0', 
       invoiceEvent({
         customer: customerId,
         invoiceId: stripeInvoiceId,
@@ -1212,7 +1214,7 @@ describe('out-of-band money already recorded at the counter (D-177)', () => {
     })
 
     for (const paidBefore of [0, 150_000]) {
-      await processStripeEvent(
+      await processStripeEvent('org_0', 
         invoiceEvent({
           customer: customerId,
           invoiceId: stripeInvoiceId,
@@ -1253,7 +1255,7 @@ describe('out-of-band money already recorded at the counter (D-177)', () => {
       },
     })
 
-    await processStripeEvent(
+    await processStripeEvent('org_0', 
       invoiceEvent({
         customer: stripeCustomerId!,
         invoiceId: stripeInvoiceId,
@@ -1281,7 +1283,7 @@ describe('out-of-band money already recorded at the counter (D-177)', () => {
       data: { createdAt: new Date(Date.now() - 3 * 86_400_000) },
     })
 
-    await processStripeEvent(
+    await processStripeEvent('org_0', 
       invoiceEvent({
         customer: customerId,
         invoiceId: stripeInvoiceId,
@@ -1336,7 +1338,7 @@ describe('out-of-band money already recorded at the counter (D-177)', () => {
       ],
     })
 
-    await processStripeEvent(
+    await processStripeEvent('org_0', 
       invoiceEvent({
         customer: customerId,
         invoiceId: march,
@@ -1358,7 +1360,7 @@ describe('out-of-band money already recorded at the counter (D-177)', () => {
     expect(await unclaimedCounterPayments([lease.propertyId])).toBe(baseline + 1)
     await prisma.payment.update({ where: { id: payment.id }, data: { createdAt: new Date() } })
 
-    await processStripeEvent(
+    await processStripeEvent('org_0', 
       invoiceEvent({
         customer: customerId,
         invoiceId: april,
@@ -1394,13 +1396,13 @@ describe('a portal payment reaches the invoice (MONEY-01)', () => {
     const invoiceId = `in_${randomUUID().replace(/-/g, '').slice(0, 14)}`
     const now = Math.floor(Date.now() / 1000)
 
-    await processStripeEvent(
+    await processStripeEvent('org_0', 
       invoiceEvent({ customer, type: 'invoice.finalized', amountDue: 200_000, invoiceId, created: now }),
     )
 
     // $1,000 of principal and a $30 card fee on top.
     const paymentIntentId = `pi_${randomUUID().replace(/-/g, '').slice(0, 16)}`
-    await processStripeEvent({
+    await processStripeEvent('org_0', {
       id: `evt_${randomUUID().replace(/-/g, '')}`,
       type: 'payment_intent.succeeded',
       created: now,
@@ -1417,13 +1419,13 @@ describe('a portal payment reaches the invoice (MONEY-01)', () => {
 
     // Stripe was told, for the principal only, against the open invoice...
     const payment = await prisma.payment.findUniqueOrThrow({
-      where: { stripePaymentIntentId: paymentIntentId },
+      where: { orgId_stripePaymentIntentId: { orgId: 'org_0', stripePaymentIntentId: paymentIntentId } },
       select: { id: true, invoiceSplits: { select: { stripeInvoiceId: true, amountCents: true, claimedByEventId: true } } },
     })
     expect(payment.invoiceSplits).toEqual([
       { stripeInvoiceId: invoiceId, amountCents: 100_000, claimedByEventId: expect.stringMatching(/^evt_/) },
     ])
-    const [open] = (await getBillingProvider().getOpenInvoices({ stripeCustomerId: customer }))!
+    const [open] = (await getBillingProvider('org_0').getOpenInvoices({ stripeCustomerId: customer }))!
     expect(open).toMatchObject({ stripeInvoiceId: invoiceId, amountRemainingCents: 100_000 })
 
     // ...and its echo credited nothing: the intent's own event is the only
@@ -1440,7 +1442,7 @@ describe('a portal payment reaches the invoice (MONEY-01)', () => {
 
     // A genuine payment of the SAME amount on the same invoice - Stripe's
     // retry collecting the rest - is money, not an echo, and is credited.
-    await processStripeEvent(
+    await processStripeEvent('org_0', 
       invoiceEvent({ customer, invoiceId, amountPaid: 100_000, paidBefore: 100_000, paymentIntentId: null, created: now }),
     )
     const after = await prisma.ledgerEntry.aggregate({
@@ -1468,25 +1470,27 @@ describe('a portal payment reaches the invoice (MONEY-01)', () => {
     // invoice - and the second push is the one that fails.
     const olderInvoiceId = `in_${randomUUID().replace(/-/g, '').slice(0, 14)}`
     const newerInvoiceId = `in_${randomUUID().replace(/-/g, '').slice(0, 14)}`
-    await processStripeEvent(
+    await processStripeEvent('org_0', 
       invoiceEvent({ customer, type: 'invoice.finalized', amountDue: 100_000, invoiceId: olderInvoiceId, created: now }),
     )
-    await processStripeEvent(
+    await processStripeEvent('org_0', 
       invoiceEvent({ customer, type: 'invoice.finalized', amountDue: 100_000, invoiceId: newerInvoiceId, created: now + 1 }),
     )
 
-    const provider = getBillingProvider()
-    const real = provider.recordOutOfBandPayment.bind(provider)
+    // On the prototype: `getBillingProvider` builds a provider per call (R-277a).
+    const real = SimulatedBillingProvider.prototype.recordOutOfBandPayment
     const spy = vi
-      .spyOn(provider, 'recordOutOfBandPayment')
-      .mockImplementationOnce(real)
+      .spyOn(SimulatedBillingProvider.prototype, 'recordOutOfBandPayment')
+      .mockImplementationOnce(function (this: SimulatedBillingProvider, ...args) {
+        return real.apply(this, args)
+      })
       .mockImplementationOnce(async () => {
         throw new Error('simulated push failure')
       })
 
     const paymentIntentId = `pi_${randomUUID().replace(/-/g, '').slice(0, 16)}`
     try {
-      await processStripeEvent({
+      await processStripeEvent('org_0', {
         id: `evt_${randomUUID().replace(/-/g, '')}`,
         type: 'payment_intent.succeeded',
         created: now + 2,
@@ -1508,7 +1512,7 @@ describe('a portal payment reaches the invoice (MONEY-01)', () => {
     // Stripe, so its split stays for the echo to find - told apart from the
     // one that landed by having no `pushedAt`.
     const payment = await prisma.payment.findUniqueOrThrow({
-      where: { stripePaymentIntentId: paymentIntentId },
+      where: { orgId_stripePaymentIntentId: { orgId: 'org_0', stripePaymentIntentId: paymentIntentId } },
       select: {
         id: true,
         invoiceSplits: { select: { stripeInvoiceId: true, amountCents: true, pushedAt: true } },
@@ -1545,16 +1549,16 @@ describe('a portal payment reaches the invoice (MONEY-01)', () => {
     const customer = payer.stripeCustomerId!
     const invoiceId = `in_${randomUUID().replace(/-/g, '').slice(0, 14)}`
     const now = Math.floor(Date.now() / 1000)
-    await processStripeEvent(
+    await processStripeEvent('org_0', 
       invoiceEvent({ customer, type: 'invoice.finalized', amountDue: 100_000, invoiceId, created: now }),
     )
 
-    const spy = vi.spyOn(getBillingProvider(), 'recordOutOfBandPayment').mockImplementationOnce(async () => {
+    const spy = vi.spyOn(SimulatedBillingProvider.prototype, 'recordOutOfBandPayment').mockImplementationOnce(async () => {
       throw new Error('simulated timeout')
     })
     const paymentIntentId = `pi_${randomUUID().replace(/-/g, '').slice(0, 16)}`
     try {
-      await processStripeEvent({
+      await processStripeEvent('org_0', {
         id: `evt_${randomUUID().replace(/-/g, '')}`,
         type: 'payment_intent.succeeded',
         created: now,
@@ -1572,7 +1576,7 @@ describe('a portal payment reaches the invoice (MONEY-01)', () => {
       spy.mockRestore()
     }
     const payment = await prisma.payment.findUniqueOrThrow({
-      where: { stripePaymentIntentId: paymentIntentId },
+      where: { orgId_stripePaymentIntentId: { orgId: 'org_0', stripePaymentIntentId: paymentIntentId } },
       select: { id: true },
     })
     const paymentCredits = async () =>
@@ -1592,7 +1596,7 @@ describe('a portal payment reaches the invoice (MONEY-01)', () => {
     const { customer, invoiceId, now, paymentId, paymentCredits } = await portalPaymentWhosePushThrew()
 
     // Stripe did record it, and says so.
-    await processStripeEvent(
+    await processStripeEvent('org_0', 
       invoiceEvent({ customer, invoiceId, amountPaid: 100_000, paymentIntentId: null, created: now }),
     )
 
@@ -1630,7 +1634,7 @@ describe('a portal payment reaches the invoice (MONEY-01)', () => {
     expect(mine).toMatchObject([{ kind: 'portal_push_unconfirmed', differenceCents: -100_000 }])
 
     // Stripe's retry collects the invoice the push never paid: real money.
-    await processStripeEvent(
+    await processStripeEvent('org_0', 
       invoiceEvent({ customer, invoiceId, amountPaid: 100_000, paymentIntentId: null, created: now }),
     )
     expect(await paymentCredits()).toBe(-200_000)
@@ -1651,7 +1655,7 @@ describe('an autopay ACH debit settles its own pending row (MONEY-08)', () => {
     const invoiceId = `in_${randomUUID().replace(/-/g, '').slice(0, 14)}`
     const now = Math.floor(Date.now() / 1000)
     const processing = (id: string, metadata: Record<string, string>) =>
-      processStripeEvent({
+      processStripeEvent('org_0', {
         id: `evt_${randomUUID().replace(/-/g, '')}`,
         type: 'payment_intent.processing',
         created: now,
@@ -1675,7 +1679,7 @@ describe('an autopay ACH debit settles its own pending row (MONEY-08)', () => {
 
     const autopayIntent = `pi_${randomUUID().replace(/-/g, '').slice(0, 16)}`
     await processing(autopayIntent, {})
-    await processStripeEvent(
+    await processStripeEvent('org_0', 
       invoiceEvent({ customer, invoiceId, amountPaid: 150_000, paymentIntentId: null, created: now + 60 }),
     )
 
@@ -1709,13 +1713,13 @@ describe('a refund of a fee-bearing card payment (MONEY-03, MONEY-10)', () => {
       (await prisma.ledgerEntry.aggregate({ where: { leaseId: lease.id }, _sum: { amountCents: true } }))
         ._sum.amountCents ?? 0
 
-    await processStripeEvent(
+    await processStripeEvent('org_0', 
       invoiceEvent({ customer, type: 'invoice.finalized', amountDue: 200_000, created: now }),
     )
     const before = await balance()
 
     const paymentIntentId = `pi_${randomUUID().replace(/-/g, '').slice(0, 16)}`
-    await processStripeEvent({
+    await processStripeEvent('org_0', {
       id: `evt_${randomUUID().replace(/-/g, '')}`,
       type: 'payment_intent.succeeded',
       created: now,
@@ -1733,7 +1737,7 @@ describe('a refund of a fee-bearing card payment (MONEY-03, MONEY-10)', () => {
 
     const chargeId = `ch_${randomUUID().replace(/-/g, '').slice(0, 14)}`
     const refund = (total: number, previous: number) =>
-      processStripeEvent({
+      processStripeEvent('org_0', {
         id: `evt_${randomUUID().replace(/-/g, '')}`,
         type: 'charge.refunded',
         created: now + 60,
@@ -1769,7 +1773,7 @@ describe('a lost chargeback (MONEY-04)', () => {
   // invoice it paid stays `paid` after the loss, so this event is the only
   // thing that can take the credit back.
   const closed = (paymentIntent: string, status: string, amount: number, created: number) =>
-    processStripeEvent({
+    processStripeEvent('org_0', {
       id: `evt_${randomUUID().replace(/-/g, '')}`,
       type: 'charge.dispute.closed',
       created,
@@ -1789,11 +1793,11 @@ describe('a lost chargeback (MONEY-04)', () => {
   it('reverses a portal card payment, principal only, and only once', async () => {
     const { lease, payer, customer, balance } = await setup()
     const now = Math.floor(Date.now() / 1000)
-    await processStripeEvent(invoiceEvent({ customer, type: 'invoice.finalized', amountDue: 200_000, created: now }))
+    await processStripeEvent('org_0', invoiceEvent({ customer, type: 'invoice.finalized', amountDue: 200_000, created: now }))
     const before = await balance()
 
     const paymentIntentId = `pi_${randomUUID().replace(/-/g, '').slice(0, 16)}`
-    await processStripeEvent({
+    await processStripeEvent('org_0', {
       id: `evt_${randomUUID().replace(/-/g, '')}`,
       type: 'payment_intent.succeeded',
       created: now,
@@ -1816,7 +1820,7 @@ describe('a lost chargeback (MONEY-04)', () => {
     // Lost: the $1,000 credit comes back off; the $30 fee was never credited.
     expect((await closed(paymentIntentId, 'lost', 103_000, now + 120)).outcome).toBe('projected')
     expect(await balance()).toBe(before)
-    const payment = await prisma.payment.findUniqueOrThrow({ where: { stripePaymentIntentId: paymentIntentId } })
+    const payment = await prisma.payment.findUniqueOrThrow({ where: { orgId_stripePaymentIntentId: { orgId: 'org_0', stripePaymentIntentId: paymentIntentId } } })
     expect(payment).toMatchObject({ status: 'REVERSED', reversalReason: 'Chargeback lost', leaseId: lease.id })
 
     // A second close for the same intent finds nothing SETTLED to reverse.
@@ -1828,14 +1832,14 @@ describe('a lost chargeback (MONEY-04)', () => {
     const { customer, balance } = await setup()
     const now = Math.floor(Date.now() / 1000)
     const invoiceId = `in_${randomUUID().replace(/-/g, '').slice(0, 14)}`
-    await processStripeEvent(invoiceEvent({ customer, invoiceId, type: 'invoice.finalized', amountDue: 150_000, created: now }))
+    await processStripeEvent('org_0', invoiceEvent({ customer, invoiceId, type: 'invoice.finalized', amountDue: 150_000, created: now }))
     const before = await balance()
-    await processStripeEvent(invoiceEvent({ customer, invoiceId, amountPaid: 150_000, paymentIntentId: null, created: now }))
+    await processStripeEvent('org_0', invoiceEvent({ customer, invoiceId, amountPaid: 150_000, paymentIntentId: null, created: now }))
     expect(await balance()).toBe(before - 150_000)
 
     const paymentIntentId = `pi_${randomUUID().replace(/-/g, '').slice(0, 16)}`
     const lookup = vi
-      .spyOn(getBillingProvider(), 'findInvoiceForPaymentIntent')
+      .spyOn(SimulatedBillingProvider.prototype, 'findInvoiceForPaymentIntent')
       .mockResolvedValueOnce(invoiceId)
     expect((await closed(paymentIntentId, 'lost', 150_000, now + 60)).outcome).toBe('projected')
     expect(lookup).toHaveBeenCalledWith(paymentIntentId)
@@ -1850,16 +1854,16 @@ describe('a lost chargeback (MONEY-04)', () => {
     const { payer, customer, balance } = await setup()
     const now = Math.floor(Date.now() / 1000)
     const invoiceId = `in_${randomUUID().replace(/-/g, '').slice(0, 14)}`
-    await processStripeEvent(invoiceEvent({ customer, invoiceId, type: 'invoice.finalized', amountDue: 150_000, created: now }))
+    await processStripeEvent('org_0', invoiceEvent({ customer, invoiceId, type: 'invoice.finalized', amountDue: 150_000, created: now }))
     const before = await balance()
-    await processStripeEvent(invoiceEvent({ customer, invoiceId, amountPaid: 150_000, paymentIntentId: null, created: now }))
+    await processStripeEvent('org_0', invoiceEvent({ customer, invoiceId, amountPaid: 150_000, paymentIntentId: null, created: now }))
     expect(await balance()).toBe(before - 150_000)
 
     // Measured under dahlia: the charge names its intent and customer, never
     // its invoice, so both the refund and the dispute have to ask Stripe.
     const paymentIntentId = `pi_${randomUUID().replace(/-/g, '').slice(0, 16)}`
-    const lookup = vi.spyOn(getBillingProvider(), 'findInvoiceForPaymentIntent').mockResolvedValue(invoiceId)
-    await processStripeEvent({
+    const lookup = vi.spyOn(SimulatedBillingProvider.prototype, 'findInvoiceForPaymentIntent').mockResolvedValue(invoiceId)
+    await processStripeEvent('org_0', {
       id: `evt_${randomUUID().replace(/-/g, '')}`,
       type: 'charge.refunded',
       created: now + 60,
@@ -1889,15 +1893,15 @@ describe('a lost chargeback (MONEY-04)', () => {
     const fee = await prisma.charge.create({
       data: { propertyId: lease.propertyId, leaseId: lease.id, type: 'LATE_FEE', amountCents: 50_000, description: 'Late fee', dueOn: new Date('2026-03-05T00:00:00.000Z') },
     })
-    await processStripeEvent(invoiceEvent({ customer, type: 'invoice.finalized', amountDue: 150_000, created: now }))
+    await processStripeEvent('org_0', invoiceEvent({ customer, type: 'invoice.finalized', amountDue: 150_000, created: now }))
     const feeInvoice = invoiceEvent({ customer, type: 'invoice.finalized', amountDue: 50_000, created: now })
     ;(feeInvoice.data.object as Record<string, unknown>).lines = { data: [{ metadata: { chargeId: fee.id } }] }
-    await processStripeEvent(feeInvoice)
+    await processStripeEvent('org_0', feeInvoice)
     const before = await balance()
 
     // $1,700 principal under RENT-first: $1,500 to rent (unlinked), $200 on the fee.
     const paymentIntentId = `pi_${randomUUID().replace(/-/g, '').slice(0, 16)}`
-    await processStripeEvent({
+    await processStripeEvent('org_0', {
       id: `evt_${randomUUID().replace(/-/g, '')}`,
       type: 'payment_intent.succeeded',
       created: now,
@@ -1919,7 +1923,7 @@ describe('a lost chargeback (MONEY-04)', () => {
       { amountCents: 20_000, chargeId: fee.id },
       { amountCents: 30_000, chargeId: null },
     ])
-    const payment = await prisma.payment.findUniqueOrThrow({ where: { stripePaymentIntentId: paymentIntentId } })
+    const payment = await prisma.payment.findUniqueOrThrow({ where: { orgId_stripePaymentIntentId: { orgId: 'org_0', stripePaymentIntentId: paymentIntentId } } })
     expect(payment.status).toBe('REVERSED')
   }, 30_000)
 
@@ -1927,15 +1931,15 @@ describe('a lost chargeback (MONEY-04)', () => {
     const { customer, balance } = await setup()
     const now = Math.floor(Date.now() / 1000)
     const invoiceId = `in_${randomUUID().replace(/-/g, '').slice(0, 14)}`
-    await processStripeEvent(invoiceEvent({ customer, invoiceId, type: 'invoice.finalized', amountDue: 150_000, created: now }))
+    await processStripeEvent('org_0', invoiceEvent({ customer, invoiceId, type: 'invoice.finalized', amountDue: 150_000, created: now }))
     const before = await balance()
-    await processStripeEvent(invoiceEvent({ customer, invoiceId, amountPaid: 150_000, paymentIntentId: null, created: now }))
+    await processStripeEvent('org_0', invoiceEvent({ customer, invoiceId, amountPaid: 150_000, paymentIntentId: null, created: now }))
     expect(await balance()).toBe(before - 150_000)
 
     // The invoice lookup used to match on the exact amount, so a partial
     // dispute could never reach the row it was about.
     const paymentIntentId = `pi_${randomUUID().replace(/-/g, '').slice(0, 16)}`
-    const lookup = vi.spyOn(getBillingProvider(), 'findInvoiceForPaymentIntent').mockResolvedValueOnce(invoiceId)
+    const lookup = vi.spyOn(SimulatedBillingProvider.prototype, 'findInvoiceForPaymentIntent').mockResolvedValueOnce(invoiceId)
     expect((await closed(paymentIntentId, 'lost', 40_000, now + 60)).outcome).toBe('projected')
     lookup.mockRestore()
     expect(await balance()).toBe(before - 110_000)
@@ -1955,16 +1959,16 @@ describe('two settlements for one lease at once (MONEY-16)', () => {
     const fee = await prisma.charge.create({
       data: { propertyId: lease.propertyId, leaseId: lease.id, type: 'LATE_FEE', amountCents: 10_000, description: 'Late fee', dueOn: new Date('2026-03-05T00:00:00.000Z') },
     })
-    await processStripeEvent(invoiceEvent({ customer, type: 'invoice.finalized', amountDue: 150_000, created: now }))
+    await processStripeEvent('org_0', invoiceEvent({ customer, type: 'invoice.finalized', amountDue: 150_000, created: now }))
     const feeInvoice = invoiceEvent({ customer, type: 'invoice.finalized', amountDue: 10_000, created: now })
     ;(feeInvoice.data.object as Record<string, unknown>).lines = { data: [{ metadata: { chargeId: fee.id } }] }
-    await processStripeEvent(feeInvoice)
+    await processStripeEvent('org_0', feeInvoice)
     const before = await leaseBalanceCents(lease.id)
 
     // Each alone covers the rent AND the fee, so each plan on the pre-payment
     // balance lands $100 on the fee. Serialised, the second sees the first.
     const settle = () =>
-      processStripeEvent({
+      processStripeEvent('org_0', {
         id: `evt_${randomUUID().replace(/-/g, '')}`,
         type: 'payment_intent.succeeded',
         created: now,

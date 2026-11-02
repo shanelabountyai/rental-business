@@ -119,7 +119,7 @@ export async function waiveCharge(
       // A NEGATIVE invoice item: Stripe's own mechanism for a credit, which
       // keeps Stripe the system of record for what is owed (D-11). Waiving
       // only in our own tables would leave Stripe still collecting it.
-      await getBillingProvider().addInvoiceItem({
+      await getBillingProvider(charge.property.orgId).addInvoiceItem({
         stripeCustomerId: payer.stripeCustomerId,
         amountCents: -charge.amountCents,
         currency: 'usd',

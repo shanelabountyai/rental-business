@@ -74,6 +74,10 @@ export interface PipelineResult {
  * that can produce an envelope is the route, after verifying.
  */
 export async function processStripeEvent(
+  /// The org whose Stripe account the event came from (R-277a): the Connect
+  /// route resolves it from `event.account`, the platform route is org #0's.
+  /// Stripe ids are unique per account, so every lookup below is scoped by it.
+  orgId: string,
   event: StripeEventEnvelope,
 ): Promise<PipelineResult> {
   const interpretation = interpretStripeEvent(event)
@@ -84,6 +88,7 @@ export async function processStripeEvent(
   try {
     await prisma.processedStripeEvent.create({
       data: {
+        orgId,
         stripeEventId: event.id,
         type: event.type,
         // Provisional: updated below once the projection either lands or
@@ -95,7 +100,7 @@ export async function processStripeEvent(
     })
   } catch (error) {
     if (!isUniqueViolation(error)) throw error
-    if (!(await retakeClaim(event.id))) return { outcome: 'duplicate' }
+    if (!(await retakeClaim(orgId, event.id))) return { outcome: 'duplicate' }
   }
 
   // A THROW RELEASES THE CLAIM (MONEY-02). Without this the 500 made Stripe
@@ -105,11 +110,11 @@ export async function processStripeEvent(
   // marked: once the projection transaction commits the row says `projected`,
   // and nothing may make committed money replayable.
   try {
-    return await projectClaimed(event, interpretation)
+    return await projectClaimed(orgId, event, interpretation)
   } catch (error) {
     await prisma.processedStripeEvent
       .updateMany({
-        where: { stripeEventId: event.id, outcome: 'received' },
+        where: { orgId, stripeEventId: event.id, outcome: 'received' },
         data: { outcome: 'failed', detail: String(error).slice(0, 500) },
       })
       .catch(() => {})
@@ -127,9 +132,10 @@ const STALE_CLAIM_MS = 15 * 60_000
  * `failed`, or one left `received` by a process that never came back.
  * Conditional, so two concurrent retries cannot both win it.
  */
-async function retakeClaim(stripeEventId: string): Promise<boolean> {
+async function retakeClaim(orgId: string, stripeEventId: string): Promise<boolean> {
   const { count } = await prisma.processedStripeEvent.updateMany({
     where: {
+      orgId,
       stripeEventId,
       OR: [
         { outcome: 'failed' },
@@ -142,11 +148,12 @@ async function retakeClaim(stripeEventId: string): Promise<boolean> {
 }
 
 async function projectClaimed(
+  orgId: string,
   event: StripeEventEnvelope,
   interpretation: ReturnType<typeof interpretStripeEvent>,
 ): Promise<PipelineResult> {
   if (interpretation.outcome === 'ignore') {
-    await recordOutcome(event.id, 'ignored', interpretation.reason)
+    await recordOutcome(orgId, event.id, 'ignored', interpretation.reason)
     return { outcome: 'ignored', detail: interpretation.reason }
   }
 
@@ -154,30 +161,30 @@ async function projectClaimed(
   // (R-039a). Handled before the projection path rather than inside it,
   // because everything below this line is about cents.
   if (interpretation.outcome === 'autopay_enrolled') {
-    const detail = await enrolAutopay(interpretation.enrolment)
-    await recordOutcome(event.id, 'ignored', detail)
+    const detail = await enrolAutopay(orgId, interpretation.enrolment)
+    await recordOutcome(orgId, event.id, 'ignored', detail)
     return { outcome: 'ignored', detail }
   }
 
-  const intent = await resolveRefundInvoice(interpretation.intent)
+  const intent = await resolveRefundInvoice(orgId, interpretation.intent)
 
   // A LOST CHARGEBACK (MONEY-04). A Dispute names no customer, so the payer
   // lookups below would find nobody; it is resolved from its Payment instead.
-  if (intent.kind === 'dispute_lost') return projectLostDispute(event, intent)
+  if (intent.kind === 'dispute_lost') return projectLostDispute(orgId, event, intent)
 
   // Application-fee customers are Applicants (R-059), not LeasePayers.
   // Checked FIRST, because the LeasePayer lookup below finds nothing for
   // one of these and would otherwise silently "ignore" the one event that
   // confirms a fee actually cleared.
-  const applicant = await findApplicantByStripeCustomer(intent.stripeCustomerId)
+  const applicant = await findApplicantByStripeCustomer(orgId, intent.stripeCustomerId)
   if (applicant) {
     const detail = await projectApplicationFeeEvent(applicant, intent)
-    await recordOutcome(event.id, 'projected', detail)
+    await recordOutcome(orgId, event.id, 'projected', detail)
     return { outcome: 'projected', detail }
   }
 
   const payer = await prisma.leasePayer.findFirst({
-    where: { stripeCustomerId: intent.stripeCustomerId ?? undefined },
+    where: { orgId, stripeCustomerId: intent.stripeCustomerId ?? undefined },
     select: { id: true, leaseId: true, propertyId: true },
   })
   if (!payer) {
@@ -186,7 +193,7 @@ async function projectClaimed(
     // would write money against the wrong tenancy, and Stripe retrying
     // forever would not make the customer appear.
     const detail = `no lease payer for customer ${intent.stripeCustomerId}`
-    await recordOutcome(event.id, 'ignored', detail)
+    await recordOutcome(orgId, event.id, 'ignored', detail)
     return { outcome: 'ignored', detail }
   }
 
@@ -195,7 +202,7 @@ async function projectClaimed(
   // echoes here as an `invoice.updated` carrying the same money a second time.
   if (await claimPortalEcho(event.id, payer.id, intent)) {
     const detail = 'portal payment applied to its invoice'
-    await recordOutcome(event.id, 'ignored', detail)
+    await recordOutcome(orgId, event.id, 'ignored', detail)
     return { outcome: 'ignored', detail }
   }
 
@@ -210,7 +217,7 @@ async function projectClaimed(
   // the failure PAY-02 names.
   const settled =
     intent.kind === 'payment_failed'
-      ? await findSettledPayment(intent)
+      ? await findSettledPayment(orgId, intent)
       : null
 
   // STALE FAILURES DO NOT REVERSE. Stripe promises neither ordering nor
@@ -245,7 +252,7 @@ async function projectClaimed(
     const detail = staleFailure
       ? 'failure predates the settlement it would have reversed'
       : 'already reversed'
-    await recordOutcome(event.id, 'ignored', detail)
+    await recordOutcome(orgId, event.id, 'ignored', detail)
     return { outcome: 'ignored', detail }
   }
 
@@ -278,7 +285,7 @@ async function projectClaimed(
     // matter. The claim reads `projected` exactly when the rows exist, so a
     // failure after this commit can never be replayed into a second credit.
     await tx.processedStripeEvent.update({
-      where: { stripeEventId: event.id },
+      where: { orgId_stripeEventId: { orgId, stripeEventId: event.id } },
       data: { outcome: 'projected', detail: outcomeDetail },
     })
 
@@ -308,7 +315,7 @@ async function projectClaimed(
       )
     }
 
-    const payment = await writePayment(tx, event, intent, payer)
+    const payment = await writePayment(tx, orgId, event, intent, payer)
     paymentId = payment?.id ?? null
 
     if (plan) {
@@ -479,7 +486,7 @@ async function projectClaimed(
   // never throwing: the ledger row is the fact, and a Stripe hiccup here must
   // not make Stripe redeliver money we have already counted.
   if (intent.kind === 'payment_succeeded' && intent.principalCents != null && paymentId) {
-    await applySettledPortalPayment(paymentId, intent, payer)
+    await applySettledPortalPayment(orgId, paymentId, intent, payer)
   }
 
   // The receipt (PAY-01), OUTSIDE the transaction and only on settlement.
@@ -570,6 +577,7 @@ type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
  */
 async function writePayment(
   tx: Tx,
+  orgId: string,
   event: StripeEventEnvelope,
   intent: ProjectionIntent,
   payer: { id: string; leaseId: string; propertyId: string },
@@ -591,7 +599,7 @@ async function writePayment(
 
   if (intent.stripePaymentIntentId) {
     const existing = await tx.payment.findUnique({
-      where: { stripePaymentIntentId: intent.stripePaymentIntentId },
+      where: { orgId_stripePaymentIntentId: { orgId, stripePaymentIntentId: intent.stripePaymentIntentId } },
       select: { id: true, status: true },
     })
     if (existing) {
@@ -801,6 +809,7 @@ async function pendingAutopayDebit(tx: Tx, leasePayerId: string, intent: Project
 }
 
 async function applySettledPortalPayment(
+  orgId: string,
   paymentId: string,
   intent: ProjectionIntent,
   payer: { leaseId: string; propertyId: string },
@@ -810,7 +819,7 @@ async function applySettledPortalPayment(
   let unconfirmedCents = 0
   try {
     const outcome = await applyPortalPayment({
-      provider: getBillingProvider(),
+      provider: getBillingProvider(orgId),
       paymentId,
       stripeCustomerId: intent.stripeCustomerId!,
       stripePaymentIntentId: intent.stripePaymentIntentId!,
@@ -934,9 +943,9 @@ async function claimPortalEcho(
   }
 }
 
-async function recordOutcome(stripeEventId: string, outcome: string, detail?: string) {
+async function recordOutcome(orgId: string, stripeEventId: string, outcome: string, detail?: string) {
   await prisma.processedStripeEvent.update({
-    where: { stripeEventId },
+    where: { orgId_stripeEventId: { orgId, stripeEventId } },
     data: { outcome, detail: detail ?? null },
   })
 }
@@ -1159,16 +1168,16 @@ async function sendPaymentFailedFix(
  * Skipped when the row is already findable by intent, so a portal refund
  * costs no extra call.
  */
-async function resolveRefundInvoice(intent: ProjectionIntent): Promise<ProjectionIntent> {
+async function resolveRefundInvoice(orgId: string, intent: ProjectionIntent): Promise<ProjectionIntent> {
   if (intent.kind !== 'refund' || intent.stripeInvoiceId || !intent.stripePaymentIntentId) {
     return intent
   }
   const known = await prisma.payment.findUnique({
-    where: { stripePaymentIntentId: intent.stripePaymentIntentId },
+    where: { orgId_stripePaymentIntentId: { orgId, stripePaymentIntentId: intent.stripePaymentIntentId } },
     select: { id: true },
   })
   if (known) return intent
-  const stripeInvoiceId = await getBillingProvider().findInvoiceForPaymentIntent(
+  const stripeInvoiceId = await getBillingProvider(orgId).findInvoiceForPaymentIntent(
     intent.stripePaymentIntentId,
   )
   return stripeInvoiceId ? { ...intent, stripeInvoiceId } : intent
@@ -1182,11 +1191,11 @@ async function resolveRefundInvoice(intent: ProjectionIntent): Promise<Projectio
  * invoice is the fallback for an out-of-band payment (R-038) that has no
  * intent at all - a check can bounce too, and it arrives here the same way.
  */
-async function findSettledPayment(intent: ProjectionIntent) {
+async function findSettledPayment(orgId: string, intent: ProjectionIntent) {
   const where = intent.stripePaymentIntentId
-    ? { stripePaymentIntentId: intent.stripePaymentIntentId }
+    ? { orgId, stripePaymentIntentId: intent.stripePaymentIntentId }
     : intent.stripeInvoiceId
-      ? { stripeInvoiceId: intent.stripeInvoiceId }
+      ? { orgId, stripeInvoiceId: intent.stripeInvoiceId }
       : null
   if (!where) return null
 
@@ -1207,6 +1216,7 @@ async function findSettledPayment(intent: ProjectionIntent) {
  * reversing again would double the debt.
  */
 async function projectLostDispute(
+  orgId: string,
   event: StripeEventEnvelope,
   intent: ProjectionIntent,
 ): Promise<PipelineResult> {
@@ -1219,16 +1229,16 @@ async function projectLostDispute(
   } as const
   const paymentIntentId = intent.stripePaymentIntentId!
   let settled = await prisma.payment.findFirst({
-    where: { stripePaymentIntentId: paymentIntentId, status: 'SETTLED' },
+    where: { orgId, stripePaymentIntentId: paymentIntentId, status: 'SETTLED' },
     select,
   })
   if (!settled) {
-    const invoiceId = await getBillingProvider().findInvoiceForPaymentIntent(paymentIntentId)
+    const invoiceId = await getBillingProvider(orgId).findInvoiceForPaymentIntent(paymentIntentId)
     // `gte`, not equality: a partial dispute names less than the charge
     // (MONEY-14), the same shape D-290 gave the refund.
     settled = invoiceId
       ? await prisma.payment.findFirst({
-          where: { stripeInvoiceId: invoiceId, status: 'SETTLED', amountCents: { gte: intent.amountCents } },
+          where: { orgId, stripeInvoiceId: invoiceId, status: 'SETTLED', amountCents: { gte: intent.amountCents } },
           select,
           orderBy: { receivedAt: 'desc' },
         })
@@ -1236,14 +1246,14 @@ async function projectLostDispute(
   }
   if (!settled) {
     const detail = `no settled payment for disputed intent ${paymentIntentId}`
-    await recordOutcome(event.id, 'ignored', detail)
+    await recordOutcome(orgId, event.id, 'ignored', detail)
     return { outcome: 'ignored', detail }
   }
 
   const payer = { id: settled.leasePayerId, leaseId: settled.leaseId, propertyId: settled.propertyId }
   await prisma.$transaction(async (tx) => {
     await tx.processedStripeEvent.update({
-      where: { stripeEventId: event.id },
+      where: { orgId_stripeEventId: { orgId, stripeEventId: event.id } },
       data: { outcome: 'projected', detail: intent.kind },
     })
     // Capped at what was disputed: Stripe disputes can be partial (MONEY-14).
@@ -1388,9 +1398,9 @@ async function reverseSettledPayment(
  * customer we do not recognise - which is a permanent condition no number of
  * attempts will fix.
  */
-async function enrolAutopay(enrolment: AutopayEnrolment): Promise<string> {
+async function enrolAutopay(orgId: string, enrolment: AutopayEnrolment): Promise<string> {
   const payer = await prisma.leasePayer.findFirst({
-    where: { stripeCustomerId: enrolment.stripeCustomerId },
+    where: { orgId, stripeCustomerId: enrolment.stripeCustomerId },
     select: { id: true, leaseId: true, propertyId: true, stripeSubscriptionId: true },
   })
   if (!payer) {
@@ -1398,14 +1408,14 @@ async function enrolAutopay(enrolment: AutopayEnrolment): Promise<string> {
   }
 
   try {
-    await getBillingProvider().setDefaultPaymentMethod({
+    await getBillingProvider(orgId).setDefaultPaymentMethod({
       stripeCustomerId: enrolment.stripeCustomerId,
       stripePaymentMethodId: enrolment.stripePaymentMethodId,
       stripeSubscriptionId: payer.stripeSubscriptionId,
     })
 
     if (payer.stripeSubscriptionId) {
-      await getBillingProvider().setCollectionMethod({
+      await getBillingProvider(orgId).setCollectionMethod({
         stripeSubscriptionId: payer.stripeSubscriptionId,
         collectionMethod: 'charge_automatically',
       })

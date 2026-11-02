@@ -54,6 +54,7 @@ export async function chargeMoveInProration(
     where: { id: leaseId },
     select: {
       id: true,
+      orgId: true,
       propertyId: true,
       rentCents: true,
       startsOn: true,
@@ -125,7 +126,7 @@ export async function chargeMoveInProration(
   }
 
   try {
-    const item = await getBillingProvider().addInvoiceItem({
+    const item = await getBillingProvider(lease.orgId).addInvoiceItem({
       stripeCustomerId: payer.stripeCustomerId,
       amountCents: proration.amountCents,
       currency: 'usd',

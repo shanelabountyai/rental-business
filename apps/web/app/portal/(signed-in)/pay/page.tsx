@@ -1,3 +1,5 @@
+import { connectedAccountId } from '@/lib/billing/provider.ts'
+import { prisma } from '@rental/db'
 import Link from 'next/link'
 import { formatCents } from '@rental/core/money'
 import { CARD_FIXED_CENTS, CARD_RATE_BPS } from '@rental/core/payments'
@@ -34,9 +36,15 @@ const CHARGE_WORDS: Record<string, string> = {
   OTHER: 'Other',
 }
 
+/// The tenant's org's connected account, for Stripe Elements (R-277a).
+async function tenantStripeAccount(tenantId: string) {
+  const { orgId } = await prisma.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { orgId: true } })
+  return connectedAccountId(orgId)
+}
+
 export default async function PayPage() {
-  const { scope } = await requireTenantWithScope()
-  const view = await paymentView(scope)
+  const { tenant, scope } = await requireTenantWithScope()
+  const [view, stripeAccount] = await Promise.all([paymentView(scope), tenantStripeAccount(tenant.id)])
 
   if (!view) {
     return (
@@ -138,6 +146,7 @@ export default async function PayPage() {
       {!view.hold.blockOnline && !view.hold.certifiedFundsOnly && (
       <AutopayPanel
         publishableKey={process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? null}
+        stripeAccount={stripeAccount}
         alreadyOn={view.autopayOn}
         debitDay={view.debitDay}
         rentDueDay={view.rentDueDay}

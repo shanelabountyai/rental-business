@@ -88,6 +88,7 @@ const LATE_FEE_APPLIES_TO = ['RENT'] as const
 /// invoice item, and an audit entry. The two passes differ only in how they
 /// anchor the fee and what its idempotency key and description carry.
 async function postLateFeeDelta(params: {
+  orgId: string
   propertyId: string
   leaseId: string
   deltaCents: number
@@ -128,7 +129,7 @@ async function postLateFeeDelta(params: {
     },
   })
 
-  const item = await getBillingProvider().addInvoiceItem({
+  const item = await getBillingProvider(params.orgId).addInvoiceItem({
     stripeCustomerId: params.stripeCustomerId,
     amountCents: params.deltaCents,
     currency: 'usd',
@@ -182,7 +183,7 @@ export async function assessLateFees(
 ): Promise<AssessmentResult> {
   const property = await prisma.property.findUniqueOrThrow({
     where: { id: propertyId },
-    select: { id: true, state: true, county: true, timezone: true },
+    select: { id: true, orgId: true, state: true, county: true, timezone: true },
   })
   const today = businessDate(now, property.timezone)
 
@@ -329,6 +330,7 @@ export async function assessLateFees(
 
     try {
       await postLateFeeDelta({
+        orgId: property.orgId,
         propertyId,
         leaseId: charge.leaseId,
         deltaCents,
@@ -487,6 +489,7 @@ export async function assessLateFees(
 
       try {
         await postLateFeeDelta({
+          orgId: property.orgId,
           propertyId,
           leaseId: lease.id,
           deltaCents,

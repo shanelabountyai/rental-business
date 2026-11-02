@@ -43,14 +43,14 @@ export async function chargeOpeningBalance(leaseId: string): Promise<OpeningBala
   const payer = await prisma.leasePayer.findFirst({
     where: { leaseId, active: true },
     orderBy: { createdAt: 'asc' },
-    select: { stripeCustomerId: true },
+    select: { orgId: true, stripeCustomerId: true },
   })
   if (!payer?.stripeCustomerId) {
     return { chargeId: charge.id, amountCents: charge.amountCents, reason: 'no_customer' }
   }
 
   try {
-    const item = await getBillingProvider().addInvoiceItem({
+    const item = await getBillingProvider(payer.orgId).addInvoiceItem({
       stripeCustomerId: payer.stripeCustomerId,
       amountCents: charge.amountCents,
       currency: 'usd',

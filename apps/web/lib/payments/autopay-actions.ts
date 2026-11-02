@@ -91,6 +91,7 @@ export async function setDebitDay(
     where: { leaseId: { in: [...scope.leaseIds] }, tenantId: scope.tenantId, active: true },
     select: {
       id: true,
+      orgId: true,
       stripeSubscriptionId: true,
       lease: {
         select: {
@@ -139,7 +140,7 @@ export async function setDebitDay(
       // an anchor in the past is a subscription that bills immediately.
       notBefore: new Date(),
     })
-    await getBillingProvider()
+    await getBillingProvider(payer.orgId)
       .setBillingAnchor({ stripeSubscriptionId: payer.stripeSubscriptionId, anchor })
       .catch((error: unknown) => {
         console.error(`[autopay] failed to move the anchor for payer ${payer.id}`, error)
@@ -170,6 +171,7 @@ export async function turnOffAutopay(): Promise<{ error?: string; notice?: strin
     where: { leaseId: { in: [...scope.leaseIds] }, tenantId: scope.tenantId, active: true },
     select: {
       id: true,
+      orgId: true,
       leaseId: true,
       propertyId: true,
       collectionMethod: true,
@@ -180,7 +182,7 @@ export async function turnOffAutopay(): Promise<{ error?: string; notice?: strin
   })
   if (!payer) return { error: 'There is no account set up to pay against yet.' }
 
-  const provider = getBillingProvider()
+  const provider = getBillingProvider(payer.orgId)
   let openInvoiceAmountCents: number | null = null
   if (payer.stripeSubscriptionId) {
     try {

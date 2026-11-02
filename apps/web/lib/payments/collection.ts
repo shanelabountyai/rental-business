@@ -71,7 +71,7 @@ export async function switchCollectionMethod(
   })
   await requirePermission('lease.write', propertyResource(payer.property))
 
-  const provider = getBillingProvider()
+  const provider = getBillingProvider(payer.property.orgId)
   let openInvoiceAmountCents: number | null = null
   if (payer.stripeSubscriptionId) {
     try {

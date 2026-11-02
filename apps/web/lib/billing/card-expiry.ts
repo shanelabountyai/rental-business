@@ -56,7 +56,7 @@ export async function sendCardExpiringNotices(
     },
   })
 
-  const provider = getBillingProvider()
+  const provider = getBillingProvider(property.orgId)
   const today = businessDate(now, property.timezone)
   let noticesSent = 0
 

@@ -139,7 +139,7 @@ export async function recordOfflinePayment(
     return { error: 'Billing is not set up for this payer yet, so there is nothing to apply this to.' }
   }
 
-  const provider = getBillingProvider()
+  const provider = getBillingProvider(payer.property.orgId)
   const [entries, invoices] = await Promise.all([
     prisma.ledgerEntry.findMany({
       where: { leaseId: payer.leaseId },

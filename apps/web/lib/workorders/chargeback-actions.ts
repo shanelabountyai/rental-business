@@ -156,7 +156,7 @@ export async function postChargeback(
 
   if (context.payer?.stripeCustomerId) {
     try {
-      const item = await getBillingProvider().addInvoiceItem({
+      const item = await getBillingProvider(workOrder.property.orgId).addInvoiceItem({
         stripeCustomerId: context.payer.stripeCustomerId,
         amountCents,
         currency: 'usd',

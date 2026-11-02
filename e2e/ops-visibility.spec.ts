@@ -176,6 +176,7 @@ test.describe('the money screen ops panels', () => {
     stripeEventIds.push(stripeEventId)
     await prisma.processedStripeEvent.create({
       data: {
+        orgId: 'org_0',
         stripeEventId,
         type: 'customer.discount.created',
         outcome: 'ignored',

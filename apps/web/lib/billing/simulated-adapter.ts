@@ -45,6 +45,13 @@ function stripeId(prefix: string): string {
 
 export class SimulatedBillingProvider implements BillingProvider {
   readonly name = 'simulated'
+  /// The org whose account this stands in for: the events it emits are that
+  /// org's, as a connected account's would be (R-277a).
+  readonly #orgId: string
+
+  constructor(orgId: string) {
+    this.#orgId = orgId
+  }
 
   async createCustomer(input: CustomerInput): Promise<ProvisionedCustomer> {
     const stripeCustomerId = stripeId('cus')
@@ -253,7 +260,7 @@ export class SimulatedBillingProvider implements BillingProvider {
         `on ${input.stripeCustomerId} - ${input.description}`,
     )
     const { processStripeEvent } = await import('./webhook.ts')
-    await processStripeEvent({
+    await processStripeEvent(this.#orgId, {
       id: `evt_simfin${key}`,
       type: 'invoice.finalized',
       created: Math.floor(Date.now() / 1000),
@@ -338,7 +345,7 @@ export class SimulatedBillingProvider implements BillingProvider {
     // Dynamic, because webhook.ts reaches back here through provider.ts and
     // a static import would close the cycle.
     const { processStripeEvent } = await import('./webhook.ts')
-    await processStripeEvent({
+    await processStripeEvent(this.#orgId, {
       // Keyed on the caller's idempotency key, so a retried submission is
       // caught by the pipeline's own duplicate guard exactly as a redelivered
       // Stripe event would be.

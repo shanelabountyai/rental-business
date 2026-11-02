@@ -197,7 +197,7 @@ describe('chargeMoveOutProration', () => {
         where: { id: payer.id },
         data: { stripeSubscriptionId: `sub_${randomUUID().replace(/-/g, '').slice(0, 14)}` },
       })
-      await processStripeEvent({
+      await processStripeEvent('org_0', {
         id: `evt_test_${randomUUID()}`,
         type: 'invoice.finalized',
         created: Date.parse('2026-03-01T09:00:00Z') / 1000,
@@ -236,7 +236,7 @@ describe('chargeMoveOutProration', () => {
       // not answer as though it had been sent it.
       expect(await leaseBalanceAtStripeCents(lease.id)).toBe(150_000)
       expect(
-        await getBillingProvider().getOpenInvoiceAmountCents({
+        await getBillingProvider('org_0').getOpenInvoiceAmountCents({
           stripeSubscriptionId: (
             await prisma.leasePayer.findUniqueOrThrow({ where: { id: payer.id } })
           ).stripeSubscriptionId!,

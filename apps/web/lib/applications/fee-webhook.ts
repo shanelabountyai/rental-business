@@ -27,11 +27,12 @@ export interface ApplicantForFeeEvent {
 }
 
 export async function findApplicantByStripeCustomer(
+  orgId: string,
   stripeCustomerId: string | null,
 ): Promise<ApplicantForFeeEvent | null> {
   if (!stripeCustomerId) return null
   return prisma.applicant.findFirst({
-    where: { stripeCustomerId },
+    where: { orgId, stripeCustomerId },
     select: { id: true, applicationId: true, firstName: true, orgId: true },
   })
 }

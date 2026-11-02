@@ -102,6 +102,19 @@ describe('what the driver actually sends', () => {
     expect(headers['Idempotency-Key']).toBe('customer:payer_1')
   })
 
+  it("makes every request ON the org's connected account, and none on the platform's for org #0", async () => {
+    // Direct charges (R-277a, D-316): the platform key authenticates and the
+    // `Stripe-Account` header names whose account the object lives on.
+    const calls = captureFetch()
+    const connected = new StripeBillingProvider('sk_test_abc123', async () => 'acct_org_a')
+    await connected.createSetupIntent('cus_1')
+    await connected.getSubscription({ stripeSubscriptionId: 'sub_1' })
+    await provider().createSetupIntent('cus_1')
+
+    const sent = calls.map((call) => (call.init.headers as Record<string, string>)['Stripe-Account'])
+    expect(sent).toEqual(['acct_org_a', 'acct_org_a', undefined])
+  })
+
   it('NEVER lets Stripe prorate a price change (D-12)', async () => {
     const calls = captureFetch()
     await provider().updateSubscriptionPrice({

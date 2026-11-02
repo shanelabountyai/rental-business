@@ -73,7 +73,7 @@ vi.mock('@/lib/billing/provider.ts', async (importOriginal) => {
               throw new Error('provider unreachable')
             },
           } as unknown as BillingProvider)
-        : actual.getBillingProvider(),
+        : actual.getBillingProvider('org_0'),
   }
 })
 

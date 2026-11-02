@@ -3,6 +3,8 @@ import 'server-only'
 import type { BillingProvider } from './adapter.ts'
 import { SimulatedBillingProvider } from './simulated-adapter.ts'
 import { StripeBillingProvider } from './stripe-adapter.ts'
+import { DEFAULT_ORG_ID } from '@/lib/auth/org.ts'
+import { orgIntegration } from '@/lib/integrations/store.ts'
 
 // The wired provider, in its own module for the same reason
 // lib/notifications/provider.ts is: so callers can import it without
@@ -19,21 +21,49 @@ import { StripeBillingProvider } from './stripe-adapter.ts'
 // simulator either - it throws on the first billing call, loudly, rather
 // than letting somebody believe billing is running when it is not.
 
-function selectProvider(): BillingProvider {
+/**
+ * The provider for ONE org's Stripe account (R-277a, D-316). Built per call
+ * rather than cached, so an account connected a minute ago is the account
+ * the next call uses.
+ *
+ * Direct charges: the platform key authenticates, and the org's connected
+ * account rides on every request as `Stripe-Account` (resolved lazily by the
+ * driver, from `connectedAccountId`). Without a key every org gets the
+ * simulator, which emits its events as that org.
+ */
+export function getBillingProvider(orgId: string): BillingProvider {
   const key = process.env.STRIPE_SECRET_KEY?.trim()
-  if (!key) return new SimulatedBillingProvider()
-  return new StripeBillingProvider(key)
+  if (!key) return new SimulatedBillingProvider(orgId)
+  return new StripeBillingProvider(key, () => stripeAccountFor(orgId))
 }
 
-/// Constructed lazily and cached, so a deployment with no key never
-/// constructs the Stripe driver, and one with a bad key fails at the first
-/// billing call rather than at import time - which would take down every
-/// page, including the ones that would tell somebody what is wrong.
-let cached: BillingProvider | null = null
+export class NoConnectedAccountError extends Error {
+  constructor(orgId: string) {
+    super(`Org ${orgId} has no connected Stripe account; billing is refused until it connects one.`)
+    this.name = 'NoConnectedAccountError'
+  }
+}
 
-export function getBillingProvider(): BillingProvider {
-  cached ??= selectProvider()
-  return cached
+/**
+ * The `Stripe-Account` header value for an org: its connected account, or
+ * null for org #0 with no STRIPE row, which bills on the platform account
+ * itself (the env credentials are org #0's alone, D-362). Any other org
+ * without an account throws - there is no fallback to the platform's
+ * account, which would bank one org's rent in another's name.
+ */
+async function stripeAccountFor(orgId: string): Promise<string | null> {
+  const accountId = await connectedAccountId(orgId)
+  if (accountId) return accountId
+  if (orgId === DEFAULT_ORG_ID) return null
+  throw new NoConnectedAccountError(orgId)
+}
+
+/// The org's connected account id, or null. Also what the browser passes to
+/// `loadStripe(pk, { stripeAccount })` (PRD 10 §2.3).
+export async function connectedAccountId(orgId: string): Promise<string | null> {
+  const row = await orgIntegration(orgId, 'STRIPE')
+  const accountId = row?.config.accountId
+  return typeof accountId === 'string' && accountId ? accountId : null
 }
 
 /// Whether billing is configured to talk to a real Stripe account.
@@ -48,5 +78,5 @@ export function billingIsLive(): boolean {
 /// The provider's own name, for display. Reads through the selector so a
 /// screen cannot report one provider while another is doing the work.
 export function billingProviderName(): string {
-  return getBillingProvider().name
+  return getBillingProvider(DEFAULT_ORG_ID).name
 }

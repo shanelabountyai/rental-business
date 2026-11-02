@@ -253,7 +253,7 @@ describe('the open-invoice read the offline path depends on', () => {
     // refused every one. The simulator derives the periods from the ledger,
     // so a retry finds the same invoices rather than inventing new ones.
     const payer = await payerRow()
-    const provider = new SimulatedBillingProvider()
+    const provider = new SimulatedBillingProvider('org_0')
     const before = await provider.getOpenInvoices({ stripeCustomerId: payer.stripeCustomerId! })
 
     await prisma.ledgerEntry.create({
@@ -302,7 +302,7 @@ describe('the open-invoice read the offline path depends on', () => {
       },
     })
 
-    const provider = new SimulatedBillingProvider()
+    const provider = new SimulatedBillingProvider('org_0')
     expect(await provider.getOpenInvoices({ stripeCustomerId: payer.stripeCustomerId! })).toEqual(
       [],
     )

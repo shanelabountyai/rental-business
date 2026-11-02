@@ -105,7 +105,7 @@ export async function assessNsfFee(args: {
 
   const payer = await prisma.leasePayer.findUniqueOrThrow({
     where: { id: args.leasePayerId },
-    select: { stripeCustomerId: true },
+    select: { orgId: true, stripeCustomerId: true },
   })
 
   // The description defends the charge, the same way the late-fee one does:
@@ -144,7 +144,7 @@ export async function assessNsfFee(args: {
   }
 
   try {
-    const item = await getBillingProvider().addInvoiceItem({
+    const item = await getBillingProvider(payer.orgId).addInvoiceItem({
       stripeCustomerId: payer.stripeCustomerId,
       amountCents: decision.amountCents,
       currency: 'usd',

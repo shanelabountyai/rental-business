@@ -29,8 +29,10 @@ import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 // test key, and PROGRESS says so rather than implying coverage.
 
 let stripePromise: Promise<Stripe | null> | null = null
-function stripe(publishableKey: string) {
-  stripePromise ??= loadStripe(publishableKey)
+/// `stripeAccount`: the org's connected account, for a direct charge on it
+/// with the platform's key (R-277a, PRD 10 §2.3); null for org #0.
+function stripe(publishableKey: string, stripeAccount: string | null) {
+  stripePromise ??= loadStripe(publishableKey, stripeAccount ? { stripeAccount } : undefined)
   return stripePromise
 }
 
@@ -162,6 +164,7 @@ function DebitDayForm({
 
 export function AutopayPanel({
   publishableKey,
+  stripeAccount,
   alreadyOn,
   debitDay,
   rentDueDay,
@@ -171,6 +174,7 @@ export function AutopayPanel({
   turnOff,
 }: {
   publishableKey: string | null
+  stripeAccount: string | null
   /// True when a payment method is already on file and the payer is on
   /// automatic collection.
   alreadyOn: boolean
@@ -281,7 +285,7 @@ export function AutopayPanel({
 
           {clientSecret ? (
             <Elements
-              stripe={stripe(publishableKey)}
+              stripe={stripe(publishableKey, stripeAccount)}
               options={{ clientSecret, appearance: { theme: 'stripe' } }}
             >
               <ConfirmForm onDone={() => setSaved(true)} />

@@ -357,7 +357,7 @@ export async function startApplicationFeePayment(rawToken: string): Promise<FeeP
     return { error: 'This fee is already paid.' }
   }
 
-  const provider = getBillingProvider()
+  const provider = getBillingProvider(applicant.orgId)
   let stripeCustomerId = applicant.stripeCustomerId
   if (!stripeCustomerId) {
     const customer = await provider.createApplicationFeeCustomer({

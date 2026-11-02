@@ -350,7 +350,7 @@ export async function finalizeDisposition(
       }
     }
 
-    const provider = getBillingProvider()
+    const provider = getBillingProvider(deposit.property.orgId)
     const invoices = await provider
       .getOpenInvoices({ stripeCustomerId: payer.stripeCustomerId })
       .catch((error) => {
@@ -607,7 +607,7 @@ export async function finalizeDisposition(
   if (uncoveredCharge && payer?.stripeCustomerId) {
     const charge: { id: string; amountCents: number; description: string } = uncoveredCharge
     try {
-      const { stripeInvoiceId } = await getBillingProvider().invoiceOneOffCharge({
+      const { stripeInvoiceId } = await getBillingProvider(deposit.property.orgId).invoiceOneOffCharge({
         stripeCustomerId: payer.stripeCustomerId,
         amountCents: charge.amountCents,
         currency: 'usd',

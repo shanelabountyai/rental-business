@@ -1,3 +1,4 @@
+import { connectedAccountId } from '@/lib/billing/provider.ts'
 import { LiveRegion } from '@/components/auth-form.tsx'
 import { ApplicantForm } from '@/components/applications/applicant-form.tsx'
 import { CoApplicantInviteForm } from '@/components/applications/coapplicant-invite-form.tsx'
@@ -136,6 +137,7 @@ export default async function ApplyPage({ params }: { params: Promise<{ token: s
               </h2>
               <FeePayment
                 publishableKey={process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? null}
+                stripeAccount={await connectedAccountId(applicant.orgId)}
                 start={startApplicationFeePayment.bind(null, token)}
               />
             </section>

@@ -1,8 +1,8 @@
+import { SimulatedBillingProvider } from '@/lib/billing/simulated-adapter.ts'
 import { randomUUID } from 'node:crypto'
 import { wallClockToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { getBillingProvider } from '@/lib/billing/provider.ts'
 import { chargeMoveInProration } from '@/lib/billing/proration.ts'
 import { processStripeEvent } from '@/lib/billing/webhook.ts'
 import { assessLateFees } from './late-fees.ts'
@@ -141,7 +141,7 @@ describe('assessLateFees', () => {
     expect(await feesOnIt()).toBe(0)
 
     // 1 April 09:00 local: the first invoice finalizes carrying the item.
-    await processStripeEvent({
+    await processStripeEvent('org_0', {
       id: `evt_test_${randomUUID()}`,
       type: 'invoice.finalized',
       created: Math.floor(firstInvoiceAt.getTime() / 1000),
@@ -604,7 +604,7 @@ describe('assessLateFees — payer selection on a two-payer lease (MONEY-06)', (
       },
     })
 
-    const spy = vi.spyOn(getBillingProvider(), 'addInvoiceItem')
+    const spy = vi.spyOn(SimulatedBillingProvider.prototype, 'addInvoiceItem')
     let billedCustomerId: string | undefined
     try {
       await assessLateFees(property.id, new Date('2026-03-20T12:00:00Z'))

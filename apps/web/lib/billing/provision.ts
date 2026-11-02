@@ -70,6 +70,7 @@ async function ensurePayer(leaseId: string) {
   const lease = await prisma.lease.findUniqueOrThrow({
     where: { id: leaseId },
     select: {
+      orgId: true,
       propertyId: true,
       leaseTenants: {
         orderBy: { isPrimary: 'desc' },
@@ -83,6 +84,7 @@ async function ensurePayer(leaseId: string) {
 
   return prisma.leasePayer.create({
     data: {
+      orgId: lease.orgId,
       leaseId,
       propertyId: lease.propertyId,
       payerType: 'TENANT',
@@ -110,6 +112,7 @@ export async function provisionLeaseBilling(
     where: { id: leaseId },
     select: {
       id: true,
+      orgId: true,
       propertyId: true,
       rentCents: true,
       rentDueDay: true,
@@ -142,7 +145,7 @@ export async function provisionLeaseBilling(
   try {
     let stripeCustomerId = payer.stripeCustomerId
     if (!stripeCustomerId) {
-      const customer = await getBillingProvider().createCustomer({
+      const customer = await getBillingProvider(lease.orgId).createCustomer({
         leasePayerId: payer.id,
         leaseId: lease.id,
         propertyId: lease.propertyId,
@@ -174,7 +177,7 @@ export async function provisionLeaseBilling(
       activatedAt: lease.activatedAt ?? now,
     })
 
-    const subscription = await getBillingProvider().createSubscription({
+    const subscription = await getBillingProvider(lease.orgId).createSubscription({
       stripeCustomerId,
       // D-12: core decides the amount, Stripe executes it.
       amountCents: lease.rentCents,
@@ -213,7 +216,7 @@ export async function provisionLeaseBilling(
       entityId: lease.id,
       propertyId: lease.propertyId,
       after: {
-        provider: getBillingProvider().name,
+        provider: getBillingProvider(lease.orgId).name,
         leasePayerId: payer.id,
         stripeCustomerId,
         stripeSubscriptionId: subscription.stripeSubscriptionId,
@@ -304,10 +307,10 @@ export async function provisionLeaseBilling(
 export async function createPaymentMethodSetup(leasePayerId: string) {
   const payer = await prisma.leasePayer.findUniqueOrThrow({
     where: { id: leasePayerId },
-    select: { stripeCustomerId: true },
+    select: { orgId: true, stripeCustomerId: true },
   })
   if (!payer.stripeCustomerId) return null
-  return getBillingProvider().createSetupIntent(payer.stripeCustomerId)
+  return getBillingProvider(payer.orgId).createSetupIntent(payer.stripeCustomerId)
 }
 
 /// The billing state of a lease, for display. Reads our own rows rather than

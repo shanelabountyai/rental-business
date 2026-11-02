@@ -38,6 +38,7 @@ export async function chargeDeposit(leaseId: string): Promise<DepositChargeResul
     where: { id: leaseId },
     select: {
       id: true,
+      orgId: true,
       propertyId: true,
       depositCents: true,
       depositArrangement: true,
@@ -80,7 +81,7 @@ export async function chargeDeposit(leaseId: string): Promise<DepositChargeResul
   }
 
   try {
-    const item = await getBillingProvider().addInvoiceItem({
+    const item = await getBillingProvider(lease.orgId).addInvoiceItem({
       stripeCustomerId: payer.stripeCustomerId,
       amountCents: lease.depositCents,
       currency: 'usd',

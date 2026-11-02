@@ -104,7 +104,7 @@ describe('applyPaymentHold', () => {
     const { payer } = await seedProvisionedPayer()
 
     // Before: Stripe is collecting.
-    const before = await getBillingProvider().getSubscription({
+    const before = await getBillingProvider('org_0').getSubscription({
       stripeSubscriptionId: payer.stripeSubscriptionId!,
     })
     expect(before?.status).toBe('active')
@@ -120,7 +120,7 @@ describe('applyPaymentHold', () => {
     // AFTER, WITH NO SWEEP HAVING RUN. This is the whole assertion: the
     // subscription is paused the moment the switch is flipped, not the next
     // morning when the nightly reconciliation would have caught up.
-    const after = await getBillingProvider().getSubscription({
+    const after = await getBillingProvider('org_0').getSubscription({
       stripeSubscriptionId: payer.stripeSubscriptionId!,
     })
     expect(after?.status).toBe('paused')
@@ -145,7 +145,7 @@ describe('applyPaymentHold', () => {
       writeAudit,
     )
     expect(
-      (await getBillingProvider().getSubscription({
+      (await getBillingProvider('org_0').getSubscription({
         stripeSubscriptionId: payer.stripeSubscriptionId!,
       }))?.status,
     ).toBe('paused')
@@ -163,7 +163,7 @@ describe('applyPaymentHold', () => {
     )
 
     expect(
-      (await getBillingProvider().getSubscription({
+      (await getBillingProvider('org_0').getSubscription({
         stripeSubscriptionId: payer.stripeSubscriptionId!,
       }))?.status,
     ).toBe('active')

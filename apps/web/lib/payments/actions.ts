@@ -100,6 +100,7 @@ export async function startPaymentFromLink(
 /// two cannot select different columns and diverge in what they can check.
 const PAYER_SELECT = {
   id: true,
+  orgId: true,
   leaseId: true,
   propertyId: true,
   collectionMethod: true,
@@ -125,6 +126,7 @@ const PAYER_SELECT = {
 async function chargeResolvedPayer(
   payer: {
     id: string
+    orgId: string
     leaseId: string
     propertyId: string
     collectionMethod: string
@@ -186,7 +188,7 @@ async function chargeResolvedPayer(
     // but not yet invoiced, or the other payer's portion on a voucher lease
     // (D-13). `validatePaymentAmount` refuses the gap rather than accepting
     // a prepayment `applyPortalPayment` cannot place.
-    getBillingProvider().getOpenInvoices({ stripeCustomerId: payer.stripeCustomerId }),
+    getBillingProvider(payer.orgId).getOpenInvoices({ stripeCustomerId: payer.stripeCustomerId }),
   ])
 
   const facts = {
@@ -258,7 +260,7 @@ async function chargeResolvedPayer(
   const totalCents = fee?.totalCents ?? amountCents
 
   try {
-    const intent = await getBillingProvider().createPaymentIntent({
+    const intent = await getBillingProvider(payer.orgId).createPaymentIntent({
       stripeCustomerId: payer.stripeCustomerId,
       amountCents: totalCents,
       principalCents: amountCents,

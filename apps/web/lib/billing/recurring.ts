@@ -50,6 +50,7 @@ export async function syncRecurringCharges(leaseId: string): Promise<RecurringSy
     where: { id: leaseId },
     select: {
       id: true,
+      orgId: true,
       propertyId: true,
       property: { select: { timezone: true } },
       recurringCharges: {
@@ -98,7 +99,7 @@ export async function syncRecurringCharges(leaseId: string): Promise<RecurringSy
     if (shouldBill && !charge.stripeSubscriptionItemId) {
       if (!subscriptionId) continue
       try {
-        const item = await getBillingProvider().addSubscriptionItem({
+        const item = await getBillingProvider(lease.orgId).addSubscriptionItem({
           stripeSubscriptionId: subscriptionId,
           amountCents: charge.amountCents,
           currency: 'usd',
@@ -133,7 +134,7 @@ export async function syncRecurringCharges(leaseId: string): Promise<RecurringSy
 
     if (!shouldBill && charge.stripeSubscriptionItemId) {
       try {
-        await getBillingProvider().endSubscriptionItem({
+        await getBillingProvider(lease.orgId).endSubscriptionItem({
           stripeSubscriptionItemId: charge.stripeSubscriptionItemId,
         })
         await prisma.recurringCharge.update({

@@ -53,6 +53,7 @@ export async function syncLeasePayer(leasePayerId: string): Promise<SyncResult> 
     where: { id: leasePayerId },
     select: {
       id: true,
+      orgId: true,
       leaseId: true,
       propertyId: true,
       stripeSubscriptionId: true,
@@ -68,7 +69,7 @@ export async function syncLeasePayer(leasePayerId: string): Promise<SyncResult> 
     },
   })
 
-  const provider = getBillingProvider()
+  const provider = getBillingProvider(payer.orgId)
 
   try {
     // What Stripe currently believes. Null when there is nothing to ask

@@ -203,6 +203,7 @@ describe('reconcileLedger', () => {
     const occurredAt = new Date()
     await prisma.processedStripeEvent.create({
       data: {
+        orgId: 'org_0',
         stripeEventId: eventId,
         type: 'invoice.payment_succeeded',
         outcome: 'projected',
@@ -221,6 +222,7 @@ describe('reconcileLedger', () => {
     const eventId = `evt_${randomUUID().replace(/-/g, '')}`
     await prisma.processedStripeEvent.create({
       data: {
+        orgId: 'org_0',
         stripeEventId: eventId,
         type: 'invoice.payment_succeeded',
         outcome: 'projected',
@@ -243,6 +245,7 @@ describe('reconcileLedger', () => {
     const eventId = `evt_${randomUUID().replace(/-/g, '')}`
     await prisma.processedStripeEvent.create({
       data: {
+        orgId: 'org_0',
         stripeEventId: eventId,
         type: 'invoice.payment_failed',
         outcome: 'projected',
@@ -261,6 +264,7 @@ describe('reconcileLedger', () => {
     const eventId = `evt_${randomUUID().replace(/-/g, '')}`
     await prisma.processedStripeEvent.create({
       data: {
+        orgId: 'org_0',
         stripeEventId: eventId,
         type: 'invoice.finalized',
         outcome: 'projected',
@@ -282,6 +286,7 @@ describe('reconcileLedger', () => {
     const eventId = `evt_${randomUUID().replace(/-/g, '')}`
     await prisma.processedStripeEvent.create({
       data: {
+        orgId: 'org_0',
         stripeEventId: eventId,
         type: 'invoice.payment_failed',
         outcome: 'projected',
@@ -298,6 +303,7 @@ describe('reconcileLedger', () => {
     const eventId = `evt_${randomUUID().replace(/-/g, '')}`
     await prisma.processedStripeEvent.create({
       data: {
+        orgId: 'org_0',
         stripeEventId: eventId,
         type: 'invoice.payment_succeeded',
         // Still `received` - claimed, never resolved either way.
@@ -329,6 +335,7 @@ describe('reconcileLedger', () => {
     const eventId = `evt_${randomUUID().replace(/-/g, '')}`
     await prisma.processedStripeEvent.create({
       data: {
+        orgId: 'org_0',
         stripeEventId: eventId,
         type: 'invoice.payment_succeeded',
         outcome: 'projected',
@@ -355,6 +362,7 @@ describe('reconcileLedger', () => {
     const old = `evt_${randomUUID().replace(/-/g, '')}`
     await prisma.processedStripeEvent.create({
       data: {
+        orgId: 'org_0',
         stripeEventId: old,
         type: 'invoice.payment_succeeded',
         outcome: 'projected',

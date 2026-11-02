@@ -467,7 +467,7 @@ async function reset() {
       const { getBillingProvider } = await loadBillingPipeline()
       for (const payer of retiringPayers) {
         if (!payer.stripeSubscriptionId) continue
-        await getBillingProvider()
+        await getBillingProvider('org_0')
           .cancelSubscription({ stripeSubscriptionId: payer.stripeSubscriptionId })
           .catch((error: unknown) => {
             console.warn(`Reset: could not cancel ${payer.stripeSubscriptionId}`, error)
@@ -3384,6 +3384,7 @@ let billingPipeline: Promise<{
     error?: string
   }>
   processStripeEvent: (
+    orgId: string,
     event: StripeEventEnvelope,
   ) => Promise<{ outcome: string; detail?: string }>
   /// The lifecycle sweep, run once per billed lease at the end of the money
@@ -3397,7 +3398,7 @@ let billingPipeline: Promise<{
   /// method rather than to the whole `BillingProvider`, which lives behind
   /// the same `server-only` wall and so cannot be imported as a type here
   /// either.
-  getBillingProvider: () => {
+  getBillingProvider: (orgId: string) => {
     cancelSubscription: (input: { stripeSubscriptionId: string }) => Promise<void>
     createSetupIntent: (
       stripeCustomerId: string,
@@ -3588,12 +3589,12 @@ function invoiceLines(chargeIds: string[]) {
  * is to state the expected outcome at the call site.
  */
 async function replay(
-  processStripeEvent: (e: StripeEventEnvelope) => Promise<{ outcome: string; detail?: string }>,
+  processStripeEvent: (orgId: string, e: StripeEventEnvelope) => Promise<{ outcome: string; detail?: string }>,
   event: StripeEventEnvelope,
   expected: 'projected' | 'ignored',
   what: string,
 ) {
-  const result = await processStripeEvent(event)
+  const result = await processStripeEvent('org_0', event)
   if (result.outcome !== expected) {
     throw new Error(
       `demo money: ${what} came back ${result.outcome} (${result.detail ?? 'no detail'}), ` +
@@ -3872,7 +3873,7 @@ async function seedMoney(
     // moves no cents, so it never touches the ledger. The detail is what
     // says it worked, which is why it is checked rather than assumed.
     if (plan.autopayDaysAgo != null) {
-      const saved = await savedPaymentMethod(getBillingProvider(), customer)
+      const saved = await savedPaymentMethod(getBillingProvider('org_0'), customer)
       const result = await push(
         stripeEvent('setup_intent.succeeded', daysFrom(-plan.autopayDaysAgo), {
           id: saved.setupIntentId,

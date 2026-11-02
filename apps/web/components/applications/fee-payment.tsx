@@ -20,8 +20,10 @@ import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 // simulating the webhook event directly.
 
 let stripePromise: Promise<Stripe | null> | null = null
-function stripe(publishableKey: string) {
-  stripePromise ??= loadStripe(publishableKey)
+/// `stripeAccount`: the org's connected account, for a direct charge on it
+/// with the platform's key (R-277a, PRD 10 §2.3); null for org #0.
+function stripe(publishableKey: string, stripeAccount: string | null) {
+  stripePromise ??= loadStripe(publishableKey, stripeAccount ? { stripeAccount } : undefined)
   return stripePromise
 }
 
@@ -77,9 +79,11 @@ function ConfirmForm({ onDone }: { onDone: () => void }) {
 
 export function FeePayment({
   publishableKey,
+  stripeAccount,
   start,
 }: {
   publishableKey: string | null
+  stripeAccount: string | null
   start: () => Promise<FeePaymentState>
 }) {
   const [clientSecret, setClientSecret] = useState<string | null>(null)
@@ -112,7 +116,7 @@ export function FeePayment({
 
       {submitted ? null : clientSecret ? (
         <Elements
-          stripe={stripe(publishableKey)}
+          stripe={stripe(publishableKey, stripeAccount)}
           options={{ clientSecret, appearance: { theme: 'stripe' } }}
         >
           <ConfirmForm onDone={() => setSubmitted(true)} />

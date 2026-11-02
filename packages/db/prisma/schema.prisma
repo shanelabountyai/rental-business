@@ -4908,8 +4908,8 @@ model LeasePayer {
   payments         Payment[]
   ledgerEntries    LedgerEntry[]
 
-  @@unique([stripeCustomerId])
-  @@unique([stripeSubscriptionId])
+  @@unique([orgId, stripeCustomerId])
+  @@unique([orgId, stripeSubscriptionId])
   @@index([leaseId])
   @@index([propertyId])
   @@index([orgId])
@@ -5201,7 +5201,7 @@ model Payment {
   depositSlipDocument Document?             @relation("PaymentDepositSlip", fields: [depositSlipDocumentId], references: [id], onDelete: Restrict)
   invoiceSplits       PaymentInvoiceSplit[]
 
-  @@unique([stripePaymentIntentId])
+  @@unique([orgId, stripePaymentIntentId])
   @@index([leaseId, receivedAt])
   @@index([propertyId, receivedAt])
   @@index([status])
@@ -5269,10 +5269,10 @@ model PaymentInvoiceSplit {
  * silence cannot give.
  */
 model ProcessedStripeEvent {
-  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
-  orgId         String       @default("org_0")
+  /// Named by the writer (R-277a: the route resolves it from `event.account`) and immutable (D-339).
+  orgId         String
   organization  Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
-  stripeEventId String       @id
+  stripeEventId String
   type          String
   /// What happened: `projected` or `ignored`. Free text rather than an enum -
   /// this is an operational log, and a new outcome should not need a
@@ -5286,6 +5286,7 @@ model ProcessedStripeEvent {
   occurredAt    DateTime
   processedAt   DateTime     @default(now())
 
+  @@id([orgId, stripeEventId])
   @@index([occurredAt])
   @@index([type])
   @@index([orgId])

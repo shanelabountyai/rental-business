@@ -106,3 +106,16 @@ export function resendSecrets(secret: string | null): { apiKey?: string; inbound
     return {}
   }
 }
+
+/**
+ * The org a Stripe connected account belongs to (R-277a), or null. Unique by
+ * the `OrgIntegration_stripe_account` index, so an account can never name
+ * two orgs and project one org's rent into another's ledger.
+ */
+export async function orgIdForStripeAccount(accountId: string): Promise<string | null> {
+  const row = await prisma.orgIntegration.findFirst({
+    where: { provider: 'STRIPE', config: { path: ['accountId'], equals: accountId } },
+    select: { orgId: true },
+  })
+  return row?.orgId ?? null
+}
