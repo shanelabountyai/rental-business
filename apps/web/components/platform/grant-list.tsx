@@ -1,7 +1,7 @@
 import { durationLabel, supportGrantStatus } from '@rental/core/rbac'
 import { friendlyTimestamp } from '@rental/core/scheduling'
-import { EndGrantButton } from '@/components/platform/support-access.tsx'
-import { endSupportGrant } from '@/lib/platform/support-actions.ts'
+import { EndGrantButton, OpenGrantButton } from '@/components/platform/support-access.tsx'
+import { endSupportGrant, openSupportGrant } from '@/lib/platform/support-actions.ts'
 
 // The console's list of support grants (PRD 11 §4.7, R-295a). A server
 // component: the console reads grants, admins' names, approvers' names and
@@ -86,6 +86,9 @@ export function GrantList({ grants, viewerId, now }: { grants: GrantRow[]; viewe
               <span>
                 Ended {g.endedByType ? ENDED_BY[g.endedByType] : ''} {friendlyTimestamp(g.endedAt, 'UTC')}
               </span>
+            )}
+            {mine && status === 'live' && (
+              <OpenGrantButton action={openSupportGrant} grantId={g.id} label={`Open ${g.organization.name}`} />
             )}
             {mine && (status === 'live' || status === 'pending') && (
               <EndGrantButton

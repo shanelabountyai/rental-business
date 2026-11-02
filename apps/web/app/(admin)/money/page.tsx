@@ -10,6 +10,7 @@ import { PlanOfferPattern } from '@/components/money/plan-offer-pattern.tsx'
 import { WaiverPattern } from '@/components/money/waiver-pattern.tsx'
 import { PageHeader } from '@/components/page-header.tsx'
 import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
+import { holdsAnywhere } from '@rental/core/rbac'
 import { resyncPayer } from '@/lib/billing/actions.ts'
 import { billingRunRows } from '@/lib/billing/lifecycle.ts'
 import { billingIsLive, billingProviderName } from '@/lib/billing/provider.ts'
@@ -102,6 +103,8 @@ export default async function MoneyPage() {
         live={billingIsLive()}
         providerName={billingProviderName()}
         resync={resyncPayer}
+        // Visibility only: the action checks `payment.record` per property (D-381).
+        canResync={holdsAnywhere(actor, 'payment.record').allowed}
         rows={rows.map((row) => ({
           id: row.id,
           leaseId: row.leaseId,

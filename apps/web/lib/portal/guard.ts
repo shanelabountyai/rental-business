@@ -21,9 +21,10 @@ import { auth } from '@/auth.ts'
  * `kind !== 'tenant'` is refused rather than upgraded. A STAFF session
  * reaching a portal route is not a tenant and must not be treated as one -
  * there is no tenantId to scope by, and defaulting to "show everything" for a
- * privileged principal is how a debugging convenience becomes a data leak. A
- * staff member who needs to see what a tenant sees gets an impersonation
- * feature, deliberately, with an audit entry - not an accident of this check.
+ * privileged principal is how a debugging convenience becomes a data leak.
+ * Nobody impersonates a tenant: staff never, and platform support only reads
+ * the org's own staff screens under a grant the owners can see (PRD 11 §4.7,
+ * R-295b). A support session is not this cookie at all, so it never gets here.
  */
 export async function requireTenant(): Promise<{
   id: string

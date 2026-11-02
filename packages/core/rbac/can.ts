@@ -32,7 +32,9 @@ export interface Actor {
   /// The organisation this request is acting in (PRD 10 §1.3). Assignments
   /// from any other org are ignored by `can()` and `propertyScope()`.
   orgId: string
-  kind: 'staff' | 'tenant' | 'guarantor' | 'vendor' | 'system'
+  /// `support` is a platform admin inside an org under a live grant (PRD 11
+  /// §4.7, R-295b): read-only by its permissions, never by a branch here.
+  kind: 'staff' | 'tenant' | 'guarantor' | 'vendor' | 'system' | 'support'
   /// A deactivated actor can do nothing, whatever their assignments say
   /// (ROLE-06).
   active: boolean

@@ -133,6 +133,10 @@ export const AUDIT_ACTIONS = [
   'support_grant.denied',
   'support_grant.ended',
   'support_grant.acknowledged',
+  /// R-295b (§4.7): a support session began on the org's host. Page views
+  /// under it are not audited one by one (§6); this row and the grant's
+  /// window are what "what was viewed" shows.
+  'support_grant.entered',
   /// R-302b: the other platform owners were emailed about a lockout (§2.5);
   /// `after.sent` is each recipient and outcome.
   'auth.lockout_notified',

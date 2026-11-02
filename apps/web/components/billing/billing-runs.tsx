@@ -48,11 +48,14 @@ export function BillingRuns({
   live,
   providerName,
   resync,
+  canResync,
 }: {
   rows: readonly BillingRunRow[]
   live: boolean
   providerName: string
   resync: (state: BillingFormState, formData: FormData) => Promise<BillingFormState>
+  /// `payment.record` (D-381): a re-sync is a write, hidden from a reader.
+  canResync: boolean
 }) {
   const [state, action] = useActionState<BillingFormState, FormData>(resync, {})
 
@@ -132,6 +135,7 @@ export function BillingRuns({
                   ))}
               </span>
 
+              {canResync && (
               <form action={action}>
                 <input type="hidden" name="leasePayerId" value={row.id} />
                 {/* One per payer, so the name says which (R-116). */}
@@ -147,6 +151,7 @@ export function BillingRuns({
                   }
                 />
               </form>
+              )}
             </li>
           ))}
         </ul>

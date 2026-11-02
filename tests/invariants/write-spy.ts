@@ -51,3 +51,9 @@ export function withWriteSpy<C>(client: C): C {
 // file's `@/auth.ts` mock reads it while the module graph is still loading.
 export type Principal = { id: string; kind: 'staff' | 'tenant' | 'guarantor'; email: null; name: string; mfaEnrolled: boolean; mfaVerified: boolean }
 export const session: { principal: Principal | null } = { principal: null }
+
+// The request's host and the support cookie's claims (PLAT-05..09, R-295b):
+// read by that suite's `next/headers` and `@/lib/support/cookie.ts` mocks, and
+// here for the same reason.
+export type SupportClaims = { grantId: string; adminId: string; orgId: string; issuedAt: number }
+export const request: { host: string; support: SupportClaims | null } = { host: '', support: null }

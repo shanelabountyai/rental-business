@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { checkMonetaryAuthority } from './authority.ts'
+import { can, propertyScope } from './can.ts'
+import { PERMISSIONS } from './permissions.ts'
 import {
   type SupportGrantState,
   approvableMinutes,
@@ -8,6 +11,8 @@ import {
   supportEndRefusal,
   supportGrantStatus,
   supportRequestRefusal,
+  SUPPORT_PERMISSIONS,
+  supportActor,
 } from './support.ts'
 
 const NOW = new Date('2026-11-02T12:00:00Z')
@@ -62,5 +67,32 @@ describe('the lifecycle refusals', () => {
     expect(supportAcknowledgeRefusal(breakGlass)).toBeNull()
     expect(supportAcknowledgeRefusal({ ...breakGlass, ownersAcknowledgedAt: NOW })).toMatch(/already/)
     expect(supportAcknowledgeRefusal(live)).toMatch(/Only emergency/)
+  })
+})
+
+describe('supportActor (PRD 11 §4.7, D-353: read-only by its data, not a branch)', () => {
+  const actor = supportActor({ platformAdminId: 'admin_1', orgId: 'org_a' })
+
+  it('holds every read but confidential.read, and no write', () => {
+    expect(SUPPORT_PERMISSIONS).toContain('audit.read')
+    expect(SUPPORT_PERMISSIONS).toContain('ledger.read')
+    expect(SUPPORT_PERMISSIONS).not.toContain('confidential.read')
+    expect(SUPPORT_PERMISSIONS.every((p) => p.endsWith('.read'))).toBe(true)
+    const refused = PERMISSIONS.filter((p) => !SUPPORT_PERMISSIONS.includes(p))
+    for (const p of refused) expect(can(actor, p).allowed, p).toBe(false)
+    for (const p of ['staff.manage', 'confidential.read', 'accesscode.reveal', 'billing.connect'] as const) {
+      expect(can(actor, p)).toEqual({ allowed: false, reason: 'no_permission' })
+    }
+  })
+
+  it('reads everything in its own org and nothing in another', () => {
+    expect(can(actor, 'lease.read', { orgId: 'org_a', propertyId: 'p1', legalEntityId: 'e1' }).allowed).toBe(true)
+    expect(can(actor, 'lease.read', { orgId: 'org_b', propertyId: 'p1' })).toEqual({ allowed: false, reason: 'out_of_scope' })
+    expect(propertyScope(actor, 'property.read')).toEqual({ orgId: 'org_a', everything: true })
+  })
+
+  it('has no monetary authority at all', () => {
+    expect(checkMonetaryAuthority(actor, 'approve_work_order', 1)).toEqual({ outcome: 'denied', reason: 'no_authority' })
+    expect(checkMonetaryAuthority(actor, 'waive_fee', 1)).toEqual({ outcome: 'denied', reason: 'no_authority' })
   })
 })

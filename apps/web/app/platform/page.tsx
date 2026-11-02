@@ -2,6 +2,8 @@ import { prisma } from '@rental/db'
 import { platformDecision, requirePlatform } from '@/lib/platform/guard.ts'
 import { signOutOfPlatform } from '@/lib/platform/auth-actions.ts'
 import { ORG_SUMMARY_SELECT, attentionReasons } from '@/lib/platform/orgs.ts'
+import { GRANT_LIST_SELECT, GrantList } from '@/components/platform/grant-list.tsx'
+import { supportGrantStatus } from '@rental/core/rbac'
 import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 import Link from 'next/link'
 
@@ -12,15 +14,23 @@ export const metadata = { title: 'Platform console' }
 // asks; the organisation panels show only to holders of `org.read`, and an
 // admin without it still gets their account and the way out.
 //
-// Not here yet, each with the row that builds it: counts by org status
-// (R-300 adds `Organization.status`), live break-glass grants, old support
-// requests and the admin's own grants (R-295).
+// Not here yet: counts by org status (R-300 adds `Organization.status`).
+// Live break-glass and old support requests are attention reasons, and the
+// admin's own live grants carry "Open" and "End" (R-295b).
 export default async function PlatformHomePage() {
   const admin = await requirePlatform()
   const canRead = (await platformDecision(admin, 'org.read')).allowed
   const canAudit = (await platformDecision(admin, 'platformAudit.read')).allowed
   const orgs = canRead ? await prisma.organization.findMany({ select: ORG_SUMMARY_SELECT, orderBy: { name: 'asc' } }) : []
   const now = new Date()
+  // Your own record, so the session is enough (as on /platform/grants).
+  const ownLive = (
+    await prisma.supportAccessGrant.findMany({
+      where: { platformAdminId: admin.id, endedAt: null, deniedAt: null, expiresAt: { gt: now } },
+      select: GRANT_LIST_SELECT,
+      orderBy: { requestedAt: 'desc' },
+    })
+  ).filter((g) => supportGrantStatus(g, now) === 'live')
   const attention = orgs
     .map((org) => ({ org, reasons: attentionReasons(org, now) }))
     .filter((row) => row.reasons.length > 0)
@@ -69,6 +79,15 @@ export default async function PlatformHomePage() {
           </a>
         </nav>
       </header>
+
+      {ownLive.length > 0 && (
+        <section aria-labelledby="own-grants-heading" className="flex flex-col gap-3 text-sm">
+          <h2 id="own-grants-heading" className="text-lg font-semibold">
+            Your live grants
+          </h2>
+          <GrantList grants={ownLive} viewerId={admin.id} now={now} />
+        </section>
+      )}
 
       {canRead && (
         <>

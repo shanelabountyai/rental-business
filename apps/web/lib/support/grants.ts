@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { recordAudit } from '@rental/core/audit'
 import { type SupportAccessContext } from '@rental/core/notifications'
 import { durationLabel } from '@rental/core/rbac'
 import { businessDate, friendlyTimestamp } from '@rental/core/scheduling'
@@ -37,6 +38,38 @@ export async function expireSupportGrants(orgId: string, db: Db = prisma, now = 
     data: { endedAt: now, endedByType: 'EXPIRY' },
   })
   return count
+}
+
+/**
+ * "End now" by the grant's own admin (§4.7), from the console or from the
+ * banner inside the org: one conditional update and its PLATFORM audit row in
+ * one transaction. False when the grant was no longer open by the time the
+ * press landed - it ended, expired or was revoked meanwhile.
+ */
+export async function endGrantAsPlatform(
+  grantId: string,
+  orgId: string,
+  adminId: string,
+  ipAddress: string | null,
+  now = new Date(),
+): Promise<boolean> {
+  return prisma.$transaction(async (tx) => {
+    const { count } = await tx.supportAccessGrant.updateMany({
+      where: { id: grantId, platformAdminId: adminId, endedAt: null, deniedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+      data: { endedAt: now, endedByType: 'PLATFORM', endedById: adminId },
+    })
+    if (count === 0) return false
+    await recordAudit(tx, {
+      actor: { type: 'PLATFORM', ref: adminId, ipAddress },
+      action: 'support_grant.ended',
+      entityType: 'SupportAccessGrant',
+      entityId: grantId,
+      orgId,
+      supportGrantId: grantId,
+      after: { by: 'PLATFORM' },
+    })
+    return true
+  })
 }
 
 /// The zone an org's owners read times in: its oldest active property's.

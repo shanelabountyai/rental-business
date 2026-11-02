@@ -7,7 +7,8 @@ import { CONSOLE, PASSWORD, code, createAdmin, ensureKeeperOwner, retireAdmins, 
 
 // R-295a (PRD 11 §4.7, §4.14, §4.16): the grant lifecycle end to end. The
 // admin asks on the console; the org's owner answers on the org's own host.
-// Entering the org under a grant is R-295b's, so nothing here enters.
+// R-295b: "Open" enters the org under a live grant, read-only, and the
+// owner's audit log shows what support did under it.
 
 const PORT = process.env.PORT ?? '3100'
 const admins: string[] = []
@@ -152,6 +153,66 @@ test('break-glass notifies the owner at once and stays on the dashboard until it
     await expect(ownerPage.getByText('Marked as seen for every owner.')).toBeVisible()
     await expect(banner).toHaveCount(0)
     expect((await prisma.supportAccessGrant.findUniqueOrThrow({ where: { id: grant.id } })).acknowledgedByStaffId).toBe(owner.id)
+  } finally {
+    await context.close()
+  }
+})
+
+test('Open enters the org read-only under a banner, End now closes it, and the owner sees it in the audit log', async ({ page, browser }, testInfo) => {
+  await ensureKeeperOwner()
+  const admin = await createAdmin(true, admins, ['platform_support'])
+  const tag = `${testInfo.project.name.slice(0, 1)}${randomUUID().slice(0, 8)}`
+  const { org, host, owner } = await orgWithOwner(tag)
+  const now = Date.now()
+  // Opened in the database: the break-glass form is the test above's.
+  const grant = await prisma.supportAccessGrant.create({
+    data: {
+      orgId: org.id,
+      platformAdminId: admin.id,
+      kind: 'BREAK_GLASS',
+      reason: 'Checking why the dashboard shows no rent for this month.',
+      requestedMinutes: 60,
+      startsAt: new Date(now),
+      expiresAt: new Date(now + 60 * 60_000),
+    },
+  })
+
+  await signIn(page, admin)
+  await page.goto(`${CONSOLE}/platform/grants`)
+  await page.getByRole('button', { name: `Open ${org.name}` }).click()
+  const orgHost = new URL(host).hostname
+  await page.waitForURL((url) => url.hostname === orgHost && url.pathname === '/dashboard')
+
+  const banner = page.getByRole('complementary', { name: 'Support session' })
+  await expect(banner).toContainText(`You are viewing ${org.name} as platform support`)
+  await axeScan(page)
+  // Read-only by its permissions: the owner's answers are not offered to it.
+  await page.goto(`${host}/settings/support-access`)
+  await expect(page.getByRole('heading', { name: 'Support access' })).toBeVisible()
+  await expect(page.getByRole('button', { name: /^Revoke access/ })).toHaveCount(0)
+
+  await banner.getByRole('button', { name: 'End now' }).click()
+  await expect(banner.getByText('Support session ended.')).toBeVisible()
+  await page.goto(`${host}/dashboard`)
+  await page.waitForURL(`${host}/support/ended`)
+  await expect(page.getByText('Platform support ended this session.')).toBeVisible()
+  await axeScan(page)
+  await page.getByRole('button', { name: 'Leave the support session' }).click()
+  await expect(page.getByText('You have left the support session.')).toBeVisible()
+
+  const rows = await prisma.auditLog.findMany({ where: { supportGrantId: grant.id }, select: { action: true, actorType: true, orgId: true } })
+  expect(rows.map((r) => r.action).sort()).toEqual(['support_grant.ended', 'support_grant.entered'])
+  expect(new Set(rows.map((r) => `${r.actorType} ${r.orgId}`))).toEqual(new Set([`PLATFORM ${org.id}`]))
+
+  const context = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
+  try {
+    const ownerPage = await context.newPage()
+    await ownerSignsIn(ownerPage, host, owner)
+    await ownerPage.goto(`${host}/settings/audit?grant=${grant.id}`)
+    await expect(ownerPage.getByRole('heading', { name: 'Under one support grant' })).toBeVisible()
+    await expect(ownerPage.getByText(`Platform support: ${admin.name}`).first()).toBeVisible()
+    await expect(ownerPage.getByText('support_grant.entered')).toBeVisible()
+    await axeScan(ownerPage)
   } finally {
     await context.close()
   }

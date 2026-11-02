@@ -58,6 +58,10 @@ export const manifest: Record<string, Entry> = {
   // lib/support/actions.ts (R-295a): an owner answering platform support.
   // One action, four intents; `deny` reaches a write on the fixture's pending grant.
   'lib/support/actions.ts#answerSupportAccess': { 'form.grantId': 'supportAccessGrant', 'form.intent': '=deny' },
+  // lib/support/session-actions.ts (R-295b): the support session acting on
+  // itself. No id from the form: the grant is the cookie's, re-checked.
+  'lib/support/session-actions.ts#endSupportSession': {},
+  'lib/support/session-actions.ts#leaveSupportSession': {},
   // lib/platform/auth-actions.ts (R-294b): every one refuses off PLATFORM_HOST
   'lib/platform/auth-actions.ts#startPlatformSignIn': { public: 'the platform sign-in form' },
   'lib/platform/auth-actions.ts#completePlatformMfa': { public: 'second step of platform sign-in, gated by the challenge cookie' },
@@ -96,6 +100,7 @@ export const manifest: Record<string, Entry> = {
   'lib/platform/support-actions.ts#requestSupportAccess': { 'form.slug': 'value' },
   'lib/platform/support-actions.ts#openBreakGlass': { 'form.slug': 'value' },
   'lib/platform/support-actions.ts#endSupportGrant': { 'form.grantId': 'value' },
+  'lib/platform/support-actions.ts#openSupportGrant': { 'form.grantId': 'value' },
   // lib/auth/invite-actions.ts (R-304a)
   'lib/auth/invite-actions.ts#acceptOrgInvite': { 'form.token': 'token', public: 'gated by the invite token in the form, on its org host only' },
   // lib/billing/actions.ts

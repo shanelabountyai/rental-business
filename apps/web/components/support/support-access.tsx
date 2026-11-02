@@ -150,6 +150,13 @@ export function SupportAccessPanel({
                 <p>Reason: {g.reason}</p>
                 <p className="text-muted-foreground">Asked {g.requestedLabel}</p>
                 {g.detail && <p>{g.detail}</p>}
+                <Link
+                  href={`/settings/audit?grant=${encodeURIComponent(g.id)}`}
+                  aria-label={`What was viewed under ${g.adminName}'s grant asked ${g.requestedLabel}`}
+                  className="self-start underline underline-offset-4"
+                >
+                  What was viewed
+                </Link>
               </li>
             ))}
           </ul>
@@ -191,9 +198,13 @@ export function BreakGlassBanners({
         >
           <p>
             Platform support ({n.adminName}) used emergency access on {n.dateLabel}.{' '}
-            {/* "See what was viewed" is R-295b's /settings/audit?grant=; until then the grant itself. */}
-            <Link href="/settings/support-access" className="underline underline-offset-4">
-              See the grant
+            {/* Each banner's link names its admin and date: two must never share a name. */}
+            <Link
+              href={`/settings/audit?grant=${encodeURIComponent(n.id)}`}
+              aria-label={`See what was viewed by ${n.adminName} on ${n.dateLabel}`}
+              className="underline underline-offset-4"
+            >
+              See what was viewed
             </Link>
           </p>
           {canAcknowledge && (

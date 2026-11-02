@@ -289,4 +289,13 @@ export const NAV_ITEMS: readonly NavItem[] = [
     portfolioOnly: true,
     ownedBy: 'R-295a',
   },
+  {
+    href: '/settings/audit',
+    label: 'Audit log',
+    group: 'Admin',
+    /// PRD 11 §4.15: scoped like every list, so a property-scoped holder sees
+    /// their properties' rows and the page does not dead-end them.
+    permission: 'audit.read',
+    ownedBy: 'R-295b',
+  },
 ]

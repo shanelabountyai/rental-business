@@ -17,10 +17,12 @@ export interface BillingFormState {
 /**
  * The re-sync action: ask Stripe what it believes, and make it agree.
  *
- * Gated on `ledger.read` plus the property, not on a billing-specific
- * permission - the people who can see a lease's money are the people who
- * should be able to fix its billing, and inventing a permission with one
- * consumer would be a role nobody assigns.
+ * Gated on `payment.record` plus the property (D-381), not on a
+ * billing-specific permission - inventing one with one consumer would be a
+ * role nobody assigns. It was `ledger.read` until R-295b: "whoever can see
+ * the money can fix its billing" put a Stripe write behind a READ, which is
+ * exactly what a read-only support session holds (PLAT-06 found it). A
+ * re-sync writes `LeasePayer` and pushes to Stripe; it is a write.
  */
 export async function resyncPayer(
   _previous: BillingFormState,
@@ -29,12 +31,12 @@ export async function resyncPayer(
   const leasePayerId = String(formData.get('leasePayerId') ?? '')
   if (!leasePayerId) return { error: 'No payer named.' }
 
-  const { actor: guarded } = await requireScope('ledger.read')
+  const { actor: guarded } = await requireScope('payment.record')
   const payer = await prisma.leasePayer.findUniqueOrThrow({
     where: { id: leasePayerId, orgId: guarded.orgId },
     select: { property: { select: { id: true, legalEntityId: true, orgId: true } } },
   })
-  await requirePermission('ledger.read', propertyResource(payer.property))
+  await requirePermission('payment.record', propertyResource(payer.property))
 
   const result = await syncLeasePayer(leasePayerId)
 
@@ -53,12 +55,12 @@ export async function resyncLease(
   const leaseId = String(formData.get('leaseId') ?? '')
   if (!leaseId) return { error: 'No lease named.' }
 
-  const { actor: guarded } = await requireScope('ledger.read')
+  const { actor: guarded } = await requireScope('payment.record')
   const lease = await prisma.lease.findUniqueOrThrow({
     where: { id: leaseId, orgId: guarded.orgId },
     select: { property: { select: { id: true, legalEntityId: true, orgId: true } } },
   })
-  await requirePermission('ledger.read', propertyResource(lease.property))
+  await requirePermission('payment.record', propertyResource(lease.property))
 
   const results = await syncLease(leaseId)
   revalidatePath(`/leases/${leaseId}`)

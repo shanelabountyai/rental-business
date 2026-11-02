@@ -42,6 +42,9 @@ const PUBLIC_BY_DESIGN: Record<string, string> = {
   'lib/platform/auth-actions.ts#confirmPlatformMfaEnrolment': 'platform challenge cookie; refuses an enrolled admin',
   'lib/platform/auth-actions.ts#setPlatformPassword': 'setup token (redeemToken)',
   'lib/platform/auth-actions.ts#signOutOfPlatform': 'ends only the caller’s own platform session',
+  'lib/support/session-actions.ts#endSupportSession':
+    "ends the caller's own support grant (R-295b); guarded by the live support session it ends, re-checked against the grant",
+  'lib/support/session-actions.ts#leaveSupportSession': "drops only the caller's own support cookie; touches no row",
   'lib/showings/access-actions.ts#verifyIdentityForShowing': 'showing-access token',
   'lib/showings/actions.ts#bookShowing': 'showing-booking token',
   'lib/scope/actions.ts#selectScope': 'a preference cookie, intersected with RBAC on read',

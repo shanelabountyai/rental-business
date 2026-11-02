@@ -26,6 +26,10 @@ export interface CalendarFeedState {
 
 export async function regenerateCalendarFeed(): Promise<CalendarFeedState> {
   const actor = await requireStaff()
+  // A staff member's own feed, keyed by their StaffUser row. A support
+  // session passes requireStaff (R-295b) but is no staff account, and minting
+  // a feed would be a write it may not make (PLAT-06).
+  if (actor.kind !== 'staff') return { error: 'Only a staff account has a calendar feed.' }
 
   const revoked = await revokeTokens('CALENDAR_FEED', actor.id)
   const issued = await issueToken('CALENDAR_FEED', { type: 'StaffUser', id: actor.id })

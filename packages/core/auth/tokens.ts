@@ -44,6 +44,10 @@ export const TOKEN_TTL_MINUTES = {
   PLATFORM_MFA_CHALLENGE: 10,
   /// R-294b: the bootstrap script's first-password link. As STAFF_PASSWORD_RESET.
   PLATFORM_PASSWORD_SETUP: 30,
+  /// R-295b (PRD 11 §4.7): the console's "Open" on a live grant, redeemed at
+  /// once by the browser it redirects. Sixty seconds: it only has to survive
+  /// one redirect, and a leaked one is a way into somebody's organisation.
+  SUPPORT_ENTRY: 1,
   /// R-304a: an organisation invite (PRD 10 §1.2's foundation shape). Seven
   /// days, because the first owner of a new org reads it when they read it.
   /// Not an AuthToken row: `OrgInvite.tokenHash` holds it, so only the TTL

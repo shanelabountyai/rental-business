@@ -53,6 +53,7 @@ describe('attentionReasons (PRD 11 §4.2)', () => {
     notificationsEnabled: true,
     health: healthy,
     integrations: [],
+    supportGrants: [],
     ...over,
   })
 
@@ -85,5 +86,17 @@ describe('attentionReasons (PRD 11 §4.2)', () => {
         now,
       ),
     ).toEqual(['1 dead-lettered event', 'Twilio failed', 'Notifications switched off'])
+  })
+
+  it('puts live emergency access first and a request unanswered past 24 hours before the kill switch (R-295b)', () => {
+    const grant = { requestedMinutes: 60, approvedAt: null, deniedAt: null, endedAt: null }
+    const breakGlass = { ...grant, kind: 'BREAK_GLASS' as const, requestedAt: hoursAgo(0.5), expiresAt: new Date(now.getTime() + 30 * 60_000) }
+    const oldRequest = { ...grant, kind: 'REQUESTED' as const, requestedAt: hoursAgo(25), expiresAt: null }
+    const freshRequest = { ...oldRequest, requestedAt: hoursAgo(23) }
+    expect(
+      attentionReasons(org({ supportGrants: [breakGlass, oldRequest, freshRequest], notificationsEnabled: false }), now),
+    ).toEqual(['Emergency access is open', '1 support request unanswered for over 24 hours', 'Notifications switched off'])
+    // An expired emergency grant the sweep has not stamped yet opens nothing.
+    expect(attentionReasons(org({ supportGrants: [{ ...breakGlass, expiresAt: hoursAgo(0.1) }] }), now)).toEqual([])
   })
 })

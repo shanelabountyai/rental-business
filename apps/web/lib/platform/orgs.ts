@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { type SupportGrantState, supportGrantStatus } from '@rental/core/rbac'
 import { prisma } from '@rental/db'
 
 // The console's reads about organisations (PRD 11 §4.2–4.4, R-303). PLAT-03
@@ -22,7 +23,16 @@ export const ORG_SUMMARY_SELECT = {
   createdAt: true,
   health: true,
   integrations: { select: INTEGRATION_SELECT, orderBy: { provider: 'asc' } },
+  // Open grants only (not ended, not denied): what §4.2's first and fifth
+  // reasons read. The lifecycle columns, never the reason text.
+  supportGrants: {
+    where: { endedAt: null, deniedAt: null },
+    select: { kind: true, requestedAt: true, requestedMinutes: true, approvedAt: true, deniedAt: true, expiresAt: true, endedAt: true },
+  },
 } as const
+
+/// A support request unanswered this long is on the dashboard (§4.2).
+export const OLD_REQUEST_MS = 24 * 60 * 60_000
 
 type Health = {
   computedAt: Date
@@ -34,19 +44,19 @@ type Summary = {
   notificationsEnabled: boolean
   health: Health | null
   integrations: { provider: string; status: string }[]
+  supportGrants: (SupportGrantState & { requestedAt: Date })[]
 }
 
 export const healthIsStale = (health: { computedAt: Date } | null, now: Date) =>
   !health || now.getTime() - health.computedAt.getTime() > HEALTH_STALE_MS
 
-/**
- * Why an org is on the dashboard's "needs attention" list, in §4.2's order.
- * Live break-glass grants and old support requests come first there; they
- * join this list with R-295, which builds the grants.
- */
+/// Why an org is on the dashboard's "needs attention" list, in §4.2's order.
 export function attentionReasons(org: Summary, now: Date): string[] {
   const reasons: string[] = []
   const { health } = org
+  if (org.supportGrants.some((g) => g.kind === 'BREAK_GLASS' && supportGrantStatus(g, now) === 'live')) {
+    reasons.push('Emergency access is open')
+  }
   if (healthIsStale(health, now)) {
     reasons.push(health ? 'Health not reported in over 26 hours' : 'Health not yet reported')
   } else if (health!.dailyOk === false) {
@@ -60,6 +70,10 @@ export function attentionReasons(org: Summary, now: Date): string[] {
   for (const i of org.integrations) {
     if (i.status === 'FAILED' || i.status === 'RESTRICTED') reasons.push(`${providerName(i.provider)} ${i.status.toLowerCase()}`)
   }
+  const old = org.supportGrants.filter(
+    (g) => supportGrantStatus(g, now) === 'pending' && now.getTime() - g.requestedAt.getTime() > OLD_REQUEST_MS,
+  ).length
+  if (old > 0) reasons.push(`${old} support request${old === 1 ? '' : 's'} unanswered for over 24 hours`)
   if (!org.notificationsEnabled) reasons.push('Notifications switched off')
   return reasons
 }

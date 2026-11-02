@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState } from 'react'
+import { useActionState, useEffect } from 'react'
 import { DEFAULT_REQUEST_MINUTES, REQUEST_MINUTES, durationLabel } from '@rental/core/rbac'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { SelectField, TextareaField } from '@/components/form/field.tsx'
@@ -63,6 +63,22 @@ export function BreakGlassForm({ action, slug }: { action: Action; slug: string 
 /// One per open grant, labelled with its org so two never share a name.
 export function EndGrantButton({ action, grantId, label }: { action: Action; grantId: string; label: string }) {
   const [state, formAction] = useActionState<SupportGrantFormState, FormData>(action, {})
+  return (
+    <form action={formAction} className="flex flex-col gap-2">
+      <FormAlerts state={state} />
+      <input type="hidden" name="grantId" value={grantId} />
+      <SubmitButton label={label} />
+    </form>
+  )
+}
+
+/// "Open" (R-295b): the action answers with the org host's entry link and the
+/// browser follows it as a full navigation, since it is another host.
+export function OpenGrantButton({ action, grantId, label }: { action: Action; grantId: string; label: string }) {
+  const [state, formAction] = useActionState<SupportGrantFormState, FormData>(action, {})
+  useEffect(() => {
+    if (state.openUrl) window.location.assign(state.openUrl)
+  }, [state])
   return (
     <form action={formAction} className="flex flex-col gap-2">
       <FormAlerts state={state} />

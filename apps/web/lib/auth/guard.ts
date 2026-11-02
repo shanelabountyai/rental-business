@@ -15,6 +15,7 @@ import {
   scopeNone,
 } from '@rental/core/rbac'
 import { redirect } from 'next/navigation'
+import { currentSupportSession } from '@/lib/support/session.ts'
 import { currentActor } from './actor.ts'
 
 // Re-exported so call sites have one import for "authorize this". The
@@ -58,10 +59,20 @@ export class AuthorizationError extends Error {
 
 /// The signed-in staff actor, or a redirect to sign-in. Use at the top of any
 /// staff page or action.
+///
+/// A support session under a live grant passes too (PRD 11 §4.7, R-295b): it
+/// reads what staff read and writes nothing, because every write behind this
+/// floor also asks for a write permission it does not hold (PLAT-06).
 export async function requireStaff(): Promise<Actor> {
   const actor = await currentActor()
-  if (!actor || actor.kind !== 'staff' || !actor.active) redirect('/login')
+  if (!actor || (actor.kind !== 'staff' && actor.kind !== 'support') || !actor.active) redirect(await signInPath())
   return actor
+}
+
+/// Where somebody with no actor goes: sign-in, or - when the browser holds a
+/// support session whose grant has closed - the page saying it ended and why.
+async function signInPath(): Promise<string> {
+  return (await currentSupportSession()) ? '/support/ended' : '/login'
 }
 
 export async function requireTenant(): Promise<Actor> {
@@ -86,7 +97,7 @@ export async function requirePermission(
   resource: Resource = {},
 ): Promise<Actor> {
   const actor = await currentActor()
-  if (!actor) redirect('/login')
+  if (!actor) redirect(await signInPath())
 
   const decision = can(actor, permission, resource)
   if (decision.allowed) return actor

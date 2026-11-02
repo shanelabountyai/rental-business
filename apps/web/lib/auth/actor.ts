@@ -10,6 +10,7 @@ import {
 import { prisma } from '@rental/db'
 import { cache } from 'react'
 import { auth } from '@/auth.ts'
+import { currentSupportSession } from '@/lib/support/session.ts'
 
 // Loads the current Actor from the session. This is the ONE place that turns
 // a session into permissions, so there is one place to audit rather than one
@@ -211,8 +212,16 @@ async function loadGuarantorActor(guarantorId: string) {
  *
  * Returns null rather than throwing when there is no session, because "not
  * signed in" is an ordinary state that every page handles by redirecting.
+ *
+ * A support session (PRD 11 §4.7, R-295b) comes first and stands alone: a
+ * browser holding one acts as support or, once its grant has closed, as
+ * nobody - never falling through to whatever org session it also holds. Every
+ * kind is named; an unknown one is nobody, not a tenant.
  */
 export const currentActor = cache(async (): Promise<Actor | null> => {
+  const support = await currentSupportSession()
+  if (support) return support.live ? support.actor : null
+
   const session = await auth()
   if (!session?.principal) return null
 
@@ -225,7 +234,9 @@ export const currentActor = cache(async (): Promise<Actor | null> => {
       )
     case 'guarantor':
       return loadGuarantorActor(session.principal.id)
-    default:
+    case 'tenant':
       return loadTenantActor(session.principal.id)
+    default:
+      return null
   }
 })

@@ -4593,6 +4593,9 @@ enum AuthTokenPurpose {
   /// R-294b: the first password, from `db:create-platform-admin`. The admin
   /// is created with an unusable random password, as `db:create-owner` does.
   PLATFORM_PASSWORD_SETUP
+  /// R-295b (PRD 11 §4.7): single-use, 60 seconds, subject = the grant. The
+  /// console mints it on "Open"; `/support/enter` on the org's host redeems it.
+  SUPPORT_ENTRY
   /// D-6: a vendor gets a signed, expiring, scoped work-order link and never
   /// an account. R-025 built the dispatch flow on top of this purpose - it
   /// does NOT invent a parallel VendorLink token table.

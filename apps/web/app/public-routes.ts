@@ -35,6 +35,10 @@ export const PUBLIC_ROUTES: Record<string, string> = {
     'The platform second factor (R-294b). Before a session exists; the challenge cookie is the credential.',
   'platform/enrol-mfa/page.tsx':
     'Platform MFA enrolment (PADM-02), between the password and the first code, before any session exists. Both its actions need the challenge cookie and refuse an already-enrolled admin.',
+  'support/enter/route.ts':
+    "Where the console's \"Open\" lands on the grant's org host (PRD 11 §4.7, R-295b). Before it there is no support session to guard with: the single-use, 60-second SUPPORT_ENTRY token is the credential, and it opens nothing unless the grant is live, its admin active and this host the grant's org.",
+  'support/ended/page.tsx':
+    "Says why a support session no longer opens anything (PRD 11 §4.7). It is where requireStaff sends a browser whose grant closed, so it cannot itself demand a live session; it reads only the visitor's own cookie and the one grant it names.",
   'platform/set-password/page.tsx':
     "The first password from db:create-platform-admin's link. The single-use token is the credential.",
   'api/cron/route.ts':

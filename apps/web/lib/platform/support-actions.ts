@@ -1,24 +1,29 @@
 'use server'
 
 import { recordAudit } from '@rental/core/audit'
-import { BREAK_GLASS_MINUTES, supportEndRefusal, supportRequestRefusal } from '@rental/core/rbac'
+import { BREAK_GLASS_MINUTES, supportEndRefusal, supportGrantStatus, supportRequestRefusal } from '@rental/core/rbac'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
+import { authUrl } from '@/lib/auth/org-url.ts'
+import { issueToken } from '@/lib/auth/store.ts'
 import { isUniqueViolation } from '@/lib/db/unique-violation.ts'
 import { requirePlatform } from '@/lib/platform/guard.ts'
-import { GRANT_STATE, expireSupportGrants, notifyOwnersOfGrant } from '@/lib/support/grants.ts'
+import { GRANT_STATE, endGrantAsPlatform, expireSupportGrants, notifyOwnersOfGrant } from '@/lib/support/grants.ts'
 
 // The console's half of support access (PRD 11 §4.7, R-295a): ask an org for
 // access, break the glass, and end a grant you hold. Every write is audited
 // in the org as PLATFORM, in the grant's own transaction (PLAT-04), and names
-// the grant (`supportGrantId`, §5.4). Nothing here lets anybody in yet:
-// entering is R-295b's.
+// the grant (`supportGrantId`, §5.4). "Open" (R-295b) hands the browser a
+// single-use entry link to the org's own host; this host never holds the
+// support session, and the org's host never holds this one.
 
 export interface SupportGrantFormState {
   error?: string
   notice?: string
   fieldErrors?: Record<string, string>
+  /// "Open": the entry link, which the browser follows as a full navigation.
+  openUrl?: string
 }
 
 const ALREADY_OPEN = 'You already have an open request or grant for this organisation. End it before asking again.'
@@ -168,25 +173,31 @@ export async function endSupportGrant(
   const refusal = supportEndRefusal(grant, 'platform', now)
   if (refusal) return { error: refusal }
 
-  const ip = await clientIp()
-  const ended = await prisma.$transaction(async (tx) => {
-    const { count } = await tx.supportAccessGrant.updateMany({
-      where: { id: grant.id, endedAt: null, deniedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
-      data: { endedAt: now, endedByType: 'PLATFORM', endedById: actor.id },
-    })
-    if (count === 0) return false
-    await recordAudit(tx, {
-      actor: { type: 'PLATFORM', ref: actor.id, ipAddress: ip },
-      action: 'support_grant.ended',
-      entityType: 'SupportAccessGrant',
-      entityId: grant.id,
-      orgId: grant.orgId,
-      supportGrantId: grant.id,
-      after: { by: 'PLATFORM' },
-    })
-    return true
-  })
+  const ended = await endGrantAsPlatform(grant.id, grant.orgId, actor.id, await clientIp(), now)
   if (!ended) return { error: 'That grant is no longer open.' }
   refresh(grant.organization.slug)
   return { notice: 'Ended.' }
+}
+
+/**
+ * "Open" (§4.7, R-295b): a live grant you hold becomes a 60-second, single-use
+ * `SUPPORT_ENTRY` token, and the browser is sent to the org's host to redeem
+ * it. Returned rather than redirected: the target is another host, and the
+ * browser opens it as the Stripe link does (R-277b). `grant.request` because
+ * entering is support work: an admin whose role was taken away cannot keep
+ * walking into an org on a grant they asked for before (D-381).
+ */
+export async function openSupportGrant(
+  _previous: SupportGrantFormState,
+  formData: FormData,
+): Promise<SupportGrantFormState> {
+  const actor = await requirePlatform({ permission: 'grant.request' })
+  const grant = await prisma.supportAccessGrant.findFirst({
+    where: { id: str(formData, 'grantId'), platformAdminId: actor.id },
+    select: { id: true, orgId: true, ...GRANT_STATE },
+  })
+  if (!grant) return { error: 'That grant no longer exists.' }
+  if (supportGrantStatus(grant) !== 'live') return { error: 'That grant is not open, so there is nothing to enter.' }
+  const { token } = await issueToken('SUPPORT_ENTRY', { type: 'SupportAccessGrant', id: grant.id }, { requestedIp: await clientIp() })
+  return { openUrl: await authUrl(grant.orgId, `/support/enter?token=${encodeURIComponent(token)}`) }
 }

@@ -14,7 +14,7 @@ export const metadata = { title: 'Support access' }
 // with `audit.read` portfolio-wide; answering is an owner's (`staff.manage`
 // as well), which a support session can never hold. In (admin) beside the
 // other owner settings (/money/stripe, /messages/settings); the URL is the
-// PRD's. "What was viewed" per grant is R-295b's /settings/audit?grant=.
+// PRD's. "What was viewed" per grant links to /settings/audit?grant= (R-295b).
 
 const KIND = { REQUESTED: 'request', BREAK_GLASS: 'emergency access' } as const
 const STATUS = { pending: 'waiting', live: 'open', denied: 'denied', ended: 'ended', expired: 'expired' } as const

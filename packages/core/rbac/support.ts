@@ -3,6 +3,9 @@
 // actions only say it. The database refuses the same things by trigger and
 // CHECK (PLAT-08); these are the sentences.
 
+import type { Actor } from './can.ts'
+import { PERMISSIONS, type Permission } from './permissions.ts'
+
 /// §4.7: a request asks for one of these; an owner may approve it for less.
 export const REQUEST_MINUTES = [60, 240, 1440] as const
 export const DEFAULT_REQUEST_MINUTES = 240
@@ -70,4 +73,37 @@ export function supportEndRefusal(g: SupportGrantState, side: 'platform' | 'org'
 export function supportAcknowledgeRefusal(g: SupportGrantState): string | null {
   if (g.kind !== 'BREAK_GLASS') return 'Only emergency access asks to be acknowledged.'
   return g.ownersAcknowledgedAt ? 'Another owner has already marked this as seen.' : null
+}
+
+/**
+ * What a support session may do (§4.7, D-353): every read except
+ * `confidential.read` (safety cases, RISK-04), and no write at all in v1
+ * (OQ-27). `audit.read` is a read already. `accesscode.reveal` is not on it:
+ * a lockbox code is a key to somebody's home. Derived from the catalogue, so a
+ * read permission added later is readable by support and a write never is.
+ */
+export const SUPPORT_PERMISSIONS: readonly Permission[] = PERMISSIONS.filter(
+  (p) => p.endsWith('.read') && p !== 'confidential.read',
+)
+
+/**
+ * The actor a live grant acts as (§4.7): one synthetic portfolio-wide
+ * assignment in the grant's org, ceilings 0, the second factor proved at the
+ * platform's own sign-in. `can()`, `propertyScope()` and
+ * `checkMonetaryAuthority()` are unchanged - the refusals come from this data
+ * (D-5). The id is the admin's, the person behind every request.
+ */
+export function supportActor(grant: { platformAdminId: string; orgId: string }): Actor {
+  return {
+    id: grant.platformAdminId,
+    orgId: grant.orgId,
+    kind: 'support',
+    active: true,
+    mfaVerified: true,
+    assignments: [
+      { orgId: grant.orgId, roleKey: 'support', permissions: SUPPORT_PERMISSIONS, legalEntityId: null, propertyId: null },
+    ],
+    leaseIds: [],
+    ceilings: { approveWorkOrderCents: 0, waiveFeeCents: 0 },
+  }
 }

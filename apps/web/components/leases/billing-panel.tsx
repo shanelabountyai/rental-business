@@ -103,6 +103,7 @@ export function BillingPanel({
   live,
   providerName,
   resync,
+  canResync,
   canSwitchCollection,
   switchCollection,
 }: {
@@ -114,6 +115,8 @@ export function BillingPanel({
     state: BillingFormState,
     formData: FormData,
   ) => Promise<BillingFormState>;
+  /// `payment.record` (D-381): a re-sync is a write, hidden from a reader.
+  canResync: boolean;
   canSwitchCollection: boolean;
   switchCollection: (
     state: WorkOrderFormState,
@@ -184,7 +187,7 @@ export function BillingPanel({
 
       <FormAlerts state={state} />
 
-      {payers.length > 0 && (
+      {canResync && payers.length > 0 && (
         <form action={action}>
           <input type="hidden" name="leaseId" value={leaseId} />
           <SubmitButton label="Re-sync with Stripe" />

@@ -12,6 +12,7 @@ import { headers } from 'next/headers'
 import { auth } from '@/auth.ts'
 import { hostOrgId } from '@/lib/auth/org.ts'
 import { isPlatformHost } from '@/lib/auth/platform-host.ts'
+import { currentSupportSession } from '@/lib/support/session.ts'
 
 // Request-aware wrapper around the shared audit service.
 //
@@ -28,7 +29,19 @@ export async function currentAuditActor(): Promise<AuditActor> {
 
 /// The actor and the session's org from ONE `auth()`, which re-reads the
 /// principal from the database every time it is called.
-async function requestAuditContext(): Promise<{ actor: AuditActor; orgId?: string }> {
+async function requestAuditContext(): Promise<{ actor: AuditActor; orgId?: string; supportGrantId?: string }> {
+  // A support session acts as its admin, in the grant's org, under the grant
+  // (PRD 11 §5.4, PLAT-07) - checked first, as `currentActor` does, so a row
+  // written in one never names whatever org session the browser also holds.
+  const support = await currentSupportSession()
+  if (support?.live) {
+    const headerList = await headers()
+    return {
+      actor: { ...requestMeta(headerList), type: 'PLATFORM', ref: support.claims.adminId },
+      orgId: support.claims.orgId,
+      supportGrantId: support.claims.grantId,
+    }
+  }
   const [session, headerList] = await Promise.all([auth(), headers()])
   // The console's session is a different cookie read by a different Auth.js
   // instance, so the org `auth()` above sees nobody there (PRD 11 §5.4,
@@ -103,7 +116,8 @@ export async function audit(
   const orgId = input.propertyId
     ? input.orgId
     : (input.orgId ?? context.orgId ?? (await hostOrgId()) ?? undefined)
-  await recordAudit(db, { ...input, orgId, actor: context.actor } as Parameters<typeof recordAudit>[1])
+  const supportGrantId = context.supportGrantId ?? input.supportGrantId
+  await recordAudit(db, { ...input, orgId, supportGrantId, actor: context.actor } as Parameters<typeof recordAudit>[1])
 }
 
 /// Re-exported for the callers that already had it from here. New callers

@@ -8,6 +8,11 @@ import { selectScope } from '@/lib/scope/actions.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { currentBrand } from '@/lib/brand.ts'
 import { can, holdsAnywhere } from '@rental/core/rbac'
+import { friendlyTimestamp } from '@rental/core/scheduling'
+import { SupportSessionBanner } from '@/components/support/support-session-banner.tsx'
+import { orgTimezone } from '@/lib/support/grants.ts'
+import { endSupportSession } from '@/lib/support/session-actions.ts'
+import { currentSupportSession } from '@/lib/support/session.ts'
 
 // The admin shell. Everything under (admin) renders inside it.
 //
@@ -28,6 +33,11 @@ export default async function AdminLayout({
   const actor = await requireStaff()
   const scope = await currentScope(actor, 'property.read')
   const brand = await currentBrand()
+  // PRD 11 §4.7: a support session says so above everything, on every page.
+  const support = await currentSupportSession()
+  const supportEnds = support?.live
+    ? friendlyTimestamp(support.grant.expiresAt, await orgTimezone(support.grant.orgId))
+    : null
 
   // Filtered on the server: a maintenance tech is never sent the markup for a
   // financial section, so there is nothing to reveal in the DOM.
@@ -58,6 +68,10 @@ export default async function AdminLayout({
         Skip to content
       </a>
 
+      {support?.live && supportEnds && (
+        <SupportSessionBanner action={endSupportSession} orgName={support.grant.organization.name} endsLabel={supportEnds} />
+      )}
+
       <header className="border-border flex flex-wrap items-center gap-3 border-b px-4 py-3">
         <Link
           href="/dashboard"
@@ -81,12 +95,15 @@ export default async function AdminLayout({
           />
         </form>
 
-        <Link
-          href="/account"
-          className="focus-visible:ring-ring text-muted-foreground hover:text-foreground rounded-md text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-        >
-          {actorName(await currentActor())}
-        </Link>
+        {/* A support session has no staff account to open. */}
+        {actor.kind === 'staff' && (
+          <Link
+            href="/account"
+            className="focus-visible:ring-ring text-muted-foreground hover:text-foreground rounded-md text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+          >
+            {actorName(await currentActor())}
+          </Link>
+        )}
       </header>
 
       <div className="flex flex-1 flex-col md:flex-row">

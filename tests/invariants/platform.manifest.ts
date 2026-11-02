@@ -38,4 +38,6 @@ export const platformManifest: Record<string, PlatformEntry> = {
   'lib/platform/support-actions.ts#openBreakGlass': { guard: 'step-up', permission: 'grant.breakGlass' },
   // Ends only the admin's own grant: it removes access, so a session is enough.
   'lib/platform/support-actions.ts#endSupportGrant': { guard: 'session' },
+  // R-295b, D-381: entering is support work, so the role must still hold it.
+  'lib/platform/support-actions.ts#openSupportGrant': { guard: 'session', permission: 'grant.request' },
 }

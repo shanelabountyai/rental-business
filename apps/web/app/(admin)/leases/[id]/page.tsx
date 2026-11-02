@@ -207,6 +207,7 @@ export default async function LeaseDetailPage({
     : []
 
   const canWrite = await actorCan('lease.write', propertyResource(lease.property))
+  const canResync = await actorCan('payment.record', propertyResource(lease.property))
   const isRunning = lease.status === 'ACTIVE' || lease.status === 'MONTH_TO_MONTH'
   const pendingRaise = canWrite && isRunning ? await scheduledRentChange(lease.id) : null
   // Recording money that arrived off the rails is the most forgeable action
@@ -642,6 +643,7 @@ export default async function LeaseDetailPage({
           providerName={billingProviderName()}
           leaseId={lease.id}
           resync={resyncLease}
+          canResync={canResync}
           payers={payers.map((payer) => ({
             id: payer.id,
             name: payer.tenant

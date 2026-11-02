@@ -10,7 +10,8 @@ export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Support access' }
 
 // PRD 11 §4.7 (R-295a): ask an organisation for access, or break the glass,
-// and see every grant there has been for it. Entering a live grant is R-295b.
+// and see every grant there has been for it. "Open" on your own live grant
+// enters the organisation, read-only (R-295b).
 export default async function PlatformOrgSupportPage({ params }: { params: Promise<{ slug: string }> }) {
   const admin = await requirePlatform({ permission: 'org.read' })
   const { slug } = await params
@@ -36,7 +37,7 @@ export default async function PlatformOrgSupportPage({ params }: { params: Promi
         </Link>
       </header>
       <p className="rounded-md border p-4 text-sm">
-        A grant is read-only. Entering the organisation under a live grant is not built yet (R-295b).
+        A grant is read-only. Open your own live grant below to view the organisation on its own address; the owners see every grant and its reason.
       </p>
       {canRequest && <RequestAccessForm action={requestSupportAccess} slug={org.slug} />}
       {canBreakGlass && <BreakGlassForm action={openBreakGlass} slug={org.slug} />}
