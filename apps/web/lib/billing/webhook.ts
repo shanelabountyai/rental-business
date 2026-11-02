@@ -26,6 +26,7 @@ import { assessNsfFee } from '@/lib/ledger/nsf-fees.ts'
 import { leaseBalanceCents } from '@/lib/ledger/queries.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 import { applyAccountStatus, applyDeauthorized, recordPlatformFee } from '@/lib/integrations/stripe-onboarding.ts'
+import { recordSetupTestPayment } from '@/lib/setup/test-payment.ts'
 
 // The webhook → projection pipeline (D-11, R-034).
 //
@@ -181,6 +182,12 @@ async function projectClaimed(
   }
   if (interpretation.outcome === 'platform_fee') {
     const detail = await recordPlatformFee(orgId, interpretation.fee, event.id)
+    await recordOutcome(orgId, event.id, 'projected', detail)
+    return { outcome: 'projected', detail }
+  }
+
+  if (interpretation.outcome === 'setup_test_paid') {
+    const detail = await recordSetupTestPayment(orgId, interpretation, event.id)
     await recordOutcome(orgId, event.id, 'projected', detail)
     return { outcome: 'projected', detail }
   }

@@ -60,6 +60,10 @@ export const manifest: Record<string, Entry> = {
   'lib/support/actions.ts#answerSupportAccess': { 'form.grantId': 'supportAccessGrant', 'form.intent': '=deny' },
   // R-291a: the owner's checklist statements; the org is the session's.
   'lib/setup/actions.ts#markSetupStep': { 'form.mark': '=just_me', 'form.intent': '=on' },
+  // R-291b: step 9's presses. The phone is the owner's own; the invoice id is bound server-side.
+  'lib/setup/actions.ts#sendTestText': { 'form.phone': 'value' },
+  'lib/setup/actions.ts#billTestDollar': {},
+  'lib/setup/actions.ts#paySimulatedTestInvoice': { stripeInvoiceId: 'value' },
   // lib/support/session-actions.ts (R-295b): the support session acting on
   // itself. No id from the form: the grant is the cookie's, re-checked.
   'lib/support/session-actions.ts#endSupportSession': {},

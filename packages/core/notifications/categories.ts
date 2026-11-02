@@ -154,6 +154,11 @@ export const NOTIFICATION_CATEGORIES = [
   /// never learn their organisation had been entered. HELD by the org's kill
   /// switch rather than suppressed (D-359, D-380): see HELD_WHEN_SWITCHED_OFF.
   'support_access',
+
+  /// R-291b (PRD 10 §5 step 9): the owner's own test text from
+  /// /settings/setup, proving the org's texting reaches a phone. Pressed by
+  /// the recipient, so there is nothing to mute: locked.
+  'setup_test',
 ] as const
 
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number]
@@ -201,6 +206,8 @@ const CATEGORY_CHANNELS: Partial<Record<NotificationCategory, readonly Notificat
   /// R-295a. An owner has no portal inbox; the dashboard banner (§4.16) is
   /// the on-screen half.
   support_access: ['EMAIL', 'SMS'],
+  /// R-291b: the step it proves is the texting one.
+  setup_test: ['SMS'],
   /// Never PORTAL - a prospect has no account and no portal to read one in
   /// (NotificationRecipientType.PROSPECT's own schema comment).
   prospect_prescreening: ['EMAIL', 'SMS'],
@@ -286,6 +293,7 @@ export const LOCKED_CATEGORIES: Readonly<
     'This is how you sign in. Turning it off would lock you out of your account, including out of this page to turn it back on.',
   support_access:
     'This is how you learn that platform support asked to view, or entered, your organisation. Turning it off would let that happen without you knowing.',
+  setup_test: 'This text is sent only when you press "Send a test text" during setup, to prove texting reaches your phone.',
 }
 
 export function isLockedCategory(category: NotificationCategory): boolean {
@@ -420,6 +428,7 @@ export const CATEGORY_LABELS: Record<NotificationCategory, string> = {
   inspection_signature: 'Inspection reports ready to review and sign',
   account_access: 'Sign-in and password links',
   support_access: 'Platform support access to your organisation',
+  setup_test: 'Setup test text',
 }
 
 /**
@@ -518,6 +527,7 @@ export const CATEGORY_AUDIENCE: Record<
   inspection_signature: new Set(['TENANT']),
   account_access: new Set(['STAFF', 'TENANT', 'GUARANTOR']),
   support_access: new Set(['STAFF']),
+  setup_test: new Set(['STAFF']),
 }
 
 /**

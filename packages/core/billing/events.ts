@@ -262,6 +262,9 @@ export type InterpretResult =
   /// The platform's cut of a charge (D-322). The owner's cost, never the
   /// tenant's, so it is not a ProjectionIntent and never reaches LedgerEntry.
   | { outcome: 'platform_fee'; fee: PlatformFeeFact }
+  /// The owner's $1 setup test invoice was paid (R-291b, D-384). The owner has
+  /// no lease, so it is not a ProjectionIntent either.
+  | { outcome: 'setup_test_paid'; stripeInvoiceId: string; amountCents: number; occurredAt: Date }
   /// Recognised, but nothing to project - or unrecognised entirely. Either
   /// way the event is acknowledged so Stripe stops retrying it.
   | { outcome: 'ignore'; reason: string }
@@ -269,6 +272,9 @@ export type InterpretResult =
 /// `OrgIntegration(STRIPE).status` once an account exists (PRD 10 §2.2).
 /// NOT_STARTED and DISABLED are ours, never Stripe's: no account yet, and
 /// deauthorised.
+/// `metadata.purpose` on the owner's $1 setup test invoice (R-291b).
+export const SETUP_TEST_PURPOSE = 'setup_test'
+
 export type ConnectStatus = 'ONBOARDING' | 'RESTRICTED' | 'ENABLED'
 
 export interface PlatformFeeFact {
@@ -492,6 +498,12 @@ export function interpretStripeEvent(event: StripeEventEnvelope): InterpretResul
         // negative delta here would post a second, unlinked correction on
         // top of the one `charge.refunded` already writes.
         return { outcome: 'ignore', reason: 'invoice amount paid did not increase' }
+      }
+
+      // Marked by `invoiceSetupTest` on the invoice itself (R-291b).
+      const metadata = object.metadata && typeof object.metadata === 'object' ? (object.metadata as Record<string, unknown>) : {}
+      if (metadata.purpose === SETUP_TEST_PURPOSE && str(object, 'status') === 'paid') {
+        return { outcome: 'setup_test_paid', stripeInvoiceId: stripeObjectId, amountCents: now, occurredAt }
       }
 
       return {

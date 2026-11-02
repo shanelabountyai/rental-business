@@ -2,9 +2,10 @@ import { prisma } from '@rental/db'
 import { PageHeader } from '@/components/page-header.tsx'
 import { ChecklistSteps } from '@/components/setup/checklist.tsx'
 import { SetupMarks } from '@/components/setup/setup-marks.tsx'
+import { SetupTestActions } from '@/components/setup/test-actions.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { refreshOrgHealth } from '@/lib/cron/org-health.ts'
-import { markSetupStep } from '@/lib/setup/actions.ts'
+import { billTestDollar, markSetupStep, sendTestText } from '@/lib/setup/actions.ts'
 import { SETUP_STEPS, setupChecklist, setupFacts, stepReason } from '@/lib/setup/checklist.ts'
 
 export const metadata = { title: 'Setup' }
@@ -19,7 +20,10 @@ export default async function SetupPage() {
   const facts = await setupFacts(actor.orgId)
   const checklist = setupChecklist(facts)
   await refreshOrgHealth(actor.orgId)
-  const { name } = await prisma.organization.findUniqueOrThrow({ where: { id: actor.orgId }, select: { name: true } })
+  const [{ name }, me] = await Promise.all([
+    prisma.organization.findUniqueOrThrow({ where: { id: actor.orgId }, select: { name: true } }),
+    prisma.staffUser.findUniqueOrThrow({ where: { id: actor.id }, select: { phone: true } }),
+  ])
   const reasons = Object.fromEntries(SETUP_STEPS.map((step) => [step, stepReason(step, facts, checklist)]))
 
   return (
@@ -43,6 +47,7 @@ export default async function SetupPage() {
         }}
       />
       <SetupMarks action={markSetupStep} marks={facts.marks} />
+      {!checklist.test && <SetupTestActions sendText={sendTestText} billDollar={billTestDollar} phone={me.phone} />}
     </div>
   )
 }

@@ -713,6 +713,7 @@ model Organization {
   applicantNotes                 ApplicantNote[]
   integrations                   OrgIntegration[]
   platformFees                   PlatformFee[]
+  setupTestPayments              SetupTestPayment[]
   health                         OrgHealth?
   supportGrants                  SupportAccessGrant[]
 }
@@ -827,6 +828,22 @@ model SimulatedStripeAccount {
   disabledReason   String?
   deauthorizedAt   DateTime?
   createdAt        DateTime  @default(now())
+}
+
+/// R-291b (D-384): the owner's $1 test invoice, paid (PRD 10 §5 step 9),
+/// from the `invoice.updated` that reports it paid. The owner has no lease, so
+/// it is never a LedgerEntry. Append-only by trigger.
+model SetupTestPayment {
+  id              String       @id @default(cuid())
+  orgId           String
+  organization    Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  stripeInvoiceId String
+  amountCents     Int
+  paidAt          DateTime
+  stripeEventId   String
+  createdAt       DateTime     @default(now())
+
+  @@unique([orgId, stripeInvoiceId])
 }
 
 /// R-277b (D-316, D-322, D-379): the platform's application fee on one

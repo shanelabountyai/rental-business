@@ -205,7 +205,7 @@ The checklist lives on the org side at `/settings/setup` and on the platform sid
 | 6 Twilio provisioned, 10DLC approved | subaccount + number + campaign `APPROVED` | Platform starts, carrier finishes |
 | 7 Email domain verified | `OrgIntegration(RESEND).status = VERIFIED`, or shared domain chosen | Org / platform |
 | 8 Jurisdiction confirmed | every property's state is enabled for the org (§7) with its counsel-review flag set | Org + counsel |
-| 9 Test send and test payment | one `Notification` delivered to the owner's own phone; one $1 invoice paid and projected | Org |
+| 9 Test send and test payment | one `Notification` delivered to the owner's own phone; one $1 invoice paid and projected (into `SetupTestPayment`, not the lease ledger — D-384) | Org |
 | 10 Go live | all above; the org's `status` becomes `ACTIVE` and crons include it | Platform |
 
 A step that fails names why (Twilio's rejection text, Stripe's `requirements.currently_due`). The checklist is the owner's first screen until step 10, then a settings page.

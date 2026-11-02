@@ -2506,6 +2506,18 @@ export const jurisdictionRulePublishedTemplate: NotificationTemplate<Jurisdictio
   },
 }
 
+/// R-291b (PRD 10 §5 step 9): the owner's test text, to their own phone.
+export interface SetupTestContext {
+  orgName: string
+}
+
+export const setupTestTextTemplate: NotificationTemplate<SetupTestContext> = {
+  key: 'setup.test_text',
+  category: 'setup_test',
+  channels: ['SMS'],
+  render: (c) => ({ body: `Test text from ${c.orgName}: texting works. No reply needed.` }),
+}
+
 /// Context for the two `support_access` templates (R-295a, PRD 11 §4.16).
 /// Times are rendered by the caller in the org's zone, as `expiresIn` is for
 /// an auth link: only the caller knows which zone the org reads.
@@ -2573,6 +2585,7 @@ export const supportRequestedTemplate: NotificationTemplate<SupportAccessContext
 export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = {
   [supportBreakGlassTemplate.key]: supportBreakGlassTemplate as unknown as NotificationTemplate<never>,
   [supportRequestedTemplate.key]: supportRequestedTemplate as unknown as NotificationTemplate<never>,
+  [setupTestTextTemplate.key]: setupTestTextTemplate as unknown as NotificationTemplate<never>,
   [jurisdictionRulePublishedTemplate.key]:
     jurisdictionRulePublishedTemplate as unknown as NotificationTemplate<never>,
   [tenantMagicLinkTemplate.key]:

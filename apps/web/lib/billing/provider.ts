@@ -53,6 +53,7 @@ const COLLECTING: ReadonlySet<string> = new Set<keyof BillingProvider>([
   'resumeSubscription',
   'addInvoiceItem',
   'invoiceOneOffCharge',
+  'invoiceSetupTest',
   'addSubscriptionItem',
   'createPaymentIntent',
   'createApplicationFeeCustomer',

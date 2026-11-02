@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { randomUUID } from 'node:crypto'
+import { SETUP_TEST_PURPOSE } from '@rental/core/billing'
 import type { CollectionMethod, OpenInvoice, PaymentRail } from '@rental/core/payments'
 import type {
   BillingProvider,
@@ -602,6 +603,48 @@ export class StripeBillingProvider implements BillingProvider {
       `${input.idempotencyKey}:finalize`,
     )
     return { stripeInvoiceId }
+  }
+
+  async invoiceSetupTest(input: {
+    staffUserId: string
+    name: string
+    email: string
+    amountCents: number
+    currency: string
+    idempotencyKey: string
+  }): Promise<{ stripeInvoiceId: string; hostedInvoiceUrl: string }> {
+    const customer = await this.#post(
+      '/customers',
+      { name: input.name, email: input.email, 'metadata[staffUserId]': input.staffUserId },
+      `${input.idempotencyKey}:customer`,
+    )
+    const description = 'Setup test payment'
+    const invoice = await this.#post(
+      '/invoices',
+      {
+        customer: customer.id as string,
+        collection_method: 'send_invoice',
+        days_until_due: 1,
+        pending_invoice_items_behavior: 'exclude',
+        description,
+        'metadata[purpose]': SETUP_TEST_PURPOSE,
+      },
+      `${input.idempotencyKey}:invoice`,
+    )
+    const stripeInvoiceId = invoice.id as string
+    await this.#post(
+      '/invoiceitems',
+      {
+        customer: customer.id as string,
+        invoice: stripeInvoiceId,
+        amount: input.amountCents,
+        currency: input.currency,
+        description,
+      },
+      `${input.idempotencyKey}:item`,
+    )
+    const finalized = await this.#post(`/invoices/${stripeInvoiceId}/finalize`, {}, `${input.idempotencyKey}:finalize`)
+    return { stripeInvoiceId, hostedInvoiceUrl: finalized.hosted_invoice_url as string }
   }
 
   async addSubscriptionItem(input: {

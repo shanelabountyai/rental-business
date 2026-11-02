@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { createHash, randomBytes } from 'node:crypto'
+import { SETUP_TEST_PURPOSE } from '@rental/core/billing'
 import { prisma } from '@rental/db'
 import { leaseBalanceAtStripeCents } from '@/lib/ledger/queries.ts'
 import type { CollectionMethod, OpenInvoice, PaymentRail } from '@rental/core/payments'
@@ -275,6 +276,43 @@ export class SimulatedBillingProvider implements BillingProvider {
       },
     })
     return { stripeInvoiceId }
+  }
+
+  /// Points at the stand-in for Stripe's hosted invoice page, whose "Pay"
+  /// calls `paySetupTestInvoice` below (D-27, as the simulated Account Link).
+  async invoiceSetupTest(input: {
+    staffUserId: string
+    name: string
+    email: string
+    amountCents: number
+    currency: string
+    idempotencyKey: string
+  }): Promise<{ stripeInvoiceId: string; hostedInvoiceUrl: string }> {
+    const key = input.idempotencyKey.replace(/[^a-zA-Z0-9]/g, '').slice(0, 32)
+    const stripeInvoiceId = `in_simsetup${key}`
+    console.info(`[billing:simulated] setup test invoice ${stripeInvoiceId} for ${input.amountCents}c to ${input.email}`)
+    return { stripeInvoiceId, hostedInvoiceUrl: `/settings/setup/simulated-invoice/${stripeInvoiceId}` }
+  }
+
+  /// The simulated hosted page's "Pay": the paid `invoice.updated` Stripe
+  /// would send, through the same pipeline.
+  async paySetupTestInvoice(stripeInvoiceId: string, amountCents: number): Promise<void> {
+    const { processStripeEvent } = await import('./webhook.ts')
+    await processStripeEvent(this.#orgId, {
+      id: `evt_simpaid${stripeInvoiceId}`,
+      type: 'invoice.updated',
+      created: Math.floor(Date.now() / 1000),
+      data: {
+        object: {
+          id: stripeInvoiceId,
+          customer: `cus_simsetup${this.#orgId}`,
+          status: 'paid',
+          amount_paid: amountCents,
+          metadata: { purpose: SETUP_TEST_PURPOSE },
+        },
+        previous_attributes: { amount_paid: 0 },
+      },
+    })
   }
 
   async addSubscriptionItem(input: {

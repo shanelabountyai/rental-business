@@ -373,6 +373,25 @@ describe('interpretStripeEvent', () => {
     expect(interpretStripeEvent(event('application_fee.created', { id: 'fee_1', amount: 250 })).outcome).toBe('ignore')
   })
 
+  it('reads the owner\'s paid setup test invoice apart from rent (R-291b)', () => {
+    const paid = (object: Record<string, unknown>) =>
+      interpretStripeEvent({
+        id: 'evt_setup',
+        type: 'invoice.updated',
+        created: 1_800_000_000,
+        data: { object: { id: 'in_setup', customer: 'cus_owner', amount_paid: 100, ...object }, previous_attributes: { amount_paid: 0 } },
+      })
+    expect(paid({ status: 'paid', metadata: { purpose: 'setup_test' } })).toEqual({
+      outcome: 'setup_test_paid',
+      stripeInvoiceId: 'in_setup',
+      amountCents: 100,
+      occurredAt: new Date(1_800_000_000_000),
+    })
+    // Unmarked, or marked and not yet paid: the ordinary rent path.
+    expect(paid({ status: 'paid' }).outcome).toBe('project')
+    expect(paid({ status: 'open', metadata: { purpose: 'setup_test' } }).outcome).toBe('project')
+  })
+
   it('projects a successful invoice payment as money in', () => {
     const result = interpretStripeEvent(
       moneyIn({

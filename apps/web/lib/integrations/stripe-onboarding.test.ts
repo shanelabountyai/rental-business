@@ -4,7 +4,9 @@ import { prisma } from '@rental/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { POST as platform } from '@/app/api/webhooks/stripe/route.ts'
 import { getBillingProvider } from '@/lib/billing/provider.ts'
+import { SimulatedBillingProvider } from '@/lib/billing/simulated-adapter.ts'
 import { processStripeEvent } from '@/lib/billing/webhook.ts'
+import { setupFacts } from '@/lib/setup/checklist.ts'
 import {
   CollectionRefusedError,
   collectionRefusal,
@@ -139,6 +141,23 @@ describe('Stripe onboarding, simulated (R-277b)', () => {
     ])
     expect(await prisma.ledgerEntry.count({ where: { orgId: orgA } })).toBe(0)
     await expect(prisma.platformFee.deleteMany({ where: { orgId: orgA } })).rejects.toThrow(/append-only/)
+  })
+
+  it("records the owner's paid $1 setup test once, off the tenant ledger, and step 9 reads it (R-291b)", async () => {
+    const provider = getBillingProvider(orgA)
+    const input = { staffUserId: 'staff_x', name: 'Owner', email: 'o@example.test', amountCents: 100, currency: 'usd', idempotencyKey: `setup-test:${orgA}:x` }
+    const invoice = await provider.invoiceSetupTest(input)
+    expect(invoice.hostedInvoiceUrl).toBe(`/settings/setup/simulated-invoice/${invoice.stripeInvoiceId}`)
+    expect((await setupFacts(orgA)).testPayment).toBe(false)
+    const simulator = new SimulatedBillingProvider(orgA)
+    await simulator.paySetupTestInvoice(invoice.stripeInvoiceId, 100)
+    await simulator.paySetupTestInvoice(invoice.stripeInvoiceId, 100)
+    expect(await prisma.setupTestPayment.findMany({ where: { orgId: orgA }, select: { stripeInvoiceId: true, amountCents: true } })).toEqual([
+      { stripeInvoiceId: invoice.stripeInvoiceId, amountCents: 100 },
+    ])
+    expect(await prisma.ledgerEntry.count({ where: { orgId: orgA } })).toBe(0)
+    expect((await setupFacts(orgA)).testPayment).toBe(true)
+    await expect(prisma.setupTestPayment.deleteMany({ where: { orgId: orgA } })).rejects.toThrow(/append-only/)
   })
 
   it('goes DISABLED on deauthorisation, raises the owner Task, and freezes collection; nothing is deleted', async () => {

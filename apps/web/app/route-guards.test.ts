@@ -174,6 +174,8 @@ const RESOURCE_LESS_GUARDS: Record<string, string> = {
   'app/(admin)/settings/setup/page.tsx':
     'The provisioning checklist (PRD 10 §5, R-291a) is about the whole organisation - its owners, Stripe, texting, email domain - not a property. Owner-only through `staff.manage`.',
   'lib/setup/actions.ts': 'Same as the setup page above. The org is the session\'s, never a form field.',
+  'app/(admin)/settings/setup/simulated-invoice/[invoiceId]/page.tsx':
+    'The simulated hosted page for the owner\'s own $1 setup test invoice (R-291b), org-wide like the setup page. `billing.connect`, and it emits only as the actor\'s org.',
   'app/(admin)/jobs/page.tsx':
     'A JobRun belongs to a property, but "did last night\'s work happen" does not (R-174): the panel answers a question about the whole deployment - every job, every property, and the jobs that have never run anywhere. Half that answer is worse than none, so refusing a scoped actor is the intended result.',
   'lib/jobs/actions.ts':

@@ -139,7 +139,7 @@ const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : 
 /// The facts, gathered inside one org. Counts and statuses only.
 export async function setupFacts(orgId: string, now = new Date()): Promise<SetupFacts> {
   const owners = await orgOwners(orgId)
-  const [org, activeMembers, entities, properties, templates, integrations, testText, testPayment, places] =
+  const [org, activeMembers, entities, properties, templates, integrations, testText, testPayment, rentPayment, places] =
     await Promise.all([
       prisma.organization.findUniqueOrThrow({ where: { id: orgId }, select: { status: true, setupMarks: true } }),
       prisma.orgMembership.count({ where: { orgId, removedAt: null, staffUser: { active: true } } }),
@@ -157,6 +157,8 @@ export async function setupFacts(orgId: string, now = new Date()): Promise<Setup
           notification: { channel: 'SMS', recipientType: 'STAFF', recipientId: { in: owners.map((o) => o.id) } },
         },
       }),
+      // The owner's paid $1 (R-291b, D-384), or any rent already received.
+      prisma.setupTestPayment.count({ where: { orgId } }),
       prisma.ledgerEntry.count({ where: { orgId, type: 'PAYMENT' } }),
       prisma.property.findMany({
         where: { orgId, active: true },
@@ -184,6 +186,6 @@ export async function setupFacts(orgId: string, now = new Date()): Promise<Setup
     resend: row('RESEND'),
     unreviewedStates: [...unreviewed].sort(),
     testText: testText > 0,
-    testPayment: testPayment > 0,
+    testPayment: testPayment + rentPayment > 0,
   }
 }

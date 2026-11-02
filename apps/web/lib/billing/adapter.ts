@@ -313,6 +313,22 @@ export interface BillingProvider {
   }): Promise<{ stripeInvoiceId: string }>
 
   /**
+   * The owner's $1 setup test (R-291b, PRD 10 §5 step 9). A customer for the
+   * owner on the org's account and one finalized invoice marked
+   * `metadata.purpose = setup_test`, paid by the owner on the provider's
+   * hosted page. Its paid `invoice.updated` becomes a SetupTestPayment, never
+   * a LedgerEntry: the owner has no lease (D-384).
+   */
+  invoiceSetupTest(input: {
+    staffUserId: string
+    name: string
+    email: string
+    amountCents: number
+    currency: string
+    idempotencyKey: string
+  }): Promise<{ stripeInvoiceId: string; hostedInvoiceUrl: string }>
+
+  /**
    * Adds a monthly line beside the rent (PAY-08, R-042).
    *
    * PET RENT AND A FLAT UTILITY FEE, and nothing whose amount a statute could

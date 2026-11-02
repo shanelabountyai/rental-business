@@ -121,6 +121,10 @@ export const AUDIT_ACTIONS = [
   /// and the platform marking the org live (PROVISIONING → ACTIVE).
   'org.setup_marked',
   'org.went_live',
+  /// R-291b (PRD 10 §5 step 9): the owner's test text (`after.channelStatus`)
+  /// and $1 test invoice (`after.stripeInvoiceId`), each pressed on /settings/setup.
+  'org.test_text_sent',
+  'org.test_invoice_sent',
   /// R-292b, R-293b (PRD 11 §3.1): an org's Twilio provisioning or Resend
   /// domain started, re-polled (by an admin, or by the nightly cron when the
   /// status moved) or retired. Never the sealed secret.
