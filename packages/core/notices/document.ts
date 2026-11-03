@@ -29,6 +29,9 @@ export interface NoticeDocumentFacts {
   generatedOn: string
   /// The statute version behind any deadline in the body, when there is one.
   citation?: string | null
+  /// R-298a (PRD 10 §7.2, D-389): the sending org has not recorded its own
+  /// counsel's review of the property's state.
+  counselUnreviewed?: boolean
 }
 
 /// An alias since R-052, which generalized this shape so the communications
@@ -51,6 +54,11 @@ export const NOTICE_DISCLAIMER =
  * renderable to either, and keeps every judgement about WHAT APPEARS on a
  * legal notice in one testable place.
  */
+/// D-4's counsel gate, per org: on every notice until the owner records a
+/// review of the state's rules.
+export const COUNSEL_UNREVIEWED_LINE =
+  "The sender has not recorded its own counsel's review of this state's rules."
+
 export function noticeDocumentBlocks(
   facts: NoticeDocumentFacts,
 ): NoticeDocumentBlock[] {
@@ -83,6 +91,7 @@ export function noticeDocumentBlocks(
   if (facts.citation) {
     blocks.push({ kind: 'footer', text: `Statute: ${facts.citation}` })
   }
+  if (facts.counselUnreviewed) blocks.push({ kind: 'footer', text: COUNSEL_UNREVIEWED_LINE })
   blocks.push({ kind: 'footer', text: NOTICE_DISCLAIMER })
 
   return blocks

@@ -142,6 +142,10 @@ test('the owner makes step 9 with a test text and a paid $1, and the console mar
   })
   ruleIds.push(rule.id)
   const { org, slug, host, owner, context, ownerPage } = await provisioningOrg(browser, testInfo, state)
+  // R-298a: and the org's own counsel review of it (D-389).
+  await prisma.orgJurisdiction.create({
+    data: { orgId: org.id, state, counselReviewedBy: 'E2E Counsel', counselReviewedAt: new Date('2026-01-02') },
+  })
   // Steps 5 and 6 are the providers' to finish; their onboarding has its own specs.
   await prisma.orgIntegration.createMany({
     data: [

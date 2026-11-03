@@ -13,6 +13,7 @@ import { actorCan, propertyResource, requirePermission, requireScope } from '@/l
 import { applyPaymentHold } from '@/lib/payments/legal-hold.ts'
 import { settleHousehold } from '@/lib/screening/household.ts'
 import { extractCapturedAt } from '@/lib/documents/exif.ts'
+import { counselUnreviewed } from '@/lib/jurisdiction/org-states.ts'
 import { rulesForConfigured } from '@/lib/jurisdiction/queries.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
 import { renderNoticePdf } from './pdf.ts'
@@ -124,6 +125,7 @@ export async function generateNoticePdf(noticeId: string): Promise<FormState> {
     // a machine in another timezone is dated wrong on the day it matters.
     generatedOn: businessDate(notice.generatedAt, notice.property.timezone),
     citation: rule?.citation ?? null,
+    counselUnreviewed: await counselUnreviewed(notice.property.orgId, notice.property.state),
   })
 
   const buffer = Buffer.from(bytes)

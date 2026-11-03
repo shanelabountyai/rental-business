@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { IMPORT_COLUMNS, type ImportSnapshot, planImport } from './plan.ts'
 
-const EMPTY_SNAPSHOT: ImportSnapshot = { legalEntities: [], properties: [], units: [], leases: [] }
+const EMPTY_SNAPSHOT: ImportSnapshot = { legalEntities: [], properties: [], units: [], leases: [], enabledStates: ['TX'] }
 
 const HEADER = [...IMPORT_COLUMNS]
 
@@ -86,6 +86,7 @@ describe('planImport - reusing what already exists', () => {
       ],
       units: [],
       leases: [],
+      enabledStates: ['TX'],
     }
     const plan = planImport(HEADER, [row({})], snapshot)
     expect(plan.errors).toEqual([])
@@ -200,5 +201,13 @@ describe('planImport - blank lines', () => {
     const plan = planImport(HEADER, [row({}), HEADER.map(() => '')], EMPTY_SNAPSHOT)
     expect(plan.rows).toHaveLength(1)
     expect(plan.errors).toEqual([])
+  })
+})
+
+describe('planImport enabled states (R-298a)', () => {
+  it('refuses a new property in a state the org has not enabled', () => {
+    const plan = planImport(HEADER, [row({ property_state: 'OK' })], EMPTY_SNAPSHOT)
+    expect(plan.ok).toBe(false)
+    expect(plan.errors).toContainEqual(expect.objectContaining({ field: 'property_state' }))
   })
 })

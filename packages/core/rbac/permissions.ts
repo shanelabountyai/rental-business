@@ -84,6 +84,11 @@ export const PERMISSIONS = [
   /// with `jurisdiction.publish`. A role row still carrying the old key is
   /// harmless - `knownPermissions` drops it - and the seed rewrites it.
   'jurisdiction.read',
+  /// R-298a (PRD 10 §7.2, D-389): enabling a state for the org and recording
+  /// that its counsel reviewed the rules there. Owner-only by construction
+  /// (no other role names it), and privileged for `template.approve`'s
+  /// reason: the review is a claim the product can only record, not check.
+  'jurisdiction.configure',
   /// Versioning ScreeningCriteria (LEASE-04, R-060, R-242; OQ-6). Same
   /// portfolio-wide shape as jurisdiction.read/write and the same reason:
   /// criteria apply to every applicant across the whole portfolio at once
@@ -201,6 +206,8 @@ export const PRIVILEGED_PERMISSIONS: ReadonlySet<Permission> = new Set([
   // record who said so. A stolen session making that claim is the same class
   // of harm as one moving money.
   'template.approve',
+  // R-298a: the same claim as above, about a state's rules.
+  'jurisdiction.configure',
   'fee.waive',
   'workorder.approve',
   'staff.manage',

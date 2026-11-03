@@ -12,6 +12,7 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
 import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
+import { stateNotEnabled } from '@/lib/jurisdiction/org-states.ts'
 import { candidateDuplicateProperties } from './queries.ts'
 
 // Writes for LegalEntity and Property (PROP-01, PROP-04).
@@ -231,6 +232,10 @@ export async function createProperty(
     legalEntityId: input.legalEntityId,
   })
 
+  // R-298a (D-389): only in a state the org has enabled.
+  const notEnabled = await stateNotEnabled(actor.orgId, input.state)
+  if (notEnabled) return { ...violationsToState([{ field: 'state', message: notEnabled }]), submitted: input }
+
   const confirmed = formData.get('confirmDuplicate') === 'true'
   if (!confirmed) {
     const key = addressComparisonKey(input)
@@ -320,6 +325,9 @@ export async function updateProperty(
   if (violations.length > 0) {
     return { ...violationsToState(violations), submitted: input }
   }
+  // R-298a: moving a property into a state the org has not enabled.
+  const notEnabled = input.state === existing.state ? null : await stateNotEnabled(actor.orgId, input.state)
+  if (notEnabled) return { ...violationsToState([{ field: 'state', message: notEnabled }]), submitted: input }
 
   await prisma.$transaction(async (tx) => {
     const updated = await tx.property.update({

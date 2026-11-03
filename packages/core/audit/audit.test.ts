@@ -302,6 +302,7 @@ describe('the audit vocabulary', () => {
       'hold.lift_protected': 'lease.hold_lifted',
       'confidential.manage': 'confidential.case_opened',
       'property.export': 'property.handoff_packet_archived',
+      'jurisdiction.configure': 'org_jurisdiction.counsel_reviewed',
     }
     for (const permission of PRIVILEGED_PERMISSIONS) {
       const action = recordable[permission]

@@ -173,6 +173,8 @@ const RESOURCE_LESS_GUARDS: Record<string, string> = {
   'lib/support/actions.ts': 'Same as the support-access page above. The org is the session\'s, never a form field.',
   'app/(admin)/settings/setup/page.tsx':
     'The provisioning checklist (PRD 10 §5, R-291a) is about the whole organisation - its owners, Stripe, texting, email domain - not a property. Owner-only through `staff.manage`.',
+  'lib/jurisdiction/actions.ts':
+    'R-298a: an org\'s states and its counsel review are org-wide by nature, like a JurisdictionRule (R-010). The org is the session\'s, never a form field.',
   'lib/setup/actions.ts': 'Same as the setup page above. The org is the session\'s, never a form field.',
   'app/(admin)/settings/export/page.tsx':
     'The full organisation export (PRD 10 §8, R-299) is every row the org holds, so it is owner-only and portfolio-wide by definition: a scoped actor must never get a partial copy.',

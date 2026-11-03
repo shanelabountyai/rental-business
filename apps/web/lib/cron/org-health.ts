@@ -41,6 +41,7 @@ export async function orgHealthCounts(orgId: string, now: Date) {
     distinct: ['state'],
     orderBy: { state: 'asc' },
   })
+  const enabled = await prisma.orgJurisdiction.findMany({ where: { orgId }, select: { state: true }, orderBy: { state: 'asc' } })
   return {
     failedRuns7d,
     deadLetters,
@@ -52,6 +53,8 @@ export async function orgHealthCounts(orgId: string, now: Date) {
     // `Property.state` is a plain string column, so only a two-letter code
     // leaves the org: anything else in it is not a state, and may be text.
     states: states.map((p) => p.state).filter((state) => /^[A-Z]{2}$/.test(state)),
+    // R-298a: the same posture, for the states the org has enabled.
+    enabledStates: enabled.map((e) => e.state).filter((state) => /^[A-Z]{2}$/.test(state)),
   }
 }
 

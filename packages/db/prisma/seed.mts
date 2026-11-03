@@ -363,10 +363,21 @@ async function seedScreeningCriteria() {
   console.info('Seeded 1 screening criteria version (v1, unreviewed placeholder).')
 }
 
+/// R-298a (D-389): org #0 operates in the state the rule above is seeded for.
+/// Counsel review is left unrecorded - only an owner can state it.
+async function seedOrgZeroStates() {
+  const { count } = await prisma.orgJurisdiction.createMany({
+    data: [{ orgId: 'org_0', state: 'TX' }],
+    skipDuplicates: true,
+  })
+  console.info(count ? 'Enabled TX for org #0.' : 'TX already enabled for org #0.')
+}
+
 async function main() {
   await seedRoles()
   await seedPlatformRoles()
   await seedJurisdictionRules()
+  await seedOrgZeroStates()
   await seedScreeningCriteria()
 }
 

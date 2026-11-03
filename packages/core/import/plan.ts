@@ -116,6 +116,8 @@ export interface ImportSnapshot {
   properties: readonly ExistingProperty[]
   units: readonly ExistingUnit[]
   leases: readonly ExistingLease[]
+  /// R-298a (D-389): the org's enabled states. A new property elsewhere is refused.
+  enabledStates: readonly string[]
 }
 
 type Ref<T> =
@@ -370,6 +372,9 @@ export function planImport(headerRow: string[], dataRows: string[][], snapshot: 
         })
         for (const v of violations) {
           err(v.field === 'historyStartsOn' ? 'property_history_starts_on' : `property_${v.field}`, v.message)
+        }
+        if (isUsStateCode(data.state) && !snapshot.enabledStates.includes(data.state)) {
+          err('property_state', `${data.state} is not enabled for your organisation. An owner enables it on the Jurisdiction rules page.`)
         }
         newPropertyKeys.set(propertyKey, data)
       }

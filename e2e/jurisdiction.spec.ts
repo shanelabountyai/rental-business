@@ -210,6 +210,9 @@ test.describe('viewing and creating jurisdiction rules', () => {
 
     await page.goto('/jurisdiction')
     await expect(page.getByText('TX — Statewide')).toBeVisible()
+    // R-298a (D-389): org #0's own states, TX enabled by the seed and backfill.
+    await expect(page.getByRole('heading', { name: "Your organisation's states" })).toBeVisible()
+    await expect(page.getByText(/^TX · counsel review/)).toBeVisible()
     await expect(page.getByRole('link', { name: 'New configuration' })).toHaveCount(0)
     await expect(page.getByRole('link', { name: /new version/i })).toHaveCount(0)
     expect((await page.goto('/jurisdiction/new'))?.status()).toBe(404)

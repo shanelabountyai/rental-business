@@ -61,7 +61,7 @@ async function readCsvText(formData: FormData): Promise<string | null> {
 // R-285b: the importer reuses only the actor's org's rows - matching an
 // address or entity name in another org would attach to someone else's book.
 async function buildSnapshot(orgId: string): Promise<ImportSnapshot> {
-  const [legalEntities, properties, units, leases] = await Promise.all([
+  const [legalEntities, properties, units, leases, enabled] = await Promise.all([
     prisma.legalEntity.findMany({ where: { orgId }, select: { id: true, name: true } }),
     prisma.property.findMany({
       where: { orgId },
@@ -69,6 +69,7 @@ async function buildSnapshot(orgId: string): Promise<ImportSnapshot> {
     }),
     prisma.unit.findMany({ where: { orgId }, select: { id: true, propertyId: true, name: true } }),
     prisma.lease.findMany({ where: { orgId }, select: { id: true, unitId: true, startsOn: true } }),
+    prisma.orgJurisdiction.findMany({ where: { orgId }, select: { state: true } }),
   ])
   return {
     legalEntities,
@@ -78,6 +79,7 @@ async function buildSnapshot(orgId: string): Promise<ImportSnapshot> {
     })),
     units,
     leases: leases.map((l) => ({ id: l.id, unitId: l.unitId, startsOn: utcToBusinessDate(l.startsOn) })),
+    enabledStates: enabled.map((e) => e.state),
   }
 }
 

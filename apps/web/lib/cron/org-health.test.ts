@@ -18,7 +18,7 @@ describe('OrgHealth (R-303, D-354)', () => {
     // org #0 holds every fixture's properties, so `states` is not empty here.
     const counts = await orgHealthCounts('org_0', new Date())
     for (const [key, value] of Object.entries(counts)) {
-      if (key === 'states') {
+      if (key === 'states' || key === 'enabledStates') {
         for (const state of value as string[]) expect(state).toMatch(/^[A-Z]{2}$/)
       } else expect(Number.isInteger(value), key).toBe(true)
     }

@@ -429,6 +429,11 @@ export const AUDIT_ACTIONS = [
   /// mutation this entity gets - versions are added, never edited in place
   /// (D-4), so there is no separate "updated" action.
   'jurisdiction_rule.versioned',
+  /// R-298a (PRD 10 §7.2, D-389): an owner enabled a state for the org
+  /// (`after.unseeded`, and `after.sent` when the platform was told it has no
+  /// rule), and recorded their counsel's review of it (`after.counselReviewedBy`).
+  'org_jurisdiction.enabled',
+  'org_jurisdiction.counsel_reviewed',
 
   /// R-242 (OQ-6): a new effective-dated version of ScreeningCriteria. Same
   /// shape as jurisdiction_rule.versioned - the one mutation this entity

@@ -1,6 +1,9 @@
 import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import { PageHeader } from '@/components/page-header.tsx'
-import { requirePermission } from '@/lib/auth/guard.ts'
+import { OrgStates } from '@/components/jurisdiction/org-states.tsx'
+import { actorCan, requirePermission } from '@/lib/auth/guard.ts'
+import { enableOrgState, recordCounselReview } from '@/lib/jurisdiction/actions.ts'
+import { orgStates } from '@/lib/jurisdiction/org-states.ts'
 import {
   listCurrentRules,
   listRuleVersions,
@@ -48,9 +51,11 @@ function summarize(rule: {
 // other org's tenants too.
 export default async function JurisdictionRulesPage() {
   const actor = await requirePermission('jurisdiction.read')
-  const [rules, coverage] = await Promise.all([
+  const [rules, coverage, states, canConfigure] = await Promise.all([
     listCurrentRules(new Date()),
     portfolioCoverage(new Date(), actor.orgId),
+    orgStates(actor.orgId),
+    actorCan('jurisdiction.configure'),
   ])
 
   // R-148: the version history D-4 promises. Old versions are never edited
@@ -78,6 +83,17 @@ export default async function JurisdictionRulesPage() {
           </p>
         </PageHeader>
       </header>
+
+      <OrgStates
+        rows={states.map((s) => ({
+          state: s.state,
+          counselReviewedBy: s.counselReviewedBy,
+          counselReviewedOn: s.counselReviewedAt ? friendlyBusinessDate(utcToBusinessDate(s.counselReviewedAt)) : null,
+        }))}
+        canConfigure={canConfigure}
+        enable={enableOrgState}
+        review={recordCounselReview}
+      />
 
       {/* R-162 (review finding 11): "a portfolio screen naming which of your
           states has no rule and which has one with unreviewed fields" -

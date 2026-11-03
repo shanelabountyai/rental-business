@@ -717,6 +717,7 @@ model Organization {
   applicantInfoRequests          ApplicantInfoRequest[]
   applicantNotes                 ApplicantNote[]
   integrations                   OrgIntegration[]
+  jurisdictions                  OrgJurisdiction[]
   platformFees                   PlatformFee[]
   setupTestPayments              SetupTestPayment[]
   health                         OrgHealth?
@@ -762,6 +763,28 @@ model OrgIntegration {
   updatedAt    DateTime            @updatedAt
 
   @@unique([orgId, provider])
+}
+
+/// R-298a (PRD 10 §7.2, D-389): a state this org operates in. The statute
+/// stays org-less (`JurisdictionRule`, D-4); what is per org is WHETHER the
+/// org may have property there, and whether ITS counsel has reviewed the
+/// rules it will act under. A property in a state with no row here cannot be
+/// created. Until `counselReviewedAt` is set, every notice for a property in
+/// the state says so.
+model OrgJurisdiction {
+  id                String       @id @default(cuid())
+  /// Immutable once written (trigger), no default: names its org or fails.
+  orgId             String
+  organization      Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  /// Two-letter state code.
+  state             String
+  enabledAt         DateTime     @default(now())
+  /// The counsel the owner names, as written, and the day they say the
+  /// review happened. Both or neither (CHECK).
+  counselReviewedBy String?
+  counselReviewedAt DateTime?    @db.Date
+
+  @@unique([orgId, state])
 }
 
 /// R-292b: the SIMULATED Twilio's own records (D-27, D-7). It stands in for
@@ -900,6 +923,9 @@ model OrgHealth {
   activeMembers       Int
   properties          Int
   states              String[]
+  /// R-298a: the org's enabled states (`OrgJurisdiction`), two-letter codes,
+  /// so the console can see a state enabled with no rule to read.
+  enabledStates       String[]     @default([])
   /// R-291a: the checklist's step booleans by key, no names (PRD 11 §5.5).
   checklist           Json?
 }

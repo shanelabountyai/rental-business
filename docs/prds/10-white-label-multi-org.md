@@ -244,6 +244,7 @@ What this PRD adds, per org:
 `JurisdictionRule` stays what D-4 made it: versioned, effective-dated, per state (and county), **not per org** — a statute is the same for every landlord in the state. Two things are per org:
 
 - **Enabled states** (`OrgJurisdiction(orgId, state, counselReviewedAt?, counselReviewedBy?)`). A property in a state the org has not enabled cannot be created; enabling a state with no seeded rule raises a platform Task (seed it — R-278 is Oklahoma, the first), and D-4's counsel gate becomes a per-org flag the owner sets with a name and date, shown on every notice the rule produces until set.
+*(2026-11-08, D-389, as built in R-298a: enabling and the counsel review are `jurisdiction.configure`, owner-only and privileged, on `/jurisdiction`; existing orgs are backfilled with their property states, review unrecorded; the platform Task is an email to publishers plus the console's uncovered list. Policy overrides are R-298b.)*
 - **Policy overrides, stricter only** (`OrgPolicy(orgId, state?, graceDays?, lateFeeMaxCents?, entryNoticeHours?, …)`): an org may give **more** grace, charge **less** than the cap, give **longer** entry notice. Core takes the stricter of statute and policy, never the looser, so a policy row cannot manufacture a violation. D-12 holds: core computes, Stripe executes.
 
 ## 8. Data ownership and exit

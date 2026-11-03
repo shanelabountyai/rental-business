@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { NOTICE_DISCLAIMER, noticeDocumentBlocks } from './document.ts'
+import { COUNSEL_UNREVIEWED_LINE, NOTICE_DISCLAIMER, type NoticeDocumentFacts, noticeDocumentBlocks } from './document.ts'
 import {
   parseServiceMethodMap,
   serviceMethodsFor,
@@ -111,6 +111,12 @@ describe('noticeDocumentBlocks', () => {
     const blocks = noticeDocumentBlocks(facts)
     expect(blocks[blocks.length - 1].text).toBe(NOTICE_DISCLAIMER)
     expect(NOTICE_DISCLAIMER).toContain('not legal advice')
+  })
+
+  it("says the org's counsel has not reviewed the state until it has (R-298a)", () => {
+    const texts = (f: NoticeDocumentFacts) => noticeDocumentBlocks(f).map((b) => b.text)
+    expect(texts({ ...facts, counselUnreviewed: true })).toContain(COUNSEL_UNREVIEWED_LINE)
+    expect(texts(facts)).not.toContain(COUNSEL_UNREVIEWED_LINE)
   })
 
   it('falls back to "Occupant" rather than addressing nobody', () => {

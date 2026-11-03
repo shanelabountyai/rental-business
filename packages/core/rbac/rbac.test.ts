@@ -283,6 +283,9 @@ describe('can — MFA gate (ROLE-05)', () => {
       // somebody the law protects. Placing one is NOT here: gating the safe
       // direction behind MFA is how holds stop being placed.
       'hold.lift_protected',
+      // R-298a. Recording counsel's review of a state's rules: a claim the
+      // product can only record, like template.approve.
+      'jurisdiction.configure',
       // R-063. Generating a lease and sending it for e-signature makes a
       // legally binding document, and completion moves the lease live and
       // creates the deposit charge and rent subscription.

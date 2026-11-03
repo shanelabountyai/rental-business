@@ -235,6 +235,13 @@ export const manifest: Record<string, Entry> = {
   'lib/insurance/actions.ts#closeClaim': { 'form.claimId': 'insuranceClaim' },
   // lib/jobs/actions.ts
   'lib/jobs/actions.ts#rerunJobAction': { 'form.jobRunId': 'jobRun' },
+  // lib/jurisdiction/actions.ts (R-298a): the actor's own org; a state is not an id.
+  'lib/jurisdiction/actions.ts#enableOrgState': { 'form.state': '=OK' },
+  'lib/jurisdiction/actions.ts#recordCounselReview': {
+    'form.state': '=TX',
+    'form.reviewedBy': '=Counsel',
+    'form.reviewedOn': '=2026-01-02',
+  },
   // lib/leases/access-code-actions.ts
   'lib/leases/access-code-actions.ts#issueAccessCodeToTenant': { leaseId: 'lease', accessCodeId: 'accessCode' },
   'lib/leases/access-code-actions.ts#issueTenantLockCode': { leaseId: 'lease', tenantId: 'tenant' },

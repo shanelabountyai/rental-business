@@ -22,7 +22,7 @@ export default async function PlatformJurisdictionPage({
   const [rules, canPublish, health, { versioned }] = await Promise.all([
     listCurrentRules(new Date()),
     platformDecision(admin, 'jurisdiction.publish').then((d) => d.allowed || d.reason === 'stepup_required'),
-    prisma.orgHealth.findMany({ select: { states: true } }),
+    prisma.orgHealth.findMany({ select: { states: true, enabledStates: true } }),
     searchParams,
   ])
   const orgsIn = new Map<string, number>()
@@ -32,7 +32,10 @@ export default async function PlatformJurisdictionPage({
     return `${n} org${n === 1 ? '' : 's'} with properties here`
   }
   const configured = new Set(rules.filter((r) => !r.jurisdiction).map((r) => r.state))
-  const uncovered = [...orgsIn.keys()].filter((state) => !configured.has(state)).sort()
+  // R-298a (D-389): a state an org has ENABLED with no rule is the platform's
+  // task too, before any property is in it.
+  const wanted = new Set([...orgsIn.keys(), ...health.flatMap((h) => h.enabledStates)])
+  const uncovered = [...wanted].filter((state) => !configured.has(state)).sort()
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-6 p-6">
@@ -69,7 +72,7 @@ export default async function PlatformJurisdictionPage({
           className="flex flex-col gap-2 rounded-md border border-warning/35 bg-warning/6 p-4 text-sm text-warning"
         >
           <h2 id="uncovered-heading" className="text-lg font-semibold">
-            States with properties and no statewide rule
+            States with properties, or enabled by an organisation, and no statewide rule
           </h2>
           <ul className="flex flex-wrap gap-x-3">
             {uncovered.map((state) => (

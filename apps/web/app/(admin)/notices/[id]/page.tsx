@@ -15,6 +15,7 @@ import { HoldBanner } from '@/components/holds/hold-banner.tsx'
 import { ServeForm } from '@/components/notices/serve-form.tsx'
 import { PageHeader } from '@/components/page-header.tsx'
 import { actorCan, requireScope } from '@/lib/auth/guard.ts'
+import { counselUnreviewed } from '@/lib/jurisdiction/org-states.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { generateNoticePdfAction, recordNoticeService } from '@/lib/notices/actions.ts'
 import { holdsForLease } from '@/lib/holds/queries.ts'
@@ -52,6 +53,8 @@ export default async function NoticePage({
     new Date(),
   ).catch(() => null)
   const permittedMethods = serviceMethodsFor(rule, notice.type)
+  // R-298a (D-389): shown until the owner records counsel's review.
+  const unreviewed = await counselUnreviewed(actor.orgId, notice.property.state)
 
   // R-084. THE notice-generation screen the backlog names. An adverse-action
   // notice to an applicant has no lease and therefore no holds — hence the
@@ -117,6 +120,13 @@ export default async function NoticePage({
           {friendlyDate(notice.generatedAt, notice.property.timezone)}
         </p>
       </header>
+
+      {unreviewed && (
+        <p className="rounded-md border border-warning/35 bg-warning/6 px-3 py-2 text-sm text-warning">
+          Your organisation has not recorded counsel’s review of the {notice.property.state} rules, so this
+          notice says so. An owner records it on the Jurisdiction rules page.
+        </p>
+      )}
 
       <HoldBanner
         context="Generating and serving are not blocked"

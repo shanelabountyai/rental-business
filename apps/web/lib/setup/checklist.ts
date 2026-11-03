@@ -55,9 +55,9 @@ export type SetupFacts = {
   stripe: Integration | null
   twilio: Integration | null
   resend: Integration | null
-  /// Two-letter codes of active properties' states with no counsel-reviewed
-  /// rule in force. Until R-298's per-org enabled states, step 8 reads the
-  /// platform-published rule (D-383).
+  /// Two-letter codes of active properties' states that are not confirmed:
+  /// no reviewed rule in force, or not enabled for the org with its counsel's
+  /// review recorded (R-298a, D-389; D-383 before it read the rule alone).
   unreviewedStates: string[]
   testText: boolean
   testPayment: boolean
@@ -121,7 +121,7 @@ export function stepReason(step: SetupStep, f: SetupFacts, c: Checklist): string
     case 'jurisdiction':
       return f.properties === 0
         ? 'No properties yet.'
-        : `No counsel-reviewed rule is in force for ${f.unreviewedStates.join(', ')}. The platform publishes these.`
+        : `Not confirmed for ${f.unreviewedStates.join(', ')}. Each needs a reviewed rule in force, which the platform publishes, and your counsel’s review recorded on the Jurisdiction rules page.`
     case 'test':
       return [
         f.testText ? null : "No text has been delivered to an owner's own phone yet.",
@@ -139,7 +139,7 @@ const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : 
 /// The facts, gathered inside one org. Counts and statuses only.
 export async function setupFacts(orgId: string, now = new Date()): Promise<SetupFacts> {
   const owners = await orgOwners(orgId)
-  const [org, activeMembers, entities, properties, templates, integrations, testText, testPayment, rentPayment, places] =
+  const [org, activeMembers, entities, properties, templates, integrations, testText, testPayment, rentPayment, places, reviewed] =
     await Promise.all([
       prisma.organization.findUniqueOrThrow({ where: { id: orgId }, select: { status: true, setupMarks: true } }),
       prisma.orgMembership.count({ where: { orgId, removedAt: null, staffUser: { active: true } } }),
@@ -165,12 +165,14 @@ export async function setupFacts(orgId: string, now = new Date()): Promise<Setup
         select: { state: true, county: true },
         distinct: ['state', 'county'],
       }),
+      prisma.orgJurisdiction.findMany({ where: { orgId, counselReviewedAt: { not: null } }, select: { state: true } }),
     ])
+  const counselReviewed = new Set(reviewed.map((r) => r.state))
   const unreviewed = new Set<string>()
   for (const place of places) {
     const rule = await rulesForConfigured(place, now)
     // Only a two-letter code leaves the org (the OrgHealth posture).
-    if (!rule?.reviewedBy) unreviewed.add(/^[A-Z]{2}$/.test(place.state) ? place.state : '??')
+    if (!rule?.reviewedBy || !counselReviewed.has(place.state)) unreviewed.add(/^[A-Z]{2}$/.test(place.state) ? place.state : '??')
   }
   const row = (p: string) => integrations.find((i) => i.provider === p) ?? null
   return {
