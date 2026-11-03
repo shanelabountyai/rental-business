@@ -49,7 +49,7 @@ export async function repairDeadlineFor(ticketId: string, today: BusinessDate): 
     where: { id: ticketId, ...REPAIR_CLOCK_RUNNING },
     select: {
       createdAt: true,
-      property: { select: { state: true, county: true, timezone: true } },
+      property: { select: { state: true, county: true, orgId: true, timezone: true } },
     },
   })
   if (!ticket) return { kind: 'not_applicable' }

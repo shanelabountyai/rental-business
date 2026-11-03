@@ -192,7 +192,7 @@ export async function assessLateFees(
   // notice is settled is the first night its tenancy is assessed again.
   const noticeHoldsLifted = await liftSettledNoticeHolds(propertyId, now)
 
-  const rule = await rulesForConfigured({ state: property.state, county: property.county }, now)
+  const rule = await rulesForConfigured({ orgId: property.orgId, state: property.state, county: property.county }, now)
   // No configured rule means no fee. NOT a default fee, and not an error:
   // D-4's whole point is that a statutory number comes from configuration,
   // and inventing one for an unconfigured state is how a product charges an

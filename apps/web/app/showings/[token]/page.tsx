@@ -71,7 +71,7 @@ export default async function ShowingBookingPage({
 
   const slots = await availableSlotsFor(
     { id: link.unitId, status: link.unitStatus },
-    { state: link.state, county: link.county, timezone: link.timezone },
+    { orgId: link.orgId, state: link.state, county: link.county, timezone: link.timezone },
     new Date(),
   )
 

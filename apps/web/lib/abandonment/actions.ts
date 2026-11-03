@@ -261,7 +261,7 @@ export async function recordEntry(
     : null
 
   const rule = await rulesForConfigured(
-    { state: found.state, county: found.county },
+    { orgId: found.orgId, state: found.state, county: found.county },
     enteredAt,
   )
 
@@ -474,7 +474,7 @@ export async function disposeBelongings(
     return { error: 'Nothing is recorded as held on this case.' }
   }
 
-  const rule = await rulesForConfigured({ state: found.state, county: found.county }, new Date())
+  const rule = await rulesForConfigured({ orgId: found.orgId, state: found.state, county: found.county }, new Date())
   const today = businessDate(new Date(), found.timezone)
 
   const decision = disposalReadiness({

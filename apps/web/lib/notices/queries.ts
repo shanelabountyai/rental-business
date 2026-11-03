@@ -8,7 +8,7 @@ import type { ResolvedScope } from '@/lib/scope/types.ts'
 // already intersected with RBAC.
 
 const noticeInclude = {
-  property: { select: { id: true, name: true, timezone: true, state: true, county: true } },
+  property: { select: { id: true, name: true, timezone: true, state: true, county: true, orgId: true } },
   lease: {
     select: {
       id: true,

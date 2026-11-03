@@ -34,6 +34,7 @@ export async function getInspection(id: string, scope: ResolvedScope) {
           timezone: true,
           state: true,
           county: true,
+          orgId: true,
         },
       },
       unit: { select: { id: true, name: true } },

@@ -26,7 +26,7 @@ export async function renewalRentCheckFor(args: {
   // number is on file, not that the offer should be refused outright over a
   // gap in this product's own configuration.
   const rule = await rulesForConfigured(
-    { state: args.propertyState, county: args.propertyCounty },
+    { orgId: null, state: args.propertyState, county: args.propertyCounty },
     businessDateToUtc(args.offeredOn),
   )
 

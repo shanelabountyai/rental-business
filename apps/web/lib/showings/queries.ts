@@ -17,7 +17,7 @@ import { rulesFor } from '@/lib/jurisdiction/queries.ts'
  */
 export async function availableSlotsFor(
   unit: { id: string; status: string },
-  property: { state: string; county: string | null; timezone: string },
+  property: { orgId: string; state: string; county: string | null; timezone: string },
   now: Date,
 ): Promise<Date[]> {
   const booked = await prisma.showing.findMany({
@@ -27,7 +27,7 @@ export async function availableSlotsFor(
 
   let earliestStart: Date | null = null
   if (unit.status === 'OCCUPIED') {
-    const rule = await rulesFor({ state: property.state, county: property.county }, now)
+    const rule = await rulesFor({ orgId: property.orgId, state: property.state, county: property.county }, now)
     earliestStart = earliestCompliantStart(now, rule.entryNoticeHours)
   }
 

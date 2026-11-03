@@ -69,13 +69,13 @@ export async function assessNsfFee(args: {
 
   const property = await prisma.property.findUniqueOrThrow({
     where: { id: args.propertyId },
-    select: { state: true, county: true, timezone: true },
+    select: { state: true, county: true, orgId: true, timezone: true },
   })
   // No configured rule means no fee, exactly as late fees treat it: D-4's
   // whole point is that a statutory number comes from configuration, and
   // inventing one for an unconfigured state is how a product charges an
   // unlawful fee in a market nobody has set up yet.
-  const rule = await rulesForConfigured({ state: property.state, county: property.county }, now)
+  const rule = await rulesForConfigured({ orgId: property.orgId, state: property.state, county: property.county }, now)
   if (!rule) {
     return { chargeId: null, amountCents: 0, reason: 'not_permitted_here' }
   }

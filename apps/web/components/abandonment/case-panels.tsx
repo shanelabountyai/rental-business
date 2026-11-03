@@ -92,7 +92,7 @@ export function RecordEntryPanel({
       <p className="text-muted-foreground text-sm">
         {entryNoticeHours == null
           ? `${stateName}’s entry-notice period is not configured in this system, so nothing is checked against it. Ask your attorney before going in.`
-          : `${stateName} requires ${entryNoticeHours} hours’ notice for a non-emergency entry.`}
+          : `A non-emergency entry here needs ${entryNoticeHours} hours’ notice: the statute or your own longer policy.`}
       </p>
 
       <TextField

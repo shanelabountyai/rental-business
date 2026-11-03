@@ -226,7 +226,7 @@ test.describe('entry-notice compliance', () => {
 
     await page.goto(`/workorders/${workOrder.id}`)
     // The form states the real, configured requirement rather than a guess.
-    await expect(page.getByText(/requires 24 hours/)).toBeVisible()
+    await expect(page.getByText(/needs 24 hours/)).toBeVisible()
 
     await page.getByLabel('Window starts').fill(localDateTime(48))
     await page.getByLabel('Window ends').fill(localDateTime(51))

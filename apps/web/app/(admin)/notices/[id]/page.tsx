@@ -49,7 +49,7 @@ export default async function NoticePage({
   })
 
   const rule = await rulesFor(
-    { state: notice.property.state, county: notice.property.county },
+    { orgId: notice.property.orgId, state: notice.property.state, county: notice.property.county },
     new Date(),
   ).catch(() => null)
   const permittedMethods = serviceMethodsFor(rule, notice.type)

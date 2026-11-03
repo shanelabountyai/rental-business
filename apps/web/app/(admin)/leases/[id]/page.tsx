@@ -199,7 +199,7 @@ export default async function LeaseDetailPage({
   // has configured - the same posture late fees, NSF fees and the deposit cap
   // all take.
   const depositRule = await rulesFor(
-    { state: lease.property.state, county: lease.property.county },
+    { orgId: lease.property.orgId, state: lease.property.state, county: lease.property.county },
     new Date(),
   ).catch(() => null)
   const depositRules = depositRule

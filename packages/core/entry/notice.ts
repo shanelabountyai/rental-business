@@ -179,7 +179,7 @@ export function entryNoticeText(context: EntryNoticeContext): string {
     `Reason for entry: ${context.reason}`,
     '',
     context.entryNoticeHours != null
-      ? `Your jurisdiction requires at least ${context.entryNoticeHours} hours' notice before a non-emergency entry.`
+      ? `We give at least ${context.entryNoticeHours} hours' notice before a non-emergency entry.`
       : 'We provide advance notice of every non-emergency entry.',
     '',
     'If this time does not work, please contact us and we will arrange another.',

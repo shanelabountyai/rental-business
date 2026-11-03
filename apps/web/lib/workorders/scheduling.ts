@@ -75,7 +75,7 @@ async function entryContextFor(workOrderId: string, orgId: string) {
   })
 
   const rule = await rulesFor(
-    { state: workOrder.property.state, county: workOrder.property.county },
+    { orgId: workOrder.property.orgId, state: workOrder.property.state, county: workOrder.property.county },
     new Date(),
   )
 

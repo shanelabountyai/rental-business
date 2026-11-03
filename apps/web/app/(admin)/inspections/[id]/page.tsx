@@ -62,7 +62,7 @@ export default async function InspectionPage({
   const entryRequired = inspectionRequiresEntryNotice(inspection.type, inspection.lease?.status ?? null)
   const entryRule = entryRequired
     ? await rulesFor(
-        { state: inspection.property.state, county: inspection.property.county },
+        { orgId: inspection.property.orgId, state: inspection.property.state, county: inspection.property.county },
         new Date(),
       ).catch(() => null)
     : null

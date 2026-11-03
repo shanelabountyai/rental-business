@@ -242,6 +242,7 @@ export const manifest: Record<string, Entry> = {
     'form.reviewedBy': '=Counsel',
     'form.reviewedOn': '=2026-01-02',
   },
+  'lib/jurisdiction/actions.ts#setOrgPolicy': { 'form.state': '=TX', 'form.graceDays': '=5' },
   // lib/leases/access-code-actions.ts
   'lib/leases/access-code-actions.ts#issueAccessCodeToTenant': { leaseId: 'lease', accessCodeId: 'accessCode' },
   'lib/leases/access-code-actions.ts#issueTenantLockCode': { leaseId: 'lease', tenantId: 'tenant' },

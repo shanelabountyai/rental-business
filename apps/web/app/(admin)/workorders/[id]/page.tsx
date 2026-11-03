@@ -236,7 +236,7 @@ export default async function WorkOrderDetailPage({
   // Tolerated as null when no rule is configured for the state, so an
   // unconfigured jurisdiction shows the form rather than 500ing the page.
   const entryRule = await rulesFor(
-    { state: workOrder.property.state, county: workOrder.property.county },
+    { orgId: workOrder.property.orgId, state: workOrder.property.state, county: workOrder.property.county },
     new Date(),
   ).catch(() => null)
   const isEmergency = workOrder.priority === 'EMERGENCY'

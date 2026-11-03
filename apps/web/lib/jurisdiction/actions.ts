@@ -29,7 +29,7 @@ export async function enableOrgState(_previous: OrgStateFormState, formData: For
 
   // Statewide only: a county ordinance sits on top of a state rule, never
   // instead of one (`selectApplicableRule`).
-  const unseeded = !(await rulesForConfigured({ state }, new Date()))
+  const unseeded = !(await rulesForConfigured({ orgId: null, state }, new Date()))
   // The platform's "Task" (D-389): an email to whoever can publish, and the
   // state listed on /platform/jurisdiction until a rule exists. Not a `Task`
   // row - that queue is an org's, worked by its staff (D-9).
@@ -94,6 +94,60 @@ export async function recordCounselReview(_previous: OrgStateFormState, formData
   await refreshOrgHealth(actor.orgId)
   revalidatePath('/jurisdiction')
   return { notice: `Recorded: ${reviewedBy} reviewed the ${state} rules.` }
+}
+
+/// A blank field is "no policy". Anything else must be a whole number in
+/// range; `null` back means it was not.
+function wholeOrBlank(raw: FormDataEntryValue | null, max: number): number | null | undefined {
+  const text = String(raw ?? '').trim()
+  if (text === '') return null
+  if (!/^\d+$/.test(text)) return undefined
+  const value = Number(text)
+  return value <= max ? value : undefined
+}
+
+/// R-298b (PRD 10 §7.2, D-390): the org's own stricter policy for a state.
+/// A looser number is accepted and simply never wins (`applyOrgPolicy`) -
+/// refusing it here would be a check against today's statute that the next
+/// published version could silently invert.
+export async function setOrgPolicy(_previous: OrgStateFormState, formData: FormData): Promise<OrgStateFormState> {
+  const actor = await requirePermission('jurisdiction.configure')
+  const state = String(formData.get('state') ?? '')
+  const graceDays = wholeOrBlank(formData.get('graceDays'), 60)
+  const capDollars = wholeOrBlank(formData.get('lateFeeMaxDollars'), 100_000)
+  const entryHours = wholeOrBlank(formData.get('entryNoticeHours'), 168)
+  if (graceDays === undefined) return { error: 'Grace days must be a whole number from 0 to 60, or blank.' }
+  if (capDollars === undefined) return { error: 'The late-fee cap must be whole dollars up to 100,000, or blank.' }
+  if (entryHours === undefined) return { error: 'Entry notice must be whole hours from 0 to 168, or blank.' }
+
+  const row = await prisma.orgJurisdiction.findUnique({ where: { orgId_state: { orgId: actor.orgId, state } } })
+  if (!row) return { error: `${state} is not enabled for your organisation.` }
+
+  const policy = {
+    policyGraceDays: graceDays,
+    policyLateFeeMaxCents: capDollars == null ? null : capDollars * 100,
+    policyEntryNoticeHours: entryHours,
+  }
+  await prisma.$transaction(async (tx) => {
+    await tx.orgJurisdiction.update({ where: { id: row.id }, data: policy })
+    await audit(
+      {
+        action: 'org_jurisdiction.policy_set',
+        entityType: 'Organization',
+        entityId: actor.orgId,
+        orgId: actor.orgId,
+        before: {
+          policyGraceDays: row.policyGraceDays,
+          policyLateFeeMaxCents: row.policyLateFeeMaxCents,
+          policyEntryNoticeHours: row.policyEntryNoticeHours,
+        },
+        after: { state, ...policy },
+      },
+      tx,
+    )
+  })
+  revalidatePath('/jurisdiction')
+  return { notice: `Saved your ${state} policy. Wherever the statute is stricter, the statute still governs.` }
 }
 
 /// Every active admin who can publish a rule. Which org asked stays out of

@@ -33,7 +33,7 @@ SCHEDULED_JOBS.push({
   run: async ({ propertyId, businessDate: today }) => {
     const property = await prisma.property.findUniqueOrThrow({
       where: { id: propertyId },
-      select: { state: true, county: true },
+      select: { state: true, county: true, orgId: true },
     })
     // No rule on file at all, or the right simply not reviewed for this
     // state yet, both read the same way here: nothing is scheduled. Neither

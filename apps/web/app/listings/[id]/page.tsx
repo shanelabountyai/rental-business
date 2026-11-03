@@ -64,7 +64,7 @@ export default async function PublicListingPage({
   const [photos, rule, smsDisclosure] = await Promise.all([
     unitPhotosForListing(listing.unitId),
     rulesFor(
-      { state: listing.property.state, county: listing.property.county },
+      { orgId: null, state: listing.property.state, county: listing.property.county },
       new Date(),
     ).catch(() => null),
     // Outside `publicListing`'s allowlist (K6): the org is read here only to

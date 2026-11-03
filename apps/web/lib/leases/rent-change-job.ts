@@ -52,7 +52,7 @@ SCHEDULED_JOBS.push({
           select: {
             status: true,
             rentCents: true,
-            property: { select: { timezone: true, state: true, county: true } },
+            property: { select: { timezone: true, state: true, county: true, orgId: true } },
           },
         },
       },
@@ -76,7 +76,7 @@ SCHEDULED_JOBS.push({
         if (change.overrideReason) return null
         const servedOn = businessDateOf(change.notice.servedAt, lease.property.timezone)
         const rule = await rulesForConfigured(
-          { state: lease.property.state, county: lease.property.county },
+          { orgId: lease.property.orgId, state: lease.property.state, county: lease.property.county },
           change.notice.servedAt,
         )
         const decision = renewalRentCheck({

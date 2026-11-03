@@ -151,7 +151,7 @@ describe('availableSlotsFor', () => {
   it('offers slots for a vacant unit with no entry-notice floor', async () => {
     const slots = await availableSlotsFor(
       { id: vacantUnitId, status: 'VACANT' },
-      { state: 'TX', county: null, timezone: 'America/Chicago' },
+      { orgId: 'org_0', state: 'TX', county: null, timezone: 'America/Chicago' },
       new Date(),
     )
     expect(slots.length).toBeGreaterThan(0)
@@ -161,7 +161,7 @@ describe('availableSlotsFor', () => {
     const now = new Date()
     const slots = await availableSlotsFor(
       { id: occupiedUnitId, status: 'OCCUPIED' },
-      { state: 'TX', county: null, timezone: 'America/Chicago' },
+      { orgId: 'org_0', state: 'TX', county: null, timezone: 'America/Chicago' },
       now,
     )
     for (const slot of slots) {
@@ -176,7 +176,7 @@ describe('bookShowing', () => {
     const token = await tokenFor(prospect.id)
     const slots = await availableSlotsFor(
       { id: vacantUnitId, status: 'VACANT' },
-      { state: 'TX', county: null, timezone: 'America/Chicago' },
+      { orgId: 'org_0', state: 'TX', county: null, timezone: 'America/Chicago' },
       new Date(),
     )
 
@@ -209,7 +209,7 @@ describe('bookShowing', () => {
     const token = await tokenFor(prospect.id)
     const slots = await availableSlotsFor(
       { id: occupiedUnitId, status: 'OCCUPIED' },
-      { state: 'TX', county: null, timezone: 'America/Chicago' },
+      { orgId: 'org_0', state: 'TX', county: null, timezone: 'America/Chicago' },
       new Date(),
     )
 
@@ -240,7 +240,7 @@ describe('bookShowing', () => {
     const token = await tokenFor(prospect.id)
     const slots = await availableSlotsFor(
       { id: vacantUnitId, status: 'VACANT' },
-      { state: 'TX', county: null, timezone: 'America/Chicago' },
+      { orgId: 'org_0', state: 'TX', county: null, timezone: 'America/Chicago' },
       new Date(),
     )
 
@@ -266,7 +266,7 @@ describe('bookShowing', () => {
     const firstToken = await tokenFor(first.id)
     const slots = await availableSlotsFor(
       { id: vacantUnitId, status: 'VACANT' },
-      { state: 'TX', county: null, timezone: 'America/Chicago' },
+      { orgId: 'org_0', state: 'TX', county: null, timezone: 'America/Chicago' },
       new Date(),
     )
     const chosen = slots[0]!

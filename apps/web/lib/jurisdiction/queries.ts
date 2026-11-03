@@ -1,7 +1,7 @@
 import 'server-only'
 
-import { computeCoverage, selectApplicableRule } from '@rental/core/jurisdiction'
-import type { PortfolioCoverage } from '@rental/core/jurisdiction'
+import { applyOrgPolicy, computeCoverage, selectApplicableRule } from '@rental/core/jurisdiction'
+import type { PortfolioCoverage, WithPolicy } from '@rental/core/jurisdiction'
 import { type JurisdictionRule, prisma } from '@rental/db'
 
 // The database side of R-010. packages/core/jurisdiction decides which row
@@ -31,17 +31,27 @@ export class JurisdictionRuleNotFoundError extends Error {
  * item that needs a grace period, a late-fee cap, a deposit deadline or a
  * notice period calls this - never `prisma.jurisdictionRule` directly, and
  * never a literal number.
+ *
+ * R-298b (D-390): the org's stricter policy is merged in HERE, once, so no
+ * caller can compute with the looser statute number by forgetting it.
+ * `orgId` is required for that reason; `null` asks for the statute alone
+ * (the platform's views, and whether a rule exists at all).
  */
 export async function rulesFor(
-  property: { state: string; county?: string | null },
+  property: { orgId: string | null; state: string; county?: string | null },
   asOf: Date,
-): Promise<JurisdictionRule> {
-  const candidates = await prisma.jurisdictionRule.findMany({
-    where: { state: property.state },
-  })
+): Promise<WithPolicy<JurisdictionRule>> {
+  const [candidates, policy] = await Promise.all([
+    prisma.jurisdictionRule.findMany({ where: { state: property.state } }),
+    property.orgId
+      ? prisma.orgJurisdiction.findUnique({
+          where: { orgId_state: { orgId: property.orgId, state: property.state } },
+        })
+      : null,
+  ])
   const rule = selectApplicableRule(candidates, property.county, asOf)
   if (!rule) throw new JurisdictionRuleNotFoundError(property.state)
-  return rule
+  return applyOrgPolicy(rule, policy)
 }
 
 /**
@@ -57,9 +67,9 @@ export async function rulesFor(
  * replaces.
  */
 export async function rulesForConfigured(
-  property: { state: string; county?: string | null },
+  property: { orgId: string | null; state: string; county?: string | null },
   asOf: Date,
-): Promise<JurisdictionRule | null> {
+): Promise<WithPolicy<JurisdictionRule> | null> {
   try {
     return await rulesFor(property, asOf)
   } catch (error) {

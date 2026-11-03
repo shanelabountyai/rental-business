@@ -113,7 +113,7 @@ const PAYER_SELECT = {
   lease: {
     select: {
       requireFullBalance: true,
-      property: { select: { state: true, county: true } },
+      property: { select: { state: true, county: true, orgId: true } },
     },
   },
 } as const
@@ -138,7 +138,7 @@ async function chargeResolvedPayer(
     stripeCustomerId: string | null
     lease: {
       requireFullBalance: boolean
-      property: { state: string; county: string | null }
+      property: { orgId: string; state: string; county: string | null }
     }
   } | null,
   formData: FormData,
@@ -182,7 +182,7 @@ async function chargeResolvedPayer(
       _sum: { amountCents: true },
     }),
     rulesForConfigured(
-      { state: payer.lease.property.state, county: payer.lease.property.county },
+      { orgId: payer.lease.property.orgId, state: payer.lease.property.state, county: payer.lease.property.county },
       new Date(),
     ),
     // MONEY-09b: the ledger balance is lease-wide and can run ahead of what

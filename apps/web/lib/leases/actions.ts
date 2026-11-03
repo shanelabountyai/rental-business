@@ -290,12 +290,12 @@ async function depositCapViolations(
 ): Promise<{ field: string; message: string }[]> {
   const property = await prisma.property.findUnique({
     where: { id: propertyId },
-    select: { state: true, county: true },
+    select: { state: true, county: true, orgId: true },
   })
   if (!property) return []
 
   const rule = await rulesForConfigured(
-    { state: property.state, county: property.county },
+    { orgId: property.orgId, state: property.state, county: property.county },
     new Date(),
   )
   if (!rule) return []
@@ -816,7 +816,7 @@ export async function recordLeaseNotice(
   if (!decision.allowed) return { error: decision.message }
 
   const rule = await rulesForConfigured(
-    { state: lease.property.state, county: lease.property.county },
+    { orgId: lease.property.orgId, state: lease.property.state, county: lease.property.county },
     givenOn,
   )
 

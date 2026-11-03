@@ -162,7 +162,7 @@ export async function setupFacts(orgId: string, now = new Date()): Promise<Setup
       prisma.ledgerEntry.count({ where: { orgId, type: 'PAYMENT' } }),
       prisma.property.findMany({
         where: { orgId, active: true },
-        select: { state: true, county: true },
+        select: { state: true, county: true, orgId: true },
         distinct: ['state', 'county'],
       }),
       prisma.orgJurisdiction.findMany({ where: { orgId, counselReviewedAt: { not: null } }, select: { state: true } }),

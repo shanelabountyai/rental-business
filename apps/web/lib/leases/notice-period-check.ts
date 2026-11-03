@@ -30,7 +30,7 @@ export async function noticePeriodCheckFor(args: {
   // this runs: which version of a statute governs a notice is a question
   // about the day it was served.
   const rule = await rulesForConfigured(
-    { state: args.propertyState, county: args.propertyCounty },
+    { orgId: null, state: args.propertyState, county: args.propertyCounty },
     businessDateToUtc(args.givenOn),
   )
 

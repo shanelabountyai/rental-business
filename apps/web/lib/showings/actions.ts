@@ -72,7 +72,7 @@ export async function bookShowing(
 
   const now = new Date()
   const unit = { id: link.unitId, status: link.unitStatus }
-  const property = { state: link.state, county: link.county, timezone: link.timezone }
+  const property = { orgId: link.orgId, state: link.state, county: link.county, timezone: link.timezone }
   const slots = await availableSlotsFor(unit, property, now)
   if (!slots.some((s) => s.getTime() === requested.getTime())) {
     return { error: 'That time is no longer available. Pick another.' }
@@ -99,7 +99,7 @@ export async function bookShowing(
     // claim is argued off. R-228: and it is asked BEFORE the decision, which
     // used to count the notice as served this instant either way.
     const servedToPortal = await canReceiveAuthLink('TENANT', tenant)
-    const rule = await rulesFor({ state: link.state, county: link.county }, now)
+    const rule = await rulesFor({ orgId: link.orgId, state: link.state, county: link.county }, now)
     const decision = entryDecision({
       scheduledStart: requested,
       noticeServedAt: servedToPortal ? now : null,

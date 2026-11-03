@@ -48,7 +48,7 @@ export async function openLeaseDraft(
     return { skipped: 'whoever recorded the decision cannot write leases' }
   }
 
-  const rule = await rulesForConfigured({ state: property.state, county: property.county }, new Date())
+  const rule = await rulesForConfigured({ orgId: property.orgId, state: property.state, county: property.county }, new Date())
   const depositCents = listing.depositCents ?? 0
   if (
     rule &&

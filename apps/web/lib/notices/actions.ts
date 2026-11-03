@@ -97,7 +97,7 @@ export async function generateNoticePdf(noticeId: string): Promise<FormState> {
   }
 
   const rule = await rulesForConfigured(
-    { state: notice.property.state, county: notice.property.county },
+    { orgId: notice.property.orgId, state: notice.property.state, county: notice.property.county },
     new Date(),
   )
 
@@ -256,7 +256,7 @@ export async function recordNoticeService(
   }
 
   const rule = await rulesForConfigured(
-    { state: notice.property.state, county: notice.property.county },
+    { orgId: notice.property.orgId, state: notice.property.state, county: notice.property.county },
     servedAt,
   )
   // Recorded as it stood AT SERVICE, never recomputed later: D-4 says rules

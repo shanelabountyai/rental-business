@@ -33,7 +33,7 @@ export default async function ListingDetailPage({
 
   const [rule, syndications, leadCounts] = await Promise.all([
     rulesFor(
-      { state: listing.property.state, county: listing.property.county },
+      { orgId: listing.property.orgId, state: listing.property.state, county: listing.property.county },
       new Date(),
     ).catch(() => null),
     listingSyndications(listing.id),

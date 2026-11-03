@@ -135,7 +135,7 @@ const VIOLATION_UNSERVED_STALL_DAYS_FALLBACK = 14
 async function checkViolations(
   propertyId: string,
   today: BusinessDate,
-  property: { state: string; county: string | null; timezone: string },
+  property: { orgId: string; state: string; county: string | null; timezone: string },
 ) {
   const cases = await prisma.violationCase.findMany({
     where: { propertyId, status: 'OPEN' },
@@ -348,7 +348,7 @@ async function checkTurnovers(propertyId: string, today: BusinessDate, timezone:
 async function checkHabitabilityRepairs(
   propertyId: string,
   today: BusinessDate,
-  property: { state: string; county: string | null; timezone: string },
+  property: { orgId: string; state: string; county: string | null; timezone: string },
 ) {
   const tickets = await prisma.ticket.findMany({
     where: { propertyId, ...REPAIR_CLOCK_RUNNING },
@@ -396,7 +396,7 @@ SCHEDULED_JOBS.push({
   run: async ({ propertyId, businessDate: today, now }) => {
     const property = await prisma.property.findUniqueOrThrow({
       where: { id: propertyId },
-      select: { state: true, county: true, timezone: true },
+      select: { state: true, county: true, orgId: true, timezone: true },
     })
 
     return {

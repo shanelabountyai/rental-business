@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { US_STATE_OPTIONS } from '@rental/core/property'
 import { prisma } from '@rental/db'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { enableOrgState, recordCounselReview } from '@/lib/jurisdiction/actions.ts'
+import { enableOrgState, recordCounselReview, setOrgPolicy } from '@/lib/jurisdiction/actions.ts'
 import { counselUnreviewed, stateNotEnabled } from '@/lib/jurisdiction/org-states.ts'
 import { rulesForConfigured } from '@/lib/jurisdiction/queries.ts'
 import { createProperty } from '@/lib/properties/actions.ts'
@@ -97,7 +97,7 @@ describe('per-org states (R-298a)', () => {
   })
 
   it('enables once, audits once, and leaves counsel review unrecorded', async () => {
-    const unseeded = !(await rulesForConfigured({ state }, new Date()))
+    const unseeded = !(await rulesForConfigured({ orgId: null, state }, new Date()))
     const first = await enableOrgState({}, form({ state }))
     expect(first.notice).toContain(`${state} enabled`)
     expect(await enableOrgState({}, form({ state }))).toEqual({ notice: `${state} is already enabled.` })
@@ -120,5 +120,28 @@ describe('per-org states (R-298a)', () => {
       'Q. Counsel',
     )
     expect(await counselUnreviewed('org_0', state)).toBe(false)
+  })
+})
+
+describe('the org policy (R-298b, D-390)', () => {
+  it('saves, audits, refuses nonsense, and blank clears', async () => {
+    await enableOrgState({}, form({ state }))
+    const fields = { state, graceDays: '5', lateFeeMaxDollars: '25', entryNoticeHours: '' }
+    expect((await setOrgPolicy({}, form({ ...fields, graceDays: '2.5' }))).error).toMatch(/Grace days/)
+    expect((await setOrgPolicy({}, form({ ...fields, entryNoticeHours: '999' }))).error).toMatch(/Entry notice/)
+    expect((await setOrgPolicy({}, form({ ...fields, state: 'ZZ' }))).error).toMatch(/not enabled/)
+    expect((await setOrgPolicy({}, form(fields))).notice).toContain(`${state} policy`)
+    expect(await prisma.orgJurisdiction.findUniqueOrThrow({ where: { orgId_state: { orgId: 'org_0', state } } })).toMatchObject({
+      policyGraceDays: 5,
+      policyLateFeeMaxCents: 2500,
+      policyEntryNoticeHours: null,
+    })
+    const audit = await prisma.auditLog.findFirstOrThrow({
+      where: { orgId: 'org_0', action: 'org_jurisdiction.policy_set', actorStaffId: ownerId },
+    })
+    expect(audit.after).toMatchObject({ state, policyGraceDays: 5, policyLateFeeMaxCents: 2500 })
+
+    session.staffId = managerId
+    await expect(setOrgPolicy({}, form(fields))).rejects.toThrow()
   })
 })

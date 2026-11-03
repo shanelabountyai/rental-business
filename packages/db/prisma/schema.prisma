@@ -772,17 +772,24 @@ model OrgIntegration {
 /// created. Until `counselReviewedAt` is set, every notice for a property in
 /// the state says so.
 model OrgJurisdiction {
-  id                String       @id @default(cuid())
+  id                     String       @id @default(cuid())
   /// Immutable once written (trigger), no default: names its org or fails.
-  orgId             String
-  organization      Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  orgId                  String
+  organization           Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   /// Two-letter state code.
-  state             String
-  enabledAt         DateTime     @default(now())
+  state                  String
+  enabledAt              DateTime     @default(now())
   /// The counsel the owner names, as written, and the day they say the
   /// review happened. Both or neither (CHECK).
-  counselReviewedBy String?
-  counselReviewedAt DateTime?    @db.Date
+  counselReviewedBy      String?
+  counselReviewedAt      DateTime?    @db.Date
+  /// R-298b (D-390): the org's own policy, STRICTER ONLY. `rulesFor` takes
+  /// the longer grace, the lower late-fee cap and the longer entry notice of
+  /// this and the statute, so a looser number here has no effect. Null is no
+  /// policy.
+  policyGraceDays        Int?
+  policyLateFeeMaxCents  Int?
+  policyEntryNoticeHours Int?
 
   @@unique([orgId, state])
 }

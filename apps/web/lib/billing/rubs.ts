@@ -106,7 +106,7 @@ export async function allocateBill(
   // literal. A state nobody has configured is a real gap and fails loudly
   // rather than defaulting to "yes, charge it on".
   const rule = await rulesForConfigured(
-    { state: bill.property.state, county: bill.property.county },
+    { orgId: bill.property.orgId, state: bill.property.state, county: bill.property.county },
     new Date(),
   )
   if (!rule) {

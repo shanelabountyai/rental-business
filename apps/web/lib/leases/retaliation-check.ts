@@ -46,7 +46,7 @@ export async function retaliationCheckFor(args: {
   actionDate: Date
 }): Promise<RetaliationWarning | null> {
   const rule = await rulesForConfigured(
-    { state: args.propertyState, county: args.propertyCounty },
+    { orgId: null, state: args.propertyState, county: args.propertyCounty },
     args.actionDate,
   )
   if (!rule?.retaliationWindowDays) return null

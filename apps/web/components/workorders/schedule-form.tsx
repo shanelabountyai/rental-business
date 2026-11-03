@@ -61,9 +61,9 @@ export function ScheduleForm({
         <p className="text-muted-foreground text-sm">
           {/* One template string rather than JSX text around an expression:
               interpolating mid-sentence dropped the space and rendered
-              "requires 24hours' notice", which is a sloppy thing for a
+              "needs 24hours' notice", which is a sloppy thing for a
               compliance hint to say. */}
-          {`This property's jurisdiction requires ${entryNoticeHours} hours' notice.${
+          {`This property needs ${entryNoticeHours} hours' notice: the statute or your own longer policy.${
             earliestCompliant ? ` The soonest compliant start is ${earliestCompliant}.` : ''
           }`}
         </p>

@@ -59,7 +59,7 @@ export async function liftSettledNoticeHolds(propertyId: string, now: Date): Pro
 
   const property = await prisma.property.findUniqueOrThrow({
     where: { id: propertyId },
-    select: { state: true, county: true, timezone: true },
+    select: { state: true, county: true, orgId: true, timezone: true },
   })
   // Resolved as `cureClockFor` resolves it: an unconfigured state has no cure
   // period, so its clock never expires and only a cure or a closed case lifts.

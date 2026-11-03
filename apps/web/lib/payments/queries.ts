@@ -115,7 +115,7 @@ export async function paymentView(scope: TenantScope): Promise<PaymentView | nul
           id: true,
           rentDueDay: true,
           requireFullBalance: true,
-          property: { select: { name: true, state: true, county: true } },
+          property: { select: { name: true, state: true, county: true, orgId: true } },
           unit: { select: { name: true } },
         },
       },
@@ -151,7 +151,7 @@ export async function paymentView(scope: TenantScope): Promise<PaymentView | nul
       _sum: { amountCents: true },
     }),
     rulesForConfigured(
-      { state: payer.lease.property.state, county: payer.lease.property.county },
+      { orgId: payer.lease.property.orgId, state: payer.lease.property.state, county: payer.lease.property.county },
       new Date(),
     ),
   ])

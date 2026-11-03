@@ -34,7 +34,7 @@ export async function startDepositDisposition(leaseId: string): Promise<StartDis
       propertyId: true,
       moveOutAt: true,
       noticeForwardingAddress: true,
-      property: { select: { state: true, county: true, timezone: true } },
+      property: { select: { state: true, county: true, orgId: true, timezone: true } },
       unit: { select: { name: true } },
       deposits: { select: { id: true, dispositionDueOn: true }, take: 1 },
     },

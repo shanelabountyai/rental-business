@@ -31,6 +31,7 @@ export interface CaseView {
   propertyName: string
   unitName: string
   timezone: string
+  orgId: string
   state: string
   county: string | null
   tenantNames: string[]
@@ -49,7 +50,7 @@ export interface CaseView {
 }
 
 const CASE_INCLUDE = {
-  property: { select: { name: true, timezone: true, state: true, county: true } },
+  property: { select: { name: true, timezone: true, state: true, county: true, orgId: true } },
   unit: { select: { name: true } },
   lease: {
     select: {
@@ -84,6 +85,7 @@ function toView(row: NonNullable<Row>): CaseView {
     propertyName: row.property.name,
     unitName: row.unit.name,
     timezone: row.property.timezone,
+    orgId: row.property.orgId,
     state: row.property.state,
     county: row.property.county,
     tenantNames: row.lease.leaseTenants.map(

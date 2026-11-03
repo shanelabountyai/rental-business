@@ -2,7 +2,7 @@ import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling
 import { PageHeader } from '@/components/page-header.tsx'
 import { OrgStates } from '@/components/jurisdiction/org-states.tsx'
 import { actorCan, requirePermission } from '@/lib/auth/guard.ts'
-import { enableOrgState, recordCounselReview } from '@/lib/jurisdiction/actions.ts'
+import { enableOrgState, recordCounselReview, setOrgPolicy } from '@/lib/jurisdiction/actions.ts'
 import { orgStates } from '@/lib/jurisdiction/org-states.ts'
 import {
   listCurrentRules,
@@ -89,10 +89,14 @@ export default async function JurisdictionRulesPage() {
           state: s.state,
           counselReviewedBy: s.counselReviewedBy,
           counselReviewedOn: s.counselReviewedAt ? friendlyBusinessDate(utcToBusinessDate(s.counselReviewedAt)) : null,
+          policyGraceDays: s.policyGraceDays,
+          policyLateFeeMaxDollars: s.policyLateFeeMaxCents == null ? null : s.policyLateFeeMaxCents / 100,
+          policyEntryNoticeHours: s.policyEntryNoticeHours,
         }))}
         canConfigure={canConfigure}
         enable={enableOrgState}
         review={recordCounselReview}
+        setPolicy={setOrgPolicy}
       />
 
       {/* R-162 (review finding 11): "a portfolio screen naming which of your

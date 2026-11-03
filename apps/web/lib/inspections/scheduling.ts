@@ -133,7 +133,7 @@ export async function scheduleInspectionEntry(
   }
 
   const rule = await rulesFor(
-    { state: inspection.property.state, county: inspection.property.county },
+    { orgId: inspection.property.orgId, state: inspection.property.state, county: inspection.property.county },
     now,
   )
 

@@ -60,7 +60,7 @@ export default async function AbandonmentCasePage({
 
   const zone = found.timezone
   const today = businessDate(new Date(), zone)
-  const rule = await rulesFor({ state: found.state, county: found.county }, new Date()).catch(
+  const rule = await rulesFor({ orgId: found.orgId, state: found.state, county: found.county }, new Date()).catch(
     () => null,
   )
 

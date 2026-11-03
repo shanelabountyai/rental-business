@@ -434,6 +434,8 @@ export const AUDIT_ACTIONS = [
   /// rule), and recorded their counsel's review of it (`after.counselReviewedBy`).
   'org_jurisdiction.enabled',
   'org_jurisdiction.counsel_reviewed',
+  /// R-298b (D-390): the org's stricter-only policy for a state (before/after).
+  'org_jurisdiction.policy_set',
 
   /// R-242 (OQ-6): a new effective-dated version of ScreeningCriteria. Same
   /// shape as jurisdiction_rule.versioned - the one mutation this entity

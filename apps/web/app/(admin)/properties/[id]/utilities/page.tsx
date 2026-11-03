@@ -52,7 +52,7 @@ export default async function PropertyUtilitiesPage({
   // fills a form in. A state with no rule configured is a real gap, and null
   // says so rather than defaulting to yes.
   const rule = await rulesFor(
-    { state: property.state, county: property.county },
+    { orgId: property.orgId, state: property.state, county: property.county },
     new Date(),
   ).catch(() => null)
 

@@ -77,7 +77,7 @@ async function fetchCase(id: string) {
   return prisma.violationCase.findUnique({
     where: { id },
     include: {
-      property: { select: { id: true, name: true, timezone: true, state: true, county: true } },
+      property: { select: { id: true, name: true, timezone: true, state: true, county: true, orgId: true } },
       unit: { select: { name: true } },
       lease: {
         select: {
@@ -135,7 +135,7 @@ async function cureFor(row: NonNullable<CaseRow>): Promise<CureClock> {
   // failure rather than a case-file one - the clock then reports "not
   // configured" instead of taking the page down with it.
   const rule = await rulesForConfigured(
-    { state: row.property.state, county: row.property.county },
+    { orgId: row.property.orgId, state: row.property.state, county: row.property.county },
     new Date(),
   )
   const services = row.notices.flatMap((notice) =>

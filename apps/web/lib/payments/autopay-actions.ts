@@ -96,7 +96,7 @@ export async function setDebitDay(
       lease: {
         select: {
           rentDueDay: true,
-          property: { select: { state: true, county: true, timezone: true } },
+          property: { select: { state: true, county: true, orgId: true, timezone: true } },
         },
       },
     },
@@ -104,7 +104,7 @@ export async function setDebitDay(
   if (!payer) return { error: 'There is no account set up to pay against yet.' }
 
   const rule = await rulesForConfigured(
-    { state: payer.lease.property.state, county: payer.lease.property.county },
+    { orgId: payer.lease.property.orgId, state: payer.lease.property.state, county: payer.lease.property.county },
     new Date(),
   )
 

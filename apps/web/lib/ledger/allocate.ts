@@ -83,7 +83,7 @@ export async function planAllocation(
       select: {
         debitDay: true,
         lease: { select: { rentDueDay: true } },
-        property: { select: { state: true, county: true, timezone: true } },
+        property: { select: { state: true, county: true, orgId: true, timezone: true } },
       },
     }),
   ])
@@ -96,7 +96,7 @@ export async function planAllocation(
   // RENT-first precisely because it is the reading least likely to leave
   // rent looking unpaid.
   const rule = await rulesForConfigured(
-    { state: payer.property.state, county: payer.property.county },
+    { orgId: payer.property.orgId, state: payer.property.state, county: payer.property.county },
     args.occurredAt,
   )
   const order = allocationOrderFor(rule ?? { paymentAllocationOrder: [] })

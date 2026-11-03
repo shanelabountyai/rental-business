@@ -32,7 +32,7 @@ export interface RentLease {
   propertyId: string
   unitId: string
   rentCents: number
-  property: { timezone: string; state: string; county: string | null; addressLine1: string }
+  property: { orgId: string; timezone: string; state: string; county: string | null; addressLine1: string }
 }
 
 export interface ScheduledRaise {
@@ -103,7 +103,7 @@ export async function planRentIncrease(args: {
   // An unconfigured jurisdiction fails OPEN, same as `renewalRentCheckFor`:
   // no rule means neither statutory number is on file.
   const rule = await rulesForConfigured(
-    { state: lease.property.state, county: lease.property.county },
+    { orgId: lease.property.orgId, state: lease.property.state, county: lease.property.county },
     businessDateToUtc(today),
   )
   const decision = renewalRentCheck({

@@ -67,10 +67,10 @@ describe('rulesFor', () => {
     })
     await makeRule({ version: 2, effectiveFrom: '2026-01-01' })
 
-    const rule = await rulesFor({ state: 'ZZ' }, new Date('2025-06-01'))
+    const rule = await rulesFor({ orgId: null, state: 'ZZ' }, new Date('2025-06-01'))
     expect(rule.graceDays).toBe(1)
 
-    const later = await rulesFor({ state: 'ZZ' }, new Date('2026-06-01'))
+    const later = await rulesFor({ orgId: null, state: 'ZZ' }, new Date('2026-06-01'))
     expect(later.graceDays).toBe(2)
   })
 
@@ -78,7 +78,7 @@ describe('rulesFor', () => {
     await makeRule({ jurisdiction: 'Testopolis', version: 1, effectiveFrom: '2026-01-01' })
 
     const rule = await rulesFor(
-      { state: 'ZZ', county: 'Testopolis' },
+      { orgId: null, state: 'ZZ', county: 'Testopolis' },
       new Date('2026-06-01'),
     )
     // The county row's own version 1, distinct from statewide's version 2.
@@ -86,7 +86,7 @@ describe('rulesFor', () => {
   })
 
   it('throws for a state with no configuration at all', async () => {
-    await expect(rulesFor({ state: UNCONFIGURED }, new Date())).rejects.toThrow(
+    await expect(rulesFor({ orgId: null, state: UNCONFIGURED }, new Date())).rejects.toThrow(
       JurisdictionRuleNotFoundError,
     )
   })
@@ -94,12 +94,12 @@ describe('rulesFor', () => {
 
 describe('rulesForConfigured', () => {
   it('resolves the configured rule, exactly like rulesFor', async () => {
-    const rule = await rulesForConfigured({ state: 'ZZ' }, new Date('2026-06-01'))
+    const rule = await rulesForConfigured({ orgId: null, state: 'ZZ' }, new Date('2026-06-01'))
     expect(rule?.graceDays).toBe(2)
   })
 
   it('returns null, not a throw, for a state with no configuration at all', async () => {
-    await expect(rulesForConfigured({ state: UNCONFIGURED }, new Date())).resolves.toBeNull()
+    await expect(rulesForConfigured({ orgId: null, state: UNCONFIGURED }, new Date())).resolves.toBeNull()
   })
 
   // R-238: the bug this exists to fix. A bare `.catch(() => null)` at the
@@ -114,7 +114,7 @@ describe('rulesForConfigured', () => {
     prisma.jurisdictionRule.findMany = (() =>
       Promise.reject(new Error('connection reset'))) as typeof original
     try {
-      await expect(rulesForConfigured({ state: 'ZZ' }, new Date())).rejects.toThrow(
+      await expect(rulesForConfigured({ orgId: null, state: 'ZZ' }, new Date())).rejects.toThrow(
         'connection reset',
       )
     } finally {
@@ -154,5 +154,51 @@ describe('currentRuleVersion', () => {
 
   it('returns null when nothing has been configured', async () => {
     expect(await currentRuleVersion(UNCONFIGURED, null)).toBeNull()
+  })
+})
+
+describe('rulesFor with an org policy (R-298b, D-390)', () => {
+  // Its own state code: a policy row is org-wide for the state, so sharing
+  // 'ZZ' would hand every other test in this file a stricter grace.
+  const POLICY_STATE = `P${randomUUID().slice(0, 8)}`
+
+  afterAll(async () => {
+    await prisma.orgJurisdiction.deleteMany({ where: { state: POLICY_STATE } })
+    await prisma.jurisdictionRule.deleteMany({ where: { state: POLICY_STATE } })
+  })
+
+  it('merges the stricter policy for the org, and only for the org', async () => {
+    await prisma.jurisdictionRule.create({
+      data: {
+        state: POLICY_STATE,
+        version: 1,
+        effectiveFrom: new Date('2025-01-01'),
+        graceDays: 2,
+        lateFeeType: 'FLAT',
+        lateFeeFlatCents: 7500,
+        lateFeeMaxCents: 5000,
+        entryNoticeHours: 24,
+        paymentAllocationOrder: ['RENT'],
+      },
+    })
+    await prisma.orgJurisdiction.create({
+      data: {
+        orgId: 'org_0',
+        state: POLICY_STATE,
+        policyGraceDays: 5,
+        policyLateFeeMaxCents: 9000, // looser than the statute: never wins
+        policyEntryNoticeHours: 48,
+      },
+    })
+
+    const statute = await rulesFor({ orgId: null, state: POLICY_STATE }, new Date())
+    expect([statute.graceDays, statute.lateFeeMaxCents, statute.entryNoticeHours]).toEqual([2, 5000, 24])
+    expect(statute.policyApplied).toEqual([])
+
+    const org = await rulesFor({ orgId: 'org_0', state: POLICY_STATE }, new Date())
+    expect([org.graceDays, org.lateFeeMaxCents, org.entryNoticeHours]).toEqual([5, 5000, 48])
+    expect(org.policyApplied).toEqual(['graceDays', 'entryNoticeHours'])
+    // The evidence still names the statute row it came from.
+    expect(org.id).toBe(statute.id)
   })
 })

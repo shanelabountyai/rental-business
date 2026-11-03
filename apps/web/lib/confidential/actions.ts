@@ -588,7 +588,7 @@ export async function recordEarlyTermination(
   // do instead of a 500. Failing OPEN in the sense that matters: nothing
   // about the case, the lock change or the retired codes waits on this.
   const rule = await rulesForConfigured(
-    { state: found.lease.property.state, county: found.lease.property.county },
+    { orgId: found.lease.property.orgId, state: found.lease.property.state, county: found.lease.property.county },
     businessDateToUtc(deliveredOn),
   )
 
