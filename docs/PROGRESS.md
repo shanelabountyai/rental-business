@@ -15347,7 +15347,7 @@ Tests: `lib/platform/settings.test.ts` (no secret value in the output, the kill 
 
 ## R-298b — The org's stricter-only policy
 
-**SHA:** `pending`
+**SHA:** `15f4d3e`
 
 **What it built.** Migration `20261109100000_org_jurisdiction_policy`: `policyGraceDays`, `policyLateFeeMaxCents` and `policyEntryNoticeHours` on `OrgJurisdiction`, nullable, with a CHECK that each is non-negative. `applyOrgPolicy` (`packages/core/jurisdiction/policy.ts`) takes the longer grace, the lower late-fee cap and the longer entry notice, fills a statute null with the policy, and returns `policyApplied` naming which fields the policy set. `rulesFor` and `rulesForConfigured` now take `{ orgId, state, county }`, read the org's row alongside the candidates, and return the merged rule. All 49 callers were updated, and each passes its property's `orgId`. Owners get a per-state policy form on `/jurisdiction` (`setOrgPolicy`, `jurisdiction.configure`, audited `org_jurisdiction.policy_set` with before/after). Tests: 5 core unit tests, a `rulesFor` integration test (the org gets the merged numbers, `orgId: null` gets the statute, the row id is still the statute's), and an action test covering validation, audit, blank-clears and owner-only.
 
