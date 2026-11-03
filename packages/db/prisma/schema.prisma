@@ -601,10 +601,11 @@ model Organization {
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
-  legalEntities LegalEntity[]
-  properties    Property[]
-  memberships   OrgMembership[]
-  invites       OrgInvite[]
+  legalEntities    LegalEntity[]
+  properties       Property[]
+  memberships      OrgMembership[]
+  invites          OrgInvite[]
+  finalExportLinks FinalExportLink[]
 
   mortgages                      Mortgage[]
   mortgageAnnualStatements       MortgageAnnualStatement[]
@@ -2718,6 +2719,7 @@ model StaffUser {
   applicantInfoRequests                   ApplicantInfoRequest[]          @relation("ApplicantInfoRequestedBy")
   applicantNotes                          ApplicantNote[]
   acceptedOrgInvites                      OrgInvite[]
+  finalExportLinks                        FinalExportLink[]
   supportGrantsApproved                   SupportAccessGrant[]            @relation("SupportGrantApprovedBy")
   supportGrantsDenied                     SupportAccessGrant[]            @relation("SupportGrantDeniedBy")
   supportGrantsAcknowledged               SupportAccessGrant[]            @relation("SupportGrantAcknowledgedBy")
@@ -7938,4 +7940,25 @@ model ApplicantNote {
 
   @@index([applicantId])
   @@index([orgId])
+}
+
+/// R-300b (D-388): the offboard run's final export, one link per owner. After
+/// the purge no membership is left to download with, so the link is emailed
+/// and ALSO asks for the owner's authenticator code: a forwarded link opens
+/// nothing. Stored hashed. When it expires the archive, this row and the
+/// owner's `StaffCredential` go (the run's cleanup), so nothing outlives it.
+model FinalExportLink {
+  id           String       @id @default(cuid())
+  orgId        String
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  staffUserId  String
+  staffUser    StaffUser    @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
+  tokenHash    String       @unique
+  /// The archive, `org-exports/<orgId>/<jobRunId>.zip`.
+  storageKey   String
+  expiresAt    DateTime
+  createdAt    DateTime     @default(now())
+
+  @@unique([orgId, staffUserId])
+  @@index([expiresAt])
 }

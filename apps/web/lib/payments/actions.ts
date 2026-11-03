@@ -18,6 +18,7 @@ import { rulesForConfigured } from '@/lib/jurisdiction/queries.ts'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
 import { payLinkRejection, verifyPayLink } from '@/lib/portal/pay-link.ts'
 import { holdFrom, recordHoldRefusal } from './legal-hold.ts'
+import { ORG_CLOSED_TO_CHANGES, orgClosedToChanges } from '@/lib/org-lifecycle/lifecycle.ts'
 
 // The tenant pays (PAY-01, R-037).
 //
@@ -93,6 +94,7 @@ export async function startPaymentFromLink(
     where: { id: link.leasePayerId, active: true },
     select: PAYER_SELECT,
   })
+  if (payer && (await orgClosedToChanges(payer.orgId))) return { error: ORG_CLOSED_TO_CHANGES }
   return chargeResolvedPayer(payer, formData, link.notificationKey)
 }
 

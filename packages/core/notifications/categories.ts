@@ -303,7 +303,7 @@ export const LOCKED_CATEGORIES: Readonly<
     'This is how you learn that platform support asked to view, or entered, your organisation. Turning it off would let that happen without you knowing.',
   setup_test: 'This text is sent only when you press "Send a test text" during setup, to prove texting reaches your phone.',
   org_status:
-    'This is how you learn your organisation was frozen, restored or scheduled for offboarding. Turning it off could let your data be deleted without you knowing the date.',
+    'This is how you learn your organisation was frozen, restored, scheduled for offboarding or offboarded. Turning it off could let your data be deleted without you knowing the date.',
 }
 
 export function isLockedCategory(category: NotificationCategory): boolean {
@@ -439,7 +439,7 @@ export const CATEGORY_LABELS: Record<NotificationCategory, string> = {
   account_access: 'Sign-in and password links',
   support_access: 'Platform support access to your organisation',
   setup_test: 'Setup test text',
-  org_status: 'Your organisation frozen, restored or scheduled for offboarding',
+  org_status: 'Your organisation frozen, restored, offboarded, or scheduled for offboarding',
 }
 
 /**

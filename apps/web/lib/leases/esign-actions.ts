@@ -15,6 +15,7 @@ import { archiveExecutedDocument } from './executed-pdf.ts'
 import { completePartyChangeEnvelope } from './party-change-apply.ts'
 import { completePaymentPlanEnvelope } from '@/lib/payments/plan-envelope.ts'
 import { signedThing, verifySignerLink } from './sign-link.ts'
+import { ORG_CLOSED_TO_CHANGES, orgClosedToChanges } from '@/lib/org-lifecycle/lifecycle.ts'
 
 // A signer's own "sign the lease" action (LEASE-06, DOC-02, R-063).
 //
@@ -79,6 +80,7 @@ export async function signLeaseDocument(
           : 'This signing link is not working. Contact your property manager.',
     }
   }
+  if (await orgClosedToChanges(link.orgId)) return { error: ORG_CLOSED_TO_CHANGES }
   const what = signedThing(link.kind)
   if (link.envelopeStatus === 'VOIDED') {
     return {

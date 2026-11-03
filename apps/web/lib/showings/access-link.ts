@@ -20,6 +20,7 @@ import { prisma } from '@rental/db'
 export type ShowingAccessLink =
   | {
       ok: true
+      orgId: string
       showingId: string
       showingStatus: string
       prospectId: string
@@ -82,6 +83,7 @@ export async function showingAccessLinkStatus(rawToken: string): Promise<Showing
 
   return {
     ok: true,
+    orgId: showing.orgId,
     showingId: showing.id,
     showingStatus: showing.status,
     prospectId: showing.prospectId,

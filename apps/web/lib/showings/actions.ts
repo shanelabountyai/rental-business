@@ -12,6 +12,7 @@ import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.t
 import { createTask } from '@/lib/tasks/create.ts'
 import { availableSlotsFor } from './queries.ts'
 import { showingLinkStatus } from './link.ts'
+import { ORG_CLOSED_TO_CHANGES, orgClosedToChanges } from '@/lib/org-lifecycle/lifecycle.ts'
 
 // PUBLIC writes for Showing (LEASE-08, R-064) - no session, same posture as
 // prospects/actions.ts and prospects/prescreen-actions.ts.
@@ -61,6 +62,7 @@ export async function bookShowing(
   if (!link.ok) {
     return { error: LINK_ERROR_MESSAGES[link.reason] ?? 'This link is not valid.' }
   }
+  if (await orgClosedToChanges(link.orgId)) return { error: ORG_CLOSED_TO_CHANGES }
 
   const raw = formData.get('slot')
   const requested = typeof raw === 'string' ? new Date(raw) : null

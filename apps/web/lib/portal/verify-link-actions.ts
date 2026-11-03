@@ -8,6 +8,7 @@ import { recordVerification } from './verify-record.ts'
 // from this file would have to return a Promise — and the first version did,
 // which put a pending Promise in the error field instead of a sentence.
 import { rejectionMessage, verifyVerifyLink } from './verify-link.ts'
+import { ORG_CLOSED_TO_CHANGES, orgClosedToChanges } from '@/lib/org-lifecycle/lifecycle.ts'
 
 // Answering from the magic link (MAINT-07, R-032c).
 //
@@ -49,6 +50,7 @@ export async function answerFromLink(
   if (!link.ok) {
     return { error: rejectionMessage(link.reason), answered: link.reason === 'answered' }
   }
+  if (await orgClosedToChanges(link.orgId)) return { error: ORG_CLOSED_TO_CHANGES }
 
   const answer = String(formData.get('resolved') ?? '')
   if (answer !== 'yes' && answer !== 'no') {

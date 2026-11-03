@@ -30,6 +30,15 @@ const STATUS_LABEL = { PROVISIONING: 'being set up', ACTIVE: 'live', FROZEN: 'fr
 // fee (R-296). The checklist (R-291a) is OrgHealth's booleans, never a count
 // the console ran itself. Pending invites
 // with "Resend" and "Revoke" are R-304a's. "Re-run" is on /platform/jobs (R-303b, PRD 11 §4.10).
+const STATUS_HISTORY_ACTIONS_LABEL: Record<string, string> = {
+  'org.frozen': 'Frozen',
+  'org.restored': 'Restored',
+  'org.offboard_scheduled': 'Offboarding scheduled',
+  'org.offboarded': 'Offboarded',
+  'org.final_export_cleared': 'Final export expired and removed',
+}
+const STATUS_HISTORY_ACTIONS = Object.keys(STATUS_HISTORY_ACTIONS_LABEL)
+
 export default async function PlatformOrgPage({
   params,
   searchParams,
@@ -64,6 +73,12 @@ export default async function PlatformOrgPage({
   })
   if (!org) notFound()
   const owners = await orgOwners(org.id)
+  // R-300b: the lifecycle's own audit rows, oldest first, are its history.
+  const history = await prisma.auditLog.findMany({
+    where: { orgId: org.id, action: { in: [...STATUS_HISTORY_ACTIONS] } },
+    select: { id: true, action: true, actorType: true, after: true, occurredAt: true },
+    orderBy: { occurredAt: 'asc' },
+  })
   const now = new Date()
   const invite = await platformDecision(admin, 'org.create')
   const configure = await platformDecision(admin, 'org.configure')
@@ -179,6 +194,26 @@ export default async function PlatformOrgPage({
         canFreeze={canFreeze}
         canOffboard={canOffboard}
       />
+
+      {history.length > 0 && (
+        <section aria-labelledby="status-history-heading" className="flex flex-col gap-2 rounded-md border p-4 text-sm break-words">
+          <h2 id="status-history-heading" className="text-lg font-semibold">
+            Status history
+          </h2>
+          <ol className="flex flex-col gap-1">
+            {history.map((row) => {
+              const reason = (row.after as { reason?: unknown } | null)?.reason
+              return (
+                <li key={row.id}>
+                  {friendlyTimestamp(row.occurredAt, 'UTC')} · {STATUS_HISTORY_ACTIONS_LABEL[row.action]} by{' '}
+                  {row.actorType === 'PLATFORM' ? 'platform support' : row.actorType === 'STAFF' ? 'an owner' : 'the daily run'}
+                  {typeof reason === 'string' && <> · “{reason}”</>}
+                </li>
+              )
+            })}
+          </ol>
+        </section>
+      )}
 
       <OrgNotificationsPanel
         action={switchOrgNotifications}

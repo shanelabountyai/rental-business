@@ -48,6 +48,7 @@ export function signedThing(kind: SignedThingKind): string {
 export type SignerLinkResult =
   | {
       ok: true
+      orgId: string
       signerId: string
       envelopeId: string
       leaseId: string
@@ -99,6 +100,7 @@ export async function verifySignerLink(token: string, now = new Date()): Promise
 
   return {
     ok: true,
+    orgId: signer.envelope.lease.orgId,
     signerId: signer.id,
     envelopeId: signer.envelopeId,
     leaseId: signer.envelope.leaseId,

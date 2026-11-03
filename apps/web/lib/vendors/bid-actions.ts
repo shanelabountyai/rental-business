@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { auditAsVendor } from '@/lib/audit/system.ts'
 import { verifyBidLink } from './bids.ts'
 import type { VendorFormState } from './actions.ts'
+import { ORG_CLOSED_TO_CHANGES, orgClosedToChanges } from '@/lib/org-lifecycle/lifecycle.ts'
 
 // What a vendor submits when asked to price a job (MAINT-04, R-026).
 //
@@ -29,6 +30,7 @@ export async function submitBid(
   }
 
   const { bid, vendorId } = link
+  if (await orgClosedToChanges(bid.workOrder.orgId)) return { error: ORG_CLOSED_TO_CHANGES }
   if (bid.respondedAt) {
     return { error: 'You have already given us a price for this one. Call the office to change it.' }
   }

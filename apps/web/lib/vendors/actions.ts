@@ -25,6 +25,7 @@ import { policyFor } from '@/lib/workorders/queries.ts'
 import { requestVerification } from '@/lib/workorders/verify.ts'
 import { vendorWorkOrderThread } from '@/lib/workorders/timeline.ts'
 import { vendorRejectionMessage } from './messages.ts'
+import { ORG_CLOSED_TO_CHANGES, orgClosedToChanges } from '@/lib/org-lifecycle/lifecycle.ts'
 
 // Everything a vendor can do, all of it through a magic link and none of it
 // with an account (D-6, D-16, MAINT-03, R-025).
@@ -78,6 +79,7 @@ export async function respondToWorkOrder(
 ): Promise<VendorFormState> {
   const link = await verifyVendorLink(token)
   if (!link.ok) return { error: vendorRejectionMessage(link.reason) }
+  if (await orgClosedToChanges(link.workOrder.orgId)) return { error: ORG_CLOSED_TO_CHANGES }
 
   const { workOrder, vendorId } = link
   if (!vendorMayRespond(workOrder.vendorResponse)) {
@@ -199,6 +201,9 @@ export async function revealCodeForVendor(
   if (!link.ok) {
     return { revealed: keep, error: vendorRejectionMessage(link.reason) }
   }
+  if (await orgClosedToChanges(link.workOrder.orgId)) {
+    return { revealed: keep, error: ORG_CLOSED_TO_CHANGES }
+  }
 
   const { workOrder, vendorId } = link
   // Accepted vendors only. Somebody who has not answered, or who declined,
@@ -255,6 +260,7 @@ export async function uploadVendorDocument(
 ): Promise<VendorFormState> {
   const link = await verifyVendorLink(token)
   if (!link.ok) return { error: vendorRejectionMessage(link.reason) }
+  if (await orgClosedToChanges(link.workOrder.orgId)) return { error: ORG_CLOSED_TO_CHANGES }
 
   const { workOrder, vendorId } = link
   if (!vendorMayUpload(workOrder.vendorResponse)) {
@@ -477,6 +483,7 @@ export async function markWorkComplete(
 ): Promise<VendorFormState> {
   const link = await verifyVendorLink(token)
   if (!link.ok) return { error: vendorRejectionMessage(link.reason) }
+  if (await orgClosedToChanges(link.workOrder.orgId)) return { error: ORG_CLOSED_TO_CHANGES }
 
   const { workOrder, vendorId } = link
   if (!vendorMayUpload(workOrder.vendorResponse)) {
@@ -558,6 +565,7 @@ export async function sendVendorMessage(
 ): Promise<VendorFormState> {
   const link = await verifyVendorLink(token)
   if (!link.ok) return { error: vendorRejectionMessage(link.reason) }
+  if (await orgClosedToChanges(link.workOrder.orgId)) return { error: ORG_CLOSED_TO_CHANGES }
 
   const { workOrder, vendorId } = link
   const body = String(formData.get('body') ?? '').trim()

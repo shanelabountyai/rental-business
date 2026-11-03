@@ -129,3 +129,14 @@ export async function syncOrgBilling(orgId: string): Promise<void> {
   // ponytail: one Stripe round trip per payer, in series; fine at 50 doors.
   for (const payer of payers) await syncLeasePayer(payer.id)
 }
+
+/// R-300b: the sentence a token link's write answers with in a FROZEN or
+/// OFFBOARDED org. A vendor, applicant or signer holds no permission for
+/// `actorForOrgStatus` to narrow, so each token-link ACTION asks this instead,
+/// after its link verifies (reads stay open: frozen is read-only, not closed).
+export const ORG_CLOSED_TO_CHANGES = 'This organisation is not taking changes through this link any more. Contact them directly.'
+
+export async function orgClosedToChanges(orgId: string): Promise<boolean> {
+  const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { status: true } })
+  return org?.status === 'FROZEN' || org?.status === 'OFFBOARDED'
+}

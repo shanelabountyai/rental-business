@@ -132,6 +132,10 @@ export const AUDIT_ACTIONS = [
   'org.frozen',
   'org.restored',
   'org.offboard_scheduled',
+  /// R-300b: the offboard run finished (FROZEN → OFFBOARDED, `after` its counts),
+  /// and its final export's links expired and were cleared with the archive.
+  'org.offboarded',
+  'org.final_export_cleared',
   /// R-292b, R-293b (PRD 11 §3.1): an org's Twilio provisioning or Resend
   /// domain started, re-polled (by an admin, or by the nightly cron when the
   /// status moved) or retired. Never the sealed secret.

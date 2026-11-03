@@ -15,6 +15,7 @@ import { prisma } from '@rental/db'
 import { authUrl } from '@/lib/auth/delivery.ts'
 import { auditAsTenant } from '@/lib/audit/system.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
+import { ORG_CLOSED_TO_CHANGES, orgClosedToChanges } from '@/lib/org-lifecycle/lifecycle.ts'
 
 // The questions a texted-in request never got asked (MAINT-01, MAINT-02,
 // R-177).
@@ -100,6 +101,7 @@ export async function issueClarifyLink(
 export type ClarifyLinkResult =
   | {
       ok: true
+      orgId: string
       ticketId: string
       tenantId: string
       /// What they told us, in their own words — never the whole
@@ -148,6 +150,7 @@ export async function verifyClarifyLink(token: string): Promise<ClarifyLinkResul
     where: { id: stored!.subjectId },
     select: {
       id: true,
+      orgId: true,
       tenantId: true,
       status: true,
       category: true,
@@ -176,6 +179,7 @@ export async function verifyClarifyLink(token: string): Promise<ClarifyLinkResul
 
   return {
     ok: true,
+    orgId: ticket.orgId,
     ticketId: ticket.id,
     tenantId,
     reported: reportedWords(ticket.description),
@@ -222,6 +226,7 @@ export async function applyClarification(
   if (!link.ok) {
     return { error: clarifyRejectionMessage(link.reason) }
   }
+  if (await orgClosedToChanges(link.orgId)) return { error: ORG_CLOSED_TO_CHANGES }
 
   if (!isMaintenanceCategory(args.category)) {
     return { error: 'Choose a category.' }

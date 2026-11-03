@@ -7,6 +7,7 @@ import { auditAsSystem } from '@/lib/audit/system.ts'
 import { redeemToken } from '@/lib/auth/store.ts'
 import { sendShowingInvite } from '@/lib/showings/invite.ts'
 import { prescreenLinkStatus } from './prescreen-link.ts'
+import { ORG_CLOSED_TO_CHANGES, orgClosedToChanges } from '@/lib/org-lifecycle/lifecycle.ts'
 
 // Recording a prospect's answers (LEASE-07, R-058).
 //
@@ -72,6 +73,7 @@ export async function submitPrescreenAnswers(
   if (!status.ok) {
     return { error: LINK_ERROR_MESSAGES[status.reason] ?? 'This link is not valid.' }
   }
+  if (await orgClosedToChanges(status.prospect.orgId)) return { error: ORG_CLOSED_TO_CHANGES }
 
   const priorEvictionsRaw = str(formData, 'priorEvictions')
   const rawValues: Record<string, string> = {

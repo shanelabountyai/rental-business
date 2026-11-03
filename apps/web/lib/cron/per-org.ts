@@ -26,6 +26,13 @@ const RUNNABLE: OrgStatus[] = ['PROVISIONING', 'ACTIVE']
 
 export type OrgRunResult = { ok: boolean } & Record<string, unknown>
 
+/// R-300b: the daily route's branch for orgs past the runnable statuses - a
+/// FROZEN org due its purge, an OFFBOARDED one whose final export expired.
+export type OffboardBranch = {
+  due: (now: Date) => Prisma.OrganizationWhereInput
+  run: (orgId: string) => Promise<OrgRunResult>
+}
+
 /**
  * The whole of a cron route: authorize, then fan out (no `org`) or run one
  * org (`?org=`). 404 for a bad token AND for an unknown org, so neither tells
@@ -39,17 +46,27 @@ export async function cronRoute(
   request: Request,
   child: CronChild,
   runForOrg: (orgId: string) => Promise<OrgRunResult>,
+  offboard?: OffboardBranch,
 ): Promise<Response> {
   if (!isAuthorizedCron(request)) return new Response('Not found', { status: 404 })
 
   const orgId = new URL(request.url).searchParams.get('org')
-  if (orgId === null) return Response.json(await fanOut(request))
+  if (orgId === null) return Response.json(await fanOut(request, offboard))
 
   const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { status: true } })
   if (!org) return new Response('Not found', { status: 404 })
   // R-300a: crons skip a frozen org - here as well as in the fan-out, so a
   // re-run from the console (D-356) cannot start one either. Not a failure.
-  if (!RUNNABLE.includes(org.status)) return Response.json({ ok: true, skipped: org.status })
+  // The one exception is the offboard run itself, on the daily route only.
+  if (!RUNNABLE.includes(org.status)) {
+    const due = offboard && (await prisma.organization.count({ where: { AND: [{ id: orgId }, offboard.due(new Date())] } }))
+    if (!due) return Response.json({ ok: true, skipped: org.status })
+    try {
+      return Response.json(await withOrgClaim('cron.offboard', orgId, new Date(), () => offboard.run(orgId)))
+    } catch (error) {
+      return Response.json({ ok: false, error: messageOf(error) }, { status: 500 })
+    }
+  }
 
   try {
     const result = await runForOrg(orgId)
@@ -63,10 +80,11 @@ export async function cronRoute(
   }
 }
 
-async function fanOut(request: Request) {
+async function fanOut(request: Request, offboard?: OffboardBranch) {
   const startedAt = Date.now()
+  const runnable: Prisma.OrganizationWhereInput = { status: { in: RUNNABLE } }
   const orgs = await prisma.organization.findMany({
-    where: { status: { in: RUNNABLE } },
+    where: offboard ? { OR: [runnable, offboard.due(new Date())] } : runnable,
     select: { id: true },
     orderBy: { id: 'asc' },
   })

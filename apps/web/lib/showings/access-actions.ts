@@ -12,6 +12,7 @@ import { revalidatePath } from 'next/cache'
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { identityAdapter, smartLockAdapter } from '@/lib/locks/provider.ts'
 import { showingAccessLinkStatus } from './access-link.ts'
+import { ORG_CLOSED_TO_CHANGES, orgClosedToChanges } from '@/lib/org-lifecycle/lifecycle.ts'
 
 // PUBLIC writes for a self-showing (LEASE-08, R-094) - no session, the same
 // posture showings/actions.ts takes, and it must stay import-clean of
@@ -64,6 +65,7 @@ export async function verifyIdentityForShowing(
 ): Promise<AccessFormState> {
   const link = await showingAccessLinkStatus(rawToken)
   if (!link.ok) return { error: LINK_ERROR_MESSAGES[link.reason] ?? 'This link is not valid.' }
+  if (await orgClosedToChanges(link.orgId)) return { error: ORG_CLOSED_TO_CHANGES }
   if (link.access) {
     return {
       notice: 'You are already confirmed. Your code appears on this page at the time you booked.',

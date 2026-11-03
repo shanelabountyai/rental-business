@@ -1,5 +1,6 @@
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { cronRoute, withOrgClaim } from '@/lib/cron/per-org.ts'
+import { OFFBOARD_DUE, runOffboarding } from '@/lib/org-lifecycle/offboard.ts'
 import { dispatchOutbox } from '@/lib/jobs/outbox.ts'
 // Side-effect import: populates SCHEDULED_JOBS before runDueJobs() reads it.
 // See registrations.ts for why every job module is imported from exactly here.
@@ -38,8 +39,12 @@ export const maxDuration = 60
 // about whether this endpoint exists, and a scanner gets no signal to come
 // back. Per org since R-290: see lib/cron/per-org.ts.
 export function GET(request: Request) {
-  return cronRoute(request, 'daily', (orgId) =>
-    withOrgClaim('cron.daily', orgId, new Date(), () => runDaily(orgId)),
+  return cronRoute(
+    request,
+    'daily',
+    (orgId) => withOrgClaim('cron.daily', orgId, new Date(), () => runDaily(orgId)),
+    // R-300b: a frozen org past its purge date is offboarded by this tick.
+    { due: OFFBOARD_DUE, run: (orgId) => runOffboarding(orgId) },
   )
 }
 

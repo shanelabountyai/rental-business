@@ -32,6 +32,9 @@ export interface StripeConnector {
   createAccount(): Promise<string>
   /// A single-use link into the provider's hosted onboarding.
   accountLink(accountId: string, urls: { refreshUrl: string; returnUrl: string }): Promise<string>
+  /// Revoke this platform's access to the account (`POST /oauth/deauthorize`).
+  /// The account is the org's own and is never deleted (R-300b).
+  disconnect(accountId: string): Promise<void>
 }
 
 class SimulatedStripeConnector implements StripeConnector {
@@ -50,6 +53,10 @@ class SimulatedStripeConnector implements StripeConnector {
   /// so it carries no return URL a link could forge.
   async accountLink(accountId: string, urls: { returnUrl: string }) {
     return new URL(`/money/stripe/simulated/${accountId}`, urls.returnUrl).href
+  }
+
+  async disconnect(accountId: string) {
+    await prisma.simulatedStripeAccount.updateMany({ where: { accountId, deauthorizedAt: null }, data: { deauthorizedAt: new Date() } })
   }
 }
 
@@ -199,6 +206,19 @@ export async function applyDeauthorized(orgId: string): Promise<string> {
   await saveOrgIntegration(orgId, 'STRIPE', { status: 'DISABLED', statusReason: reason })
   await raiseOwnerTask(orgId, reason)
   return `account ${row.status} → DISABLED`
+}
+
+/// The offboard run's half (R-300b): we disconnect, rather than the org. No
+/// owner task - there is no org left to do it.
+export async function disconnectStripeForOffboarding(orgId: string): Promise<boolean> {
+  const row = await stripeRow(orgId)
+  if (!row || row.status === 'DISABLED') return false
+  if (row.accountId) await stripeConnector.disconnect(row.accountId)
+  await saveOrgIntegration(orgId, 'STRIPE', {
+    status: 'DISABLED',
+    statusReason: 'Disconnected when the organisation was offboarded. The Stripe account is the organisation’s own and was not deleted.',
+  })
+  return true
 }
 
 export async function recordPlatformFee(orgId: string, fee: PlatformFeeFact, stripeEventId: string): Promise<string> {

@@ -5,6 +5,7 @@ import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
+import { ORG_CLOSED_TO_CHANGES, orgClosedToChanges } from '@/lib/org-lifecycle/lifecycle.ts'
 import {
   type ClarificationArgs,
   applyClarification,
@@ -116,6 +117,7 @@ export async function uploadClarificationPhoto(
 ): Promise<{ id: string } | { error: string }> {
   const link = await verifyClarifyLink(token)
   if (!link.ok) return { error: 'This link is no longer accepting photos.' }
+  if (await orgClosedToChanges(link.orgId)) return { error: ORG_CLOSED_TO_CHANGES }
 
   if (!file.type.startsWith('image/')) {
     return { error: 'Only photos can be attached here.' }

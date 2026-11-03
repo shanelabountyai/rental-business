@@ -19,6 +19,7 @@ import { notify } from '@/lib/notifications/send.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
 import { completeApplicantIfDone } from './fee-webhook.ts'
 import { applicationLinkStatus } from './link.ts'
+import { ORG_CLOSED_TO_CHANGES, orgClosedToChanges } from '@/lib/org-lifecycle/lifecycle.ts'
 
 // PUBLIC writes for Application/Applicant (LEASE-03, R-059) - no session,
 // same posture as prospects/actions.ts: every write here is authorized by
@@ -92,6 +93,7 @@ export async function submitApplicantForm(
   if (!status.ok) {
     return { error: LINK_ERROR_MESSAGES[status.reason] ?? 'This link is not valid.' }
   }
+  if (await orgClosedToChanges(status.applicant.orgId)) return { error: ORG_CLOSED_TO_CHANGES }
   if (status.applicant.completedAt) {
     return { error: 'This application is already complete.' }
   }
@@ -200,6 +202,7 @@ export async function inviteCoApplicant(
   if (!status.ok) {
     return { error: LINK_ERROR_MESSAGES[status.reason] ?? 'This link is not valid.' }
   }
+  if (await orgClosedToChanges(status.applicant.orgId)) return { error: ORG_CLOSED_TO_CHANGES }
   if (!status.applicant.isLead) {
     return { error: 'Only the person who started this application can add co-applicants.' }
   }
@@ -275,6 +278,7 @@ export async function uploadApplicationDocument(
   if (!status.ok) {
     return { error: LINK_ERROR_MESSAGES[status.reason] ?? 'This link is not valid.' }
   }
+  if (await orgClosedToChanges(status.applicant.orgId)) return { error: ORG_CLOSED_TO_CHANGES }
 
   const limit = await consumeRateLimit(
     `application-upload:${status.applicant.id}`,
@@ -349,6 +353,7 @@ export async function startApplicationFeePayment(rawToken: string): Promise<FeeP
   if (!status.ok) {
     return { error: LINK_ERROR_MESSAGES[status.reason] ?? 'This link is not valid.' }
   }
+  if (await orgClosedToChanges(status.applicant.orgId)) return { error: ORG_CLOSED_TO_CHANGES }
   const { applicant } = status
   if (!applicant.feeCents || applicant.feeCents <= 0) {
     return { error: 'No fee is due.' }

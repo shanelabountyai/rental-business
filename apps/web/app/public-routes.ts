@@ -17,6 +17,10 @@ export const PUBLIC_ROUTES: Record<string, string> = {
     'The single-use token in the link is the credential; demanding a session would defeat the purpose.',
   'invite/[token]/page.tsx':
     "Accepting an organisation invite (R-304a). The single-use token is the credential, honoured only on its org's host.",
+  'final-export/[token]/page.tsx':
+    "An offboarded org's final export (R-300b, D-388). No membership survives the purge to sign in with; the emailed token names the link, honoured only on its org's host, and the download below also asks for the owner's authenticator code.",
+  'api/final-export/route.ts':
+    'The download behind the page above: the token AND the owner\'s authenticator code (verifyStaffStepUp, rate limited per owner), checked here.',
   'portal/login/page.tsx': 'Tenant sign-in.',
   'portal/verify/page.tsx':
     'Where a magic link lands (K1). Changes nothing on GET; the token is the credential and is spent by the POST below.',

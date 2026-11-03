@@ -13,6 +13,7 @@ import { unitPhotosForListing } from '@/lib/listings/queries.ts'
 export type ShowingLinkResult =
   | {
       ok: true
+      orgId: string
       prospectId: string
       firstName: string
       propertyId: string
@@ -121,6 +122,7 @@ export async function showingLinkStatus(rawToken: string): Promise<ShowingLinkRe
 
   return {
     ok: true,
+    orgId: prospect.orgId,
     prospectId: prospect.id,
     firstName: prospect.firstName,
     propertyId: prospect.propertyId,

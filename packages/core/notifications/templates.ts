@@ -2586,21 +2586,25 @@ export const supportRequestedTemplate: NotificationTemplate<SupportAccessContext
 /// rendered by the caller in the org's zone.
 export interface OrgStatusContext {
   orgName: string
-  change: 'frozen' | 'restored' | 'offboard_scheduled'
+  change: 'frozen' | 'restored' | 'offboard_scheduled' | 'offboarded'
   /// Who pressed it: platform support, or one of the org's own owners.
   by: 'platform' | 'owner'
   /// Platform presses only: the admin's words, verbatim.
   reason?: string
   /// "30 Jan 2027": the day the purge may run (frozen, offboard_scheduled).
   purgeOn?: string
-  /// `/settings/export` on the org's own host.
+  /// `/settings/export` on the org's own host; for `offboarded`, the owner's
+  /// own final-export link (R-300b, D-388).
   url: string
+  /// `offboarded` only: the last day the final-export link works.
+  availableUntil?: string
 }
 
 const ORG_STATUS_SUBJECTS: Record<OrgStatusContext['change'], (orgName: string) => string> = {
   frozen: (n) => `${n} has been frozen`,
   restored: (n) => `${n} has been restored`,
   offboard_scheduled: (n) => `${n} is scheduled for offboarding`,
+  offboarded: (n) => `${n} has been offboarded: your final export`,
 }
 
 /**
@@ -2615,7 +2619,15 @@ export const orgStatusChangedTemplate: NotificationTemplate<OrgStatusContext> = 
   render: (c) => {
     const who = c.by === 'platform' ? 'Platform support' : 'An owner of your organisation'
     const lines =
-      c.change === 'restored'
+      c.change === 'offboarded'
+        ? [
+            `${c.orgName} has been offboarded, and its data is being removed from this service, apart from the payment, message and audit records the law requires us to keep.`,
+            '',
+            `Your final export of everything it held is here until ${c.availableUntil}: ${c.url}`,
+            '',
+            'Opening it asks for the current code from your authenticator app, so the link alone opens nothing. It is yours only: do not forward it.',
+          ]
+        : c.change === 'restored'
         ? [`${who} restored ${c.orgName}. Everything works again, and billing resumes.`]
         : c.change === 'frozen'
           ? [

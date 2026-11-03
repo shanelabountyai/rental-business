@@ -80,6 +80,7 @@ export async function issueVerifyLink(
 export type VerifyLinkResult =
   | {
       ok: true
+      orgId: string
       workOrderId: string
       tenantId: string
       round: number
@@ -152,6 +153,7 @@ export async function verifyVerifyLink(token: string): Promise<VerifyLinkResult>
     where: { id: stored!.subjectId },
     select: {
       id: true,
+      orgId: true,
       status: true,
       scope: true,
       reopenCount: true,
@@ -209,6 +211,7 @@ export async function verifyVerifyLink(token: string): Promise<VerifyLinkResult>
 
   return {
     ok: true,
+    orgId: workOrder.orgId,
     workOrderId: workOrder.id,
     tenantId,
     round,
