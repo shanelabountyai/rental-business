@@ -300,6 +300,16 @@ export const NAV_ITEMS: readonly NavItem[] = [
     ownedBy: 'R-295a',
   },
   {
+    href: '/settings/export',
+    label: 'Export data',
+    group: 'Admin',
+    /// PRD 10 §8: owner-only. The page also needs `report.financial` and
+    /// `audit.read`; `staff.manage` is the one a manager lacks.
+    permission: 'staff.manage',
+    portfolioOnly: true,
+    ownedBy: 'R-299',
+  },
+  {
     href: '/settings/audit',
     label: 'Audit log',
     group: 'Admin',

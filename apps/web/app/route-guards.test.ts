@@ -174,6 +174,10 @@ const RESOURCE_LESS_GUARDS: Record<string, string> = {
   'app/(admin)/settings/setup/page.tsx':
     'The provisioning checklist (PRD 10 §5, R-291a) is about the whole organisation - its owners, Stripe, texting, email domain - not a property. Owner-only through `staff.manage`.',
   'lib/setup/actions.ts': 'Same as the setup page above. The org is the session\'s, never a form field.',
+  'app/(admin)/settings/export/page.tsx':
+    'The full organisation export (PRD 10 §8, R-299) is every row the org holds, so it is owner-only and portfolio-wide by definition: a scoped actor must never get a partial copy.',
+  'app/api/org-export/[id]/route.ts': 'Same as the export page above. The run is looked up by the session\'s org; another org\'s id is a 404.',
+  'lib/export/actions.ts': 'Same as the export page above. The org is the session\'s, never a form field.',
   'app/(admin)/settings/setup/simulated-invoice/[invoiceId]/page.tsx':
     'The simulated hosted page for the owner\'s own $1 setup test invoice (R-291b), org-wide like the setup page. `billing.connect`, and it emits only as the actor\'s org.',
   'app/(admin)/jobs/page.tsx':

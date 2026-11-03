@@ -58,6 +58,8 @@ export const manifest: Record<string, Entry> = {
   // lib/support/actions.ts (R-295a): an owner answering platform support.
   // One action, four intents; `deny` reaches a write on the fixture's pending grant.
   'lib/support/actions.ts#answerSupportAccess': { 'form.grantId': 'supportAccessGrant', 'form.intent': '=deny' },
+  // R-299: the full org export; the org is the session's and it takes no id.
+  'lib/export/actions.ts#startOrgExport': { 'form.code': 'value' },
   // R-291a: the owner's checklist statements; the org is the session's.
   'lib/setup/actions.ts#markSetupStep': { 'form.mark': '=just_me', 'form.intent': '=on' },
   // R-291b: step 9's presses. The phone is the owner's own; the invoice id is bound server-side.

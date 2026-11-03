@@ -125,6 +125,8 @@ export const AUDIT_ACTIONS = [
   /// and $1 test invoice (`after.stripeInvoiceId`), each pressed on /settings/setup.
   'org.test_text_sent',
   'org.test_invoice_sent',
+  /// R-299 (PRD 10 §8): the full organisation export started (`entityId` is its JobRun).
+  'org.exported',
   /// R-292b, R-293b (PRD 11 §3.1): an org's Twilio provisioning or Resend
   /// domain started, re-polled (by an admin, or by the nightly cron when the
   /// status moved) or retired. Never the sealed secret.
