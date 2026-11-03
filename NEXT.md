@@ -1,4 +1,4 @@
-**2026-11-08 (latest): R-298a done (D-389).** Enabled states, the per-org counsel flag, and the property, import and notice gates are built.
+**2026-11-08 (latest): R-298a done (`6511816`, D-389).** Enabled states, the per-org counsel flag, and the property, import and notice gates are built.
 
 A bare `go` is **R-298b** (backlog row 275b): `OrgPolicy` stricter-only overrides (more grace, a lower late-fee cap, longer entry notice). Core takes the stricter of statute and policy, never the looser (D-12). It touches every caller of `rulesFor` that reads `graceDays`, `lateFee*` or `entryNoticeHours`. Decide early whether the policy is applied inside `rulesFor` (one place) or at each computation (where the evidence records which number won). R-297 waits on OQ-16; R-287 (RLS) follows.
 

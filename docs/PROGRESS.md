@@ -15335,7 +15335,7 @@ Tests: `lib/platform/settings.test.ts` (no secret value in the output, the kill 
 
 ## R-298a — Enabled states and the per-org counsel flag
 
-**SHA:** `pending`
+**SHA:** `6511816`
 
 **What it built.** `OrgJurisdiction(orgId, state, enabledAt, counselReviewedBy?, counselReviewedAt?)`. It is unique per (org, state), a CHECK makes the two counsel columns both-or-neither, and it carries an `org_scope` trigger. The migration backfills every distinct (org, state) already in `Property`, with counsel review unrecorded. `seed.mts` enables TX for org #0 on a fresh database. New permission `jurisdiction.configure` (owner-only by construction, privileged). `lib/jurisdiction/actions.ts` holds two actions. `enableOrgState` is idempotent through `createMany` + `skipDuplicates`, writes the `org_jurisdiction.enabled` audit row, and refreshes `OrgHealth`. `recordCounselReview` refuses a future date, a malformed date and a state that is not enabled, and audits `org_jurisdiction.counsel_reviewed` with before and after. `/jurisdiction` gains a "Your organisation's states" panel. `createProperty`, `updateProperty` (only when the state changes) and the CSV import (`ImportSnapshot.enabledStates`) refuse a state the org has not enabled. The archived notice PDF carries `COUNSEL_UNREVIEWED_LINE`, and the notice page shows a banner, until the review is recorded. Checklist step 8 now needs a reviewed rule in force AND the org's counsel review. When a state with no statewide rule is enabled, every active admin holding `jurisdiction.publish` gets an email, and the state joins `/platform/jurisdiction`'s uncovered list through the new `OrgHealth.enabledStates`.
 
