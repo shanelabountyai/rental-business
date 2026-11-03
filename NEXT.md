@@ -1,4 +1,4 @@
-**2026-11-07 (latest): R-300b done (D-388).** The offboard run, the emailed code-guarded final export, the evidence-closure purge, token-link refusals and the console's status history are built. Milestone-closing walk (D-28) not done for the offboarding path.
+**2026-11-07 (latest): R-300b done (`dc5066e`, D-388).** The offboard run, the emailed code-guarded final export, the evidence-closure purge, token-link refusals and the console's status history are built. Milestone-closing walk (D-28) not done for the offboarding path.
 
 A bare `go` is **R-298** (backlog row 275): per-org jurisdiction (`OrgJurisdiction`). It is the first open row in that section that is not gated; R-297 waits on OQ-16, and R-287 (RLS) follows. Read row 275 first; if it turns out gated, take R-287.
 
