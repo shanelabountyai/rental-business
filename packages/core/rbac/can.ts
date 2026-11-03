@@ -49,6 +49,10 @@ export interface Actor {
     approveWorkOrderCents: number | null
     waiveFeeCents: number | null
   }
+  /// Set by `actorForOrgStatus` when the org is FROZEN or OFFBOARDED (R-300a):
+  /// the permissions are already narrowed; this only lets a screen or a
+  /// tenant guard SAY why.
+  readOnly?: true
 }
 
 /// What is being acted on.

@@ -20,6 +20,7 @@ export const ORG_SUMMARY_SELECT = {
   slug: true,
   name: true,
   notificationsEnabled: true,
+  status: true,
   createdAt: true,
   health: true,
   integrations: { select: INTEGRATION_SELECT, orderBy: { provider: 'asc' } },

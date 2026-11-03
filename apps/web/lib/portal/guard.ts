@@ -73,11 +73,24 @@ export async function tenantScope(tenantId: string): Promise<TenantScope> {
   }
 }
 
+/// R-300a: the tenant's org is FROZEN or OFFBOARDED. The portal layout reads
+/// it for the banner; `requireTenantWithScope({ write: true })` for refusing.
+export async function tenantOrgFrozen(tenantId: string): Promise<boolean> {
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { organization: { select: { status: true } } } })
+  const status = tenant?.organization.status
+  return status === 'FROZEN' || status === 'OFFBOARDED'
+}
+
 /// Both at once, for the common case of a page that needs the person and
 /// their scope. Separate functions above so a caller that genuinely needs
 /// only one is not made to pay for a query it will not read.
-export async function requireTenantWithScope() {
+///
+/// `write: true` on every tenant ACTION (R-300a): a tenant's writes ask for no
+/// permission, so the freeze that narrowed them is checked here instead. The
+/// portal's banner says why the press went nowhere.
+export async function requireTenantWithScope(options: { write?: boolean } = {}) {
   const tenant = await requireTenant()
+  if (options.write && (await tenantOrgFrozen(tenant.id))) redirect('/portal')
   const scope = await tenantScope(tenant.id)
   return { tenant, scope }
 }

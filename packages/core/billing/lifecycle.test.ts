@@ -191,3 +191,26 @@ describe('when Stripe has not been asked', () => {
     expect(lifecycleDecision(lease({ rentCents: 999_999 }), null).action).toBe('none')
   })
 })
+
+describe('a frozen organisation (R-300a)', () => {
+  it('pauses a live subscription', () => {
+    expect(lifecycleDecision(lease({ orgFrozen: true }), stripe()).action).toBe('pause')
+  })
+
+  it('does not resume a paused one while frozen', () => {
+    expect(lifecycleDecision(lease({ orgFrozen: true }), stripe({ status: 'paused' })).action).toBe('none')
+  })
+
+  it('on restore resumes only what no collection hold also paused', () => {
+    expect(lifecycleDecision(lease(), stripe({ status: 'paused' })).action).toBe('resume')
+    expect(lifecycleDecision(lease({ collectionPaused: true }), stripe({ status: 'paused' })).action).toBe('none')
+  })
+
+  it('starts no billing for a lease with no subscription', () => {
+    expect(lifecycleDecision(lease({ orgFrozen: true, stripeSubscriptionId: null }), null).action).toBe('none')
+  })
+
+  it('still cancels an ended tenancy', () => {
+    expect(lifecycleDecision(lease({ orgFrozen: true, status: 'ENDED' }), stripe()).action).toBe('cancel')
+  })
+})

@@ -28,7 +28,7 @@ export async function verifyWorkOrder(
   _previous: VerifyFormState,
   formData: FormData,
 ): Promise<VerifyFormState> {
-  const { scope } = await requireTenantWithScope()
+  const { scope } = await requireTenantWithScope({ write: true })
 
   const workOrderId = String(formData.get('workOrderId') ?? '')
   const answer = String(formData.get('resolved') ?? '')

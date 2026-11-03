@@ -2582,7 +2582,61 @@ export const supportRequestedTemplate: NotificationTemplate<SupportAccessContext
   }),
 }
 
+/// Context for `org.status_changed` (R-300a, PRD 11 §4.6). Dates are
+/// rendered by the caller in the org's zone.
+export interface OrgStatusContext {
+  orgName: string
+  change: 'frozen' | 'restored' | 'offboard_scheduled'
+  /// Who pressed it: platform support, or one of the org's own owners.
+  by: 'platform' | 'owner'
+  /// Platform presses only: the admin's words, verbatim.
+  reason?: string
+  /// "30 Jan 2027": the day the purge may run (frozen, offboard_scheduled).
+  purgeOn?: string
+  /// `/settings/export` on the org's own host.
+  url: string
+}
+
+const ORG_STATUS_SUBJECTS: Record<OrgStatusContext['change'], (orgName: string) => string> = {
+  frozen: (n) => `${n} has been frozen`,
+  restored: (n) => `${n} has been restored`,
+  offboard_scheduled: (n) => `${n} is scheduled for offboarding`,
+}
+
+/**
+ * Sent to every active owner when the org's lifecycle moves (§4.6: "+ owners
+ * notified"). Says what changed first, what still works second, and the date
+ * last - the one fact an owner must act before.
+ */
+export const orgStatusChangedTemplate: NotificationTemplate<OrgStatusContext> = {
+  key: 'org.status_changed',
+  category: 'org_status',
+  channels: ['EMAIL'],
+  render: (c) => {
+    const who = c.by === 'platform' ? 'Platform support' : 'An owner of your organisation'
+    const lines =
+      c.change === 'restored'
+        ? [`${who} restored ${c.orgName}. Everything works again, and billing resumes.`]
+        : c.change === 'frozen'
+          ? [
+              `${who} froze ${c.orgName}. Everyone can still sign in and read everything, but nothing can be changed, scheduled jobs have stopped, and rent collection is paused.`,
+              '',
+              `Download a full export of your data here: ${c.url}`,
+            ]
+          : [
+              `${who} scheduled ${c.orgName} for offboarding. On or after ${c.purgeOn} its data will be removed from this service, apart from the payment, message and audit records the law requires us to keep.`,
+              '',
+              `Download a full export of your data before then: ${c.url}`,
+            ]
+    return {
+      subject: ORG_STATUS_SUBJECTS[c.change](c.orgName),
+      body: [...lines, ...(c.reason ? ['', `Reason: ${c.reason}`] : [])].join('\n'),
+    }
+  },
+}
+
 export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = {
+  [orgStatusChangedTemplate.key]: orgStatusChangedTemplate as unknown as NotificationTemplate<never>,
   [supportBreakGlassTemplate.key]: supportBreakGlassTemplate as unknown as NotificationTemplate<never>,
   [supportRequestedTemplate.key]: supportRequestedTemplate as unknown as NotificationTemplate<never>,
   [setupTestTextTemplate.key]: setupTestTextTemplate as unknown as NotificationTemplate<never>,

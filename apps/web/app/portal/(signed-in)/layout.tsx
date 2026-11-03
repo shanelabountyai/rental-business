@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { PortalNav } from '@/components/portal/portal-nav.tsx'
 import { signOutTenant } from '@/lib/portal/actions.ts'
 import { PORTAL_NAV_ITEMS } from '@/lib/portal/nav.ts'
-import { requireTenant } from '@/lib/portal/guard.ts'
+import { requireTenant, tenantOrgFrozen } from '@/lib/portal/guard.ts'
 
 // The tenant portal shell (R-018, PRD §6.4, D-8, D-10).
 //
@@ -55,6 +55,7 @@ export default async function PortalLayout({
   // about WHICH records they may see. Every page below scopes its own queries
   // - the same split the admin shell's layout guard makes for the same reason.
   const tenant = await requireTenant()
+  const frozen = await tenantOrgFrozen(tenant.id)
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -91,6 +92,15 @@ export default async function PortalLayout({
         id="main"
         className="mx-auto w-full max-w-2xl flex-1 px-4 py-6 pb-24 text-base sm:pb-6"
       >
+        {frozen && (
+          // R-300a: every tenant action redirects here while frozen, so this
+          // is the sentence that explains the press that went nowhere.
+          <p role="status" className="mb-6 rounded-md border p-4 break-words">
+            Your landlord’s account here is closed for changes. You can still read your lease, payments, notices and
+            messages, but you cannot pay, send messages or make requests here. Contact your landlord directly. In an
+            emergency, call 911.
+          </p>
+        )}
         {children}
       </main>
     </div>

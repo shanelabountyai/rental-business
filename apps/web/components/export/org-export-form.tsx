@@ -30,3 +30,34 @@ export function OrgExportForm({ action }: { action: Action }) {
     </div>
   )
 }
+
+/// R-300a: the owner's own freeze. Its own form and result region, below the
+/// export, so the export's notice and this one can never be confused.
+export function OrgFreezeForm({ action, slug }: { action: Action; slug: string }) {
+  const [state, formAction] = useActionState<OrgExportFormState, FormData>(action, {})
+  return (
+    <div className="flex flex-col gap-3">
+      <FormAlerts state={state} />
+      <form action={formAction} className="flex max-w-sm flex-col gap-3">
+        <TextField
+          label={`Type ${slug} to confirm the freeze`}
+          name="confirmFreeze"
+          required
+          autoComplete="off"
+          error={state.fieldErrors?.confirmFreeze}
+          idPrefix="org-freeze"
+        />
+        <TextField
+          label="Your authenticator code to freeze"
+          name="freezeCode"
+          required
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          error={state.fieldErrors?.freezeCode}
+          idPrefix="org-freeze"
+        />
+        <SubmitButton label="Freeze this organisation" />
+      </form>
+    </div>
+  )
+}

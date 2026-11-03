@@ -589,8 +589,12 @@ model Organization {
   /// (CHECK: a lower-case bare hostname). Read by `orgIdForHost` and `authUrl`.
   customDomain         String?   @unique
   /// R-291a (D-383): PROVISIONING until the platform marks it live from the
-  /// checklist; then the slug is fixed. R-300 adds FROZEN and OFFBOARDED.
+  /// checklist; then the slug is fixed. R-300a adds FROZEN and OFFBOARDED.
   status               OrgStatus @default(PROVISIONING)
+  /// R-300a: set while FROZEN (CHECK); the D-325 window counts from it.
+  frozenAt             DateTime?
+  /// R-300a: the purge date, once offboarding is scheduled (FROZEN only, CHECK).
+  offboardAt           DateTime?
   /// R-291a: what the owner states rather than the database shows - `just_me`
   /// (step 2), `templates_reviewed` (4), `shared_email` (7). CHECK-enforced set.
   setupMarks           String[]  @default([])
@@ -721,6 +725,10 @@ model Organization {
 enum OrgStatus {
   PROVISIONING
   ACTIVE
+  /// R-300a: reads only, crons skip, subscriptions paused (D-319).
+  FROZEN
+  /// R-300b: exported, disconnected, non-evidence rows purged.
+  OFFBOARDED
 }
 
 enum IntegrationProvider {

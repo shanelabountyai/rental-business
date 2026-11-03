@@ -111,8 +111,11 @@ export async function requirePermission(
   // to prove a second factor (ROLE-05). The rest go to /no-access, which says
   // which permission was missing.
   if (decision.reason === 'mfa_required') redirect('/account?mfa=required')
+  // R-300a: a frozen org's actor holds reads only, so the reason that helps
+  // is the freeze, not the role.
+  const reason = actor.readOnly ? 'org_frozen' : decision.reason
   redirect(
-    `/no-access?permission=${encodeURIComponent(permission)}&reason=${decision.reason}`,
+    `/no-access?permission=${encodeURIComponent(permission)}&reason=${reason}`,
   )
 }
 

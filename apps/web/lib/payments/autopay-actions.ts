@@ -37,7 +37,7 @@ export interface AutopaySetupState {
 }
 
 export async function startAutopaySetup(): Promise<AutopaySetupState> {
-  const { scope } = await requireTenantWithScope()
+  const { scope } = await requireTenantWithScope({ write: true })
   if (scope.leaseIds.length === 0) {
     return { error: 'There is no account set up to pay against yet.' }
   }
@@ -84,7 +84,7 @@ export async function setDebitDay(
   _previous: { error?: string; saved?: boolean },
   formData: FormData,
 ): Promise<{ error?: string; saved?: boolean }> {
-  const { scope } = await requireTenantWithScope()
+  const { scope } = await requireTenantWithScope({ write: true })
   const debitDay = Number(formData.get('debitDay'))
 
   const payer = await prisma.leasePayer.findFirst({
@@ -165,7 +165,7 @@ export async function setDebitDay(
  * email on file gets the same sentence a staff member would.
  */
 export async function turnOffAutopay(): Promise<{ error?: string; notice?: string }> {
-  const { scope } = await requireTenantWithScope()
+  const { scope } = await requireTenantWithScope({ write: true })
 
   const payer = await prisma.leasePayer.findFirst({
     where: { leaseId: { in: [...scope.leaseIds] }, tenantId: scope.tenantId, active: true },

@@ -127,6 +127,11 @@ export const AUDIT_ACTIONS = [
   'org.test_invoice_sent',
   /// R-299 (PRD 10 §8): the full organisation export started (`entityId` is its JobRun).
   'org.exported',
+  /// R-300a (PRD 10 §8, PRD 11 §4.6): ACTIVE → FROZEN and back, and the purge
+  /// date set (`after.offboardAt`). PLATFORM rows carry `after.reason`.
+  'org.frozen',
+  'org.restored',
+  'org.offboard_scheduled',
   /// R-292b, R-293b (PRD 11 §3.1): an org's Twilio provisioning or Resend
   /// domain started, re-polled (by an admin, or by the nightly cron when the
   /// status moved) or retired. Never the sealed secret.

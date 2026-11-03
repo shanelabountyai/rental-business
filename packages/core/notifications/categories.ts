@@ -159,6 +159,12 @@ export const NOTIFICATION_CATEGORIES = [
   /// /settings/setup, proving the org's texting reaches a phone. Pressed by
   /// the recipient, so there is nothing to mute: locked.
   'setup_test',
+
+  /// R-300a (PRD 10 §8, PRD 11 §4.6): the organisation was frozen, restored,
+  /// or scheduled for offboarding. Sent to its active owners only. Locked for
+  /// the reason `support_access` is: an owner who muted it could lose their
+  /// organisation's data without being told the date.
+  'org_status',
 ] as const
 
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number]
@@ -208,6 +214,8 @@ const CATEGORY_CHANNELS: Partial<Record<NotificationCategory, readonly Notificat
   support_access: ['EMAIL', 'SMS'],
   /// R-291b: the step it proves is the texting one.
   setup_test: ['SMS'],
+  /// R-300a: a dated notice an owner may need to forward or file.
+  org_status: ['EMAIL'],
   /// Never PORTAL - a prospect has no account and no portal to read one in
   /// (NotificationRecipientType.PROSPECT's own schema comment).
   prospect_prescreening: ['EMAIL', 'SMS'],
@@ -294,6 +302,8 @@ export const LOCKED_CATEGORIES: Readonly<
   support_access:
     'This is how you learn that platform support asked to view, or entered, your organisation. Turning it off would let that happen without you knowing.',
   setup_test: 'This text is sent only when you press "Send a test text" during setup, to prove texting reaches your phone.',
+  org_status:
+    'This is how you learn your organisation was frozen, restored or scheduled for offboarding. Turning it off could let your data be deleted without you knowing the date.',
 }
 
 export function isLockedCategory(category: NotificationCategory): boolean {
@@ -429,6 +439,7 @@ export const CATEGORY_LABELS: Record<NotificationCategory, string> = {
   account_access: 'Sign-in and password links',
   support_access: 'Platform support access to your organisation',
   setup_test: 'Setup test text',
+  org_status: 'Your organisation frozen, restored or scheduled for offboarding',
 }
 
 /**
@@ -528,6 +539,7 @@ export const CATEGORY_AUDIENCE: Record<
   account_access: new Set(['STAFF', 'TENANT', 'GUARANTOR']),
   support_access: new Set(['STAFF']),
   setup_test: new Set(['STAFF']),
+  org_status: new Set(['STAFF']),
 }
 
 /**
@@ -540,7 +552,7 @@ export const CATEGORY_AUDIENCE: Record<
  * nothing is sent while the switch is off, and the platform-wide env switch
  * still suppresses.
  */
-export const HELD_WHEN_SWITCHED_OFF: ReadonlySet<NotificationCategory> = new Set(['support_access'])
+export const HELD_WHEN_SWITCHED_OFF: ReadonlySet<NotificationCategory> = new Set(['support_access', 'org_status'])
 
 export function isInAudience(
   category: NotificationCategory,

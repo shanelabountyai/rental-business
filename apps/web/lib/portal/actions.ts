@@ -42,7 +42,7 @@ export async function replyFromPortal(
   _previous: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const { tenant, scope } = await requireTenantWithScope()
+  const { tenant, scope } = await requireTenantWithScope({ write: true })
 
   const thread = await prisma.thread.findFirst({
     where: { id: threadId, tenantId: scope.tenantId },

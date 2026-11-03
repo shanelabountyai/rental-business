@@ -72,7 +72,7 @@ const MAX_PHOTO_BYTES = 15 * 1024 * 1024
 export async function uploadMaintenancePhoto(
   file: File,
 ): Promise<{ id: string } | { error: string }> {
-  const { tenant, scope } = await requireTenantWithScope()
+  const { tenant, scope } = await requireTenantWithScope({ write: true })
 
   if (!file.type.startsWith('image/')) {
     return { error: 'Only photos can be attached here.' }
@@ -138,7 +138,7 @@ export async function attachMaintenancePhoto(
   ticketId: string,
   documentId: string,
 ): Promise<{ error?: string }> {
-  const { tenant, scope } = await requireTenantWithScope()
+  const { tenant, scope } = await requireTenantWithScope({ write: true })
 
   const ticket = await prisma.ticket.findFirst({
     where: { id: ticketId, tenantId: scope.tenantId },
@@ -184,7 +184,7 @@ export type SubmitMaintenanceRequestResult = MaintenanceFormState | { ticketId: 
 export async function submitMaintenanceRequest(
   args: SubmitMaintenanceRequestArgs,
 ): Promise<SubmitMaintenanceRequestResult> {
-  const { tenant, scope } = await requireTenantWithScope()
+  const { tenant, scope } = await requireTenantWithScope({ write: true })
 
   if (!isMaintenanceCategory(args.category)) {
     return { error: 'Choose a category.' }
@@ -382,7 +382,7 @@ export async function submitEmergencyForm(
 export async function submitEmergencyRequest(
   args: EmergencyRequestInput,
 ): Promise<SubmitEmergencyResult> {
-  const { tenant, scope } = await requireTenantWithScope()
+  const { tenant, scope } = await requireTenantWithScope({ write: true })
 
   const violations = validateEmergencyRequest(args)
   if (violations.length > 0) {

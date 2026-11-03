@@ -1,9 +1,9 @@
 import { friendlyTimestamp } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
-import { OrgExportForm } from '@/components/export/org-export-form.tsx'
+import { OrgExportForm, OrgFreezeForm } from '@/components/export/org-export-form.tsx'
 import { PageHeader } from '@/components/page-header.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
-import { startOrgExport } from '@/lib/export/actions.ts'
+import { freezeOwnOrganization, startOrgExport } from '@/lib/export/actions.ts'
 import { ORG_EXPORT_JOB, ORG_EXPORT_TTL_MS } from '@/lib/export/org-export.ts'
 import { orgTimezone } from '@/lib/support/grants.ts'
 
@@ -16,9 +16,10 @@ const STATUS = { RUNNING: 'Being made', SUCCEEDED: 'Ready', FAILED: 'Failed' } a
 
 export default async function OrgExportPage() {
   const actor = await requirePermission('report.financial')
-  await requirePermission('staff.manage')
+  await requirePermission('property.export')
   await requirePermission('audit.read')
-  const [runs, zone] = await Promise.all([
+  const [org, runs, zone] = await Promise.all([
+    prisma.organization.findUniqueOrThrow({ where: { id: actor.orgId }, select: { slug: true, status: true, offboardAt: true } }),
     prisma.jobRun.findMany({
       where: { orgId: actor.orgId, jobType: ORG_EXPORT_JOB },
       select: { id: true, status: true, startedAt: true, finishedAt: true, error: true, result: true },
@@ -67,6 +68,29 @@ export default async function OrgExportPage() {
               )
             })}
           </ul>
+        )}
+      </section>
+      <section aria-labelledby="freeze-heading" className="flex flex-col gap-3">
+        <h2 id="freeze-heading" className="text-lg font-semibold">
+          Freeze this organisation
+        </h2>
+        {org.status === 'FROZEN' ? (
+          <p className="text-sm break-words">
+            Frozen. Everyone can still read and export; nothing can be changed, scheduled jobs are stopped and rent
+            collection is paused. Only platform support can restore it.
+            {org.offboardAt && ` Its data is scheduled for removal on or after ${friendlyTimestamp(org.offboardAt, zone)}.`}
+          </p>
+        ) : org.status === 'ACTIVE' ? (
+          <>
+            <p className="text-sm">
+              For leaving the service. Everyone keeps read access and can still export, but nothing can be changed,
+              scheduled jobs stop and rent collection is paused (subscriptions are paused, not cancelled). You cannot
+              undo it yourself: only platform support can restore it.
+            </p>
+            <OrgFreezeForm action={freezeOwnOrganization} slug={org.slug} />
+          </>
+        ) : (
+          <p className="text-sm">An organisation still being set up cannot be frozen.</p>
         )}
       </section>
     </div>

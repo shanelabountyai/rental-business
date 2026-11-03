@@ -60,6 +60,8 @@ export const manifest: Record<string, Entry> = {
   'lib/support/actions.ts#answerSupportAccess': { 'form.grantId': 'supportAccessGrant', 'form.intent': '=deny' },
   // R-299: the full org export; the org is the session's and it takes no id.
   'lib/export/actions.ts#startOrgExport': { 'form.code': 'value' },
+  // R-300a: the owner's own freeze; the org is the session's, the slug typed back.
+  'lib/export/actions.ts#freezeOwnOrganization': { 'form.confirmFreeze': 'value', 'form.freezeCode': 'value' },
   // R-291a: the owner's checklist statements; the org is the session's.
   'lib/setup/actions.ts#markSetupStep': { 'form.mark': '=just_me', 'form.intent': '=on' },
   // R-291b: step 9's presses. The phone is the owner's own; the invoice id is bound server-side.
@@ -94,6 +96,8 @@ export const manifest: Record<string, Entry> = {
   // R-304b: the console names any org by its slug, by design.
   'lib/platform/org-actions.ts#configureOrganization': { 'form.slug': 'value' },
   'lib/platform/org-actions.ts#changeOrgSlug': { 'form.slug': 'value' },
+  // R-300a: freeze / restore / schedule offboarding name the org by slug.
+  'lib/platform/org-actions.ts#changeOrgLifecycle': { 'form.slug': 'value', 'form.intent': '=freeze', 'form.lifecycleReason': '=invariant', 'form.confirmLifecycle': 'value' },
   // R-306: the kill switch names the org the same way.
   'lib/platform/org-actions.ts#switchOrgNotifications': { 'form.slug': 'value', 'form.intent': '=off', 'form.reason': '=invariant' },
   // R-291a: go-live names the org by slug, typed back to confirm.

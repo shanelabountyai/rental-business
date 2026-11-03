@@ -2,7 +2,8 @@
 
 import { recordAudit } from '@rental/core/audit'
 import { mintToken } from '@rental/core/auth'
-import { RESERVED_ORG_SLUGS, orgSlugRefusal } from '@rental/core/rbac'
+import { RESERVED_ORG_SLUGS, orgSlugRefusal, slugConfirmRefusal } from '@rental/core/rbac'
+import { friendlyTimestamp } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
@@ -11,6 +12,7 @@ import { usableColor } from '@/lib/brand.ts'
 import { authUrl } from '@/lib/auth/delivery.ts'
 import { deliverOverChannel } from '@/lib/notifications/deliver.ts'
 import { requirePlatform } from '@/lib/platform/guard.ts'
+import { type LifecycleAudit, freezeOrg, restoreOrg, scheduleOffboarding } from '@/lib/org-lifecycle/lifecycle.ts'
 import { refreshOrgHealth } from '@/lib/cron/org-health.ts'
 import { STEP_LABELS, SETUP_STEPS, readyToGoLive, setupChecklist, setupFacts } from '@/lib/setup/checklist.ts'
 import { minutesUntil, orgInviteEmail } from '@/lib/platform/mail.ts'
@@ -409,4 +411,59 @@ export async function markOrgLive(_previous: OrgInviteFormState, formData: FormD
   revalidatePath(`/platform/orgs/${slug}`)
   revalidatePath('/platform/orgs')
   return { notice: live ? 'The organisation is live. Its slug is now fixed.' : 'The organisation is already live.' }
+}
+
+/**
+ * Freeze, restore, or schedule offboarding (PRD 11 §4.6, R-300a). `org.freeze`
+ * for the first two and `org.offboard` for the third, each a step-up
+ * permission, so the guard asks for a fresh code on every press; a reason and
+ * the slug typed back on all three. The transitions themselves are
+ * `lib/org-lifecycle/lifecycle.ts`, shared with the owner's own freeze.
+ */
+export async function changeOrgLifecycle(_previous: OrgInviteFormState, formData: FormData): Promise<OrgInviteFormState> {
+  const slug = str(formData, 'slug')
+  const intent = str(formData, 'intent')
+  // The guard first, whatever the form says (PLAT-02); an unknown intent asks for `org.freeze`.
+  const actor = await requirePlatform({
+    permission: intent === 'offboard' ? 'org.offboard' : 'org.freeze',
+    stepUp: true,
+    next: `/platform/orgs/${encodeURIComponent(slug)}`,
+  })
+  if (intent !== 'freeze' && intent !== 'restore' && intent !== 'offboard') return { error: 'That action is not recognised.' }
+  const org = await prisma.organization.findUnique({ where: { slug }, select: { id: true } })
+  if (!org) return { error: 'That organisation no longer exists.' }
+
+  const reason = str(formData, 'lifecycleReason')
+  const mismatch = slugConfirmRefusal(str(formData, 'confirmLifecycle'), slug)
+  if (!reason || mismatch) {
+    return {
+      error: mismatch ?? 'A reason is required.',
+      // Keyed by intent: a frozen org's panel shows the restore and offboard forms at once.
+      fieldErrors: {
+        ...(!reason && { [`lifecycleReason.${intent}`]: 'Say why. The owners read it word for word.' }),
+        ...(mismatch && { [`confirmLifecycle.${intent}`]: 'Does not match.' }),
+      },
+    }
+  }
+
+  const ip = await clientIp()
+  const record: LifecycleAudit = (tx, entry) =>
+    recordAudit(tx, { actor: { type: 'PLATFORM', ref: actor.id, ipAddress: ip }, entityType: 'Organization', entityId: org.id, orgId: org.id, ...entry })
+  const outcome =
+    intent === 'freeze'
+      ? await freezeOrg(org.id, 'platform', reason, record)
+      : intent === 'restore'
+        ? await restoreOrg(org.id, reason, record)
+        : await scheduleOffboarding(org.id, reason, record)
+  if (!outcome.ok) return { error: outcome.error }
+  revalidatePath(`/platform/orgs/${slug}`)
+  revalidatePath('/platform/orgs')
+  return {
+    notice:
+      intent === 'freeze'
+        ? 'Frozen. Its people can read and export but change nothing, its crons are skipped and rent collection is paused. The owners were told.'
+        : intent === 'restore'
+          ? 'Restored. Everything works again and billing resumes. The owners were told.'
+          : `Offboarding is scheduled for ${friendlyTimestamp(outcome.purgeOn!, 'UTC')}. The owners were told.`,
+  }
 }

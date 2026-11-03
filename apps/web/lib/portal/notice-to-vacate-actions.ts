@@ -32,7 +32,7 @@ export async function submitNoticeToVacate(
   _previous: NoticeToVacateFormState,
   formData: FormData,
 ): Promise<NoticeToVacateFormState> {
-  const { scope } = await requireTenantWithScope()
+  const { scope } = await requireTenantWithScope({ write: true })
   const home = await getTenantHome(scope)
   if (!home) {
     return { error: 'We do not have a home on file for you yet. Send us a message instead.' }

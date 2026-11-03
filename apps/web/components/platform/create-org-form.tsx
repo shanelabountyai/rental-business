@@ -300,3 +300,101 @@ export function OrgGoLivePanel({
     </div>
   )
 }
+
+/// "Freeze / restore" and "Schedule offboarding" (PRD 11 §4.6, R-300a). ONE
+/// action state and one result region for the panel, mounted outside the
+/// status branches: a freeze swaps the freeze form for the restore one, and a
+/// notice inside the form that pressed would leave with it (CLAUDE.md). Field
+/// errors carry their form's intent, because a frozen org shows two forms.
+export function OrgLifecyclePanel({
+  action,
+  slug,
+  status,
+  purgeOn,
+  scheduled,
+  canFreeze,
+  canOffboard,
+}: {
+  action: OrgAction
+  slug: string
+  status: string
+  /// The D-325 date: when it WOULD purge if scheduled, or when it will.
+  purgeOn: string | null
+  scheduled: boolean
+  canFreeze: boolean
+  canOffboard: boolean
+}) {
+  const [state, formAction] = useActionState<OrgInviteFormState, FormData>(action, {})
+  if (status !== 'ACTIVE' && status !== 'FROZEN') return null
+  const form = (intent: 'freeze' | 'restore' | 'offboard', verb: string, button: string) => (
+    <LifecycleForm formAction={formAction} errors={state.fieldErrors ?? {}} slug={slug} intent={intent} verb={verb} button={button} />
+  )
+  return (
+    <section aria-labelledby="lifecycle-heading" className="flex flex-col gap-3 rounded-md border p-4 text-sm">
+      <h2 id="lifecycle-heading" className="text-lg font-semibold">
+        Freeze and offboarding
+      </h2>
+      <FormAlerts state={state} />
+      {status === 'ACTIVE' ? (
+        <>
+          <p>
+            Live. Freezing it leaves its people able to read and export but not change anything, skips its crons and
+            pauses rent collection (subscriptions are paused, not cancelled). The owners are told. It asks for a fresh
+            code.
+          </p>
+          {canFreeze && form('freeze', 'freezing', 'Freeze organisation')}
+        </>
+      ) : (
+        <>
+          <p className="break-words">
+            {scheduled
+              ? `This organisation is frozen and scheduled for offboarding: its data may be purged on or after ${purgeOn}. Restoring it cancels that.`
+              : `This organisation is frozen and not scheduled for offboarding. Scheduling it sets the purge date to ${purgeOn}, 90 days after the freeze.`}
+          </p>
+          {canFreeze && form('restore', 'restoring', 'Restore organisation')}
+          {canOffboard && !scheduled && form('offboard', 'offboarding', 'Schedule offboarding')}
+        </>
+      )}
+    </section>
+  )
+}
+
+function LifecycleForm({
+  formAction,
+  errors,
+  slug,
+  intent,
+  verb,
+  button,
+}: {
+  formAction: (formData: FormData) => void
+  errors: Record<string, string>
+  slug: string
+  intent: 'freeze' | 'restore' | 'offboard'
+  verb: string
+  button: string
+}) {
+  return (
+    <form action={formAction} className="flex flex-col gap-4">
+      <input type="hidden" name="slug" value={slug} />
+      <input type="hidden" name="intent" value={intent} />
+      <TextField
+        label={`Reason for ${verb}`}
+        name="lifecycleReason"
+        required
+        error={errors[`lifecycleReason.${intent}`]}
+        hint="Sent to the owners and recorded in the organisation's audit log."
+        idPrefix={`lifecycle-${intent}`}
+      />
+      <TextField
+        label={`Type the slug to confirm ${verb}`}
+        name="confirmLifecycle"
+        required
+        autoComplete="off"
+        error={errors[`confirmLifecycle.${intent}`]}
+        idPrefix={`lifecycle-${intent}`}
+      />
+      <SubmitButton label={button} />
+    </form>
+  )
+}

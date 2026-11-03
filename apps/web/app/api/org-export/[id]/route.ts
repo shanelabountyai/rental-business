@@ -10,7 +10,7 @@ import { storage } from '@/lib/storage/index.ts'
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const actor = await requirePermission('report.financial')
-  await requirePermission('staff.manage')
+  await requirePermission('property.export')
   await requirePermission('audit.read')
   const { id } = await params
   // Another org's id answers exactly as a missing one (ORG-04).

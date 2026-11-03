@@ -26,9 +26,11 @@ export default async function NoAccessPage({
     <div className="flex max-w-prose flex-col gap-3">
       <PageHeader title="You don&rsquo;t have access to that" />
       <p className="text-muted-foreground text-sm">
-        {reason === 'out_of_scope'
-          ? 'Your access covers some properties but not that one. Ask whoever manages access to widen your scope.'
-          : 'Your role doesn’t include this. Ask whoever manages access if you need it.'}
+        {reason === 'org_frozen'
+          ? 'This organisation is frozen. Everything can still be read and exported, and nothing can be changed until it is restored.'
+          : reason === 'out_of_scope'
+            ? 'Your access covers some properties but not that one. Ask whoever manages access to widen your scope.'
+            : 'Your role doesn’t include this. Ask whoever manages access if you need it.'}
       </p>
       {permission && (
         <p className="text-muted-foreground text-sm">

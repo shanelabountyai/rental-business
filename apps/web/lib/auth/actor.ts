@@ -4,6 +4,7 @@ import {
   type Actor,
   type Assignment,
   type Permission,
+  actorForOrgStatus,
   effectiveCeiling,
   isPermission,
 } from '@rental/core/rbac'
@@ -60,7 +61,7 @@ export async function loadStaffActor(staffUserId: string, mfaVerified: boolean, 
       orgMemberships: {
         where: { removedAt: null, ...(orgId === undefined ? {} : { orgId }) },
         orderBy: { joinedAt: 'asc' },
-        select: { orgId: true },
+        select: { orgId: true, organization: { select: { status: true } } },
         take: 1,
       },
       assignments: {
@@ -86,6 +87,7 @@ export async function loadStaffActor(staffUserId: string, mfaVerified: boolean, 
 
   // '' is no organisation's id, so a member of none matches no row anywhere.
   const memberOf = staffUser.orgMemberships[0]?.orgId ?? ''
+  const orgStatus = staffUser.orgMemberships[0]?.organization.status ?? 'ACTIVE'
   const inOrg = staffUser.assignments.filter((row) => row.orgId === memberOf)
 
   const assignments: Assignment[] = inOrg.map((row) => ({
@@ -117,7 +119,8 @@ export async function loadStaffActor(staffUserId: string, mfaVerified: boolean, 
       ),
     },
   }
-  return actor
+  // R-300a: a frozen org's staff read and change nothing.
+  return actorForOrgStatus(actor, orgStatus)
 }
 
 async function loadTenantActor(tenantId: string) {
@@ -127,6 +130,7 @@ async function loadTenantActor(tenantId: string) {
       id: true,
       orgId: true,
       active: true,
+      organization: { select: { status: true } },
       leaseTenants: { select: { leaseId: true } },
     },
   })
@@ -163,7 +167,7 @@ async function loadTenantActor(tenantId: string) {
     leaseIds: tenant.leaseTenants.map((link) => link.leaseId),
     ceilings: { approveWorkOrderCents: 0, waiveFeeCents: 0 },
   }
-  return actor
+  return actorForOrgStatus(actor, tenant.organization.status)
 }
 
 /// R-165. A guarantor guarantees exactly one lease (Guarantor.leaseId), so
@@ -171,7 +175,7 @@ async function loadTenantActor(tenantId: string) {
 async function loadGuarantorActor(guarantorId: string) {
   const guarantor = await prisma.guarantor.findUnique({
     where: { id: guarantorId },
-    select: { id: true, orgId: true, active: true, leaseId: true },
+    select: { id: true, orgId: true, active: true, leaseId: true, organization: { select: { status: true } } },
   })
   if (!guarantor) return null
 
@@ -204,7 +208,7 @@ async function loadGuarantorActor(guarantorId: string) {
     leaseIds: [guarantor.leaseId],
     ceilings: { approveWorkOrderCents: 0, waiveFeeCents: 0 },
   }
-  return actor
+  return actorForOrgStatus(actor, guarantor.organization.status)
 }
 
 /**

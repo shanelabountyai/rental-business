@@ -51,7 +51,7 @@ export async function startPayment(
   _previous: PayFormState,
   formData: FormData,
 ): Promise<PayFormState> {
-  const { scope } = await requireTenantWithScope()
+  const { scope } = await requireTenantWithScope({ write: true })
 
   // THEIR OWN payer, found from their own scope. The form carries no payer
   // id at all - one that did would be an id somebody could change.

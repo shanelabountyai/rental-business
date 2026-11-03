@@ -45,7 +45,7 @@ export const STEP_LABELS: Record<SetupStep, { label: string; owner: string }> = 
 type Integration = { status: string; statusReason: string | null }
 
 export type SetupFacts = {
-  status: 'PROVISIONING' | 'ACTIVE'
+  status: 'PROVISIONING' | 'ACTIVE' | 'FROZEN' | 'OFFBOARDED'
   marks: string[]
   activeOwners: number
   activeMembers: number
@@ -76,7 +76,7 @@ export function setupChecklist(f: SetupFacts): Checklist {
     email: f.resend?.status === 'VERIFIED' || f.marks.includes('shared_email'),
     jurisdiction: f.properties > 0 && f.unreviewedStates.length === 0,
     test: f.testText && f.testPayment,
-    live: f.status === 'ACTIVE',
+    live: f.status !== 'PROVISIONING',
   }
 }
 

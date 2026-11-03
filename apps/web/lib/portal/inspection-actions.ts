@@ -32,7 +32,7 @@ export async function signInspectionAsTenant(
   _previous: InspectionSignFormState,
   formData: FormData,
 ): Promise<InspectionSignFormState> {
-  const { scope } = await requireTenantWithScope()
+  const { scope } = await requireTenantWithScope({ write: true })
 
   const inspection = await prisma.inspection.findUnique({ where: { id: inspectionId } })
   if (!inspection?.leaseId || !scope.leaseIds.includes(inspection.leaseId)) {
@@ -135,7 +135,7 @@ export async function recordItemAsTenant(
   _previous: InspectionSignFormState,
   formData: FormData,
 ): Promise<InspectionSignFormState> {
-  const { scope } = await requireTenantWithScope()
+  const { scope } = await requireTenantWithScope({ write: true })
   const item = await selfGuidedItemForWrite(itemId, scope)
   if (!item) return { error: 'That report could not be found.' }
 
@@ -155,7 +155,7 @@ export async function recordItemPhotoAsTenant(
   _previous: InspectionSignFormState,
   formData: FormData,
 ): Promise<InspectionSignFormState> {
-  const { scope } = await requireTenantWithScope()
+  const { scope } = await requireTenantWithScope({ write: true })
   const item = await selfGuidedItemForWrite(itemId, scope)
   if (!item) return { error: 'That report could not be found.' }
 
@@ -181,7 +181,7 @@ export async function finishInspectionAsTenant(
   _previous: InspectionSignFormState,
   _formData: FormData,
 ): Promise<InspectionSignFormState> {
-  const { scope } = await requireTenantWithScope()
+  const { scope } = await requireTenantWithScope({ write: true })
   const inspection = await prisma.inspection.findUnique({
     where: { id: inspectionId },
     include: { items: { select: { condition: true } } },

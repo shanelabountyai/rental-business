@@ -9,18 +9,23 @@ export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Organisations' }
 
 // PRD 11 §4.3 (R-303). Search is a plain GET form, so it works before
-// hydration. Not here yet: the status filter and column (R-300), checklist
+// hydration, and so is the status filter (R-300a). Not here yet: checklist
 // n/10 (R-291), open grants (R-295) and the fee (R-296).
-export default async function PlatformOrgsPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+const STATUSES = { PROVISIONING: 'Being set up', ACTIVE: 'Live', FROZEN: 'Frozen', OFFBOARDED: 'Offboarded' } as const
+
+export default async function PlatformOrgsPage({ searchParams }: { searchParams: Promise<{ q?: string; status?: string }> }) {
   const admin = await requirePlatform({ permission: 'org.read' })
   // Shown to holders of `org.create`; the press asks for the code (R-304a).
   const decision = await platformDecision(admin, 'org.create')
   const canCreate = decision.allowed || decision.reason === 'stepup_required'
-  const q = (await searchParams).q?.trim() ?? ''
+  const params = await searchParams
+  const q = params.q?.trim() ?? ''
+  const status = Object.keys(STATUSES).find((s) => s === params.status) as keyof typeof STATUSES | undefined
   const orgs = await prisma.organization.findMany({
-    where: q
-      ? { OR: [{ name: { contains: q, mode: 'insensitive' } }, { slug: { contains: q, mode: 'insensitive' } }] }
-      : undefined,
+    where: {
+      ...(q && { OR: [{ name: { contains: q, mode: 'insensitive' } }, { slug: { contains: q, mode: 'insensitive' } }] }),
+      ...(status && { status }),
+    },
     select: ORG_SUMMARY_SELECT,
     orderBy: { name: 'asc' },
   })
@@ -44,12 +49,23 @@ export default async function PlatformOrgsPage({ searchParams }: { searchParams:
           Search by name or slug
           <input name="q" defaultValue={q} className={INPUT_CLASSES} />
         </label>
+        <label className="flex min-w-0 flex-col gap-1 text-sm font-medium">
+          Status
+          <select name="status" defaultValue={status ?? ''} className={INPUT_CLASSES}>
+            <option value="">Any</option>
+            {Object.entries(STATUSES).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
         <button type="submit" className={`${SUBMIT_BUTTON_CLASSES} min-h-11 px-4 py-2`}>
           Search
         </button>
       </form>
       {orgs.length === 0 ? (
-        <p className="text-sm">{q ? 'No organisations match.' : 'No organisations yet.'}</p>
+        <p className="text-sm">{q || status ? 'No organisations match.' : 'No organisations yet.'}</p>
       ) : (
         <ul className="flex flex-col divide-y rounded-md border">
           {orgs.map((org) => (
@@ -57,7 +73,9 @@ export default async function PlatformOrgsPage({ searchParams }: { searchParams:
               <Link href={`/platform/orgs/${org.slug}`} className="font-medium underline underline-offset-4">
                 {org.name}
               </Link>
-              <span className="text-muted-foreground">{org.slug}</span>
+              <span className="text-muted-foreground">
+                {org.slug} · {STATUSES[org.status]}
+              </span>
               <span>
                 {org.integrations.length === 0
                   ? 'No integrations started'

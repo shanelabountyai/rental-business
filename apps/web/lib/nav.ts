@@ -304,8 +304,9 @@ export const NAV_ITEMS: readonly NavItem[] = [
     label: 'Export data',
     group: 'Admin',
     /// PRD 10 §8: owner-only. The page also needs `report.financial` and
-    /// `audit.read`; `staff.manage` is the one a manager lacks.
-    permission: 'staff.manage',
+    /// `audit.read`; `property.export` is the one a manager lacks, and the one
+    /// a frozen org's owner keeps (D-386).
+    permission: 'property.export',
     portfolioOnly: true,
     ownedBy: 'R-299',
   },

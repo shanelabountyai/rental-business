@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { businessDateToUtc, utcToBusinessDate } from '@rental/core/scheduling'
-import { type Prisma, prisma } from '@rental/db'
+import { type OrgStatus, type Prisma, prisma } from '@rental/db'
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { isAuthorizedCron } from '@/lib/cron/authorize.ts'
 import { type CronChild, recordOrgHealth } from '@/lib/cron/org-health.ts'
@@ -20,6 +20,9 @@ import { isUniqueViolation } from '@/lib/db/unique-violation.ts'
 //
 // ponytail: every org at once. Each child opens its own pool, so at a few
 // dozen orgs this wants batches of ten; at two it does not.
+
+/// Every status but FROZEN and OFFBOARDED (PRD 10 §8: "crons skip the org").
+const RUNNABLE: OrgStatus[] = ['PROVISIONING', 'ACTIVE']
 
 export type OrgRunResult = { ok: boolean } & Record<string, unknown>
 
@@ -42,8 +45,11 @@ export async function cronRoute(
   const orgId = new URL(request.url).searchParams.get('org')
   if (orgId === null) return Response.json(await fanOut(request))
 
-  const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { id: true } })
+  const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { status: true } })
   if (!org) return new Response('Not found', { status: 404 })
+  // R-300a: crons skip a frozen org - here as well as in the fan-out, so a
+  // re-run from the console (D-356) cannot start one either. Not a failure.
+  if (!RUNNABLE.includes(org.status)) return Response.json({ ok: true, skipped: org.status })
 
   try {
     const result = await runForOrg(orgId)
@@ -59,7 +65,11 @@ export async function cronRoute(
 
 async function fanOut(request: Request) {
   const startedAt = Date.now()
-  const orgs = await prisma.organization.findMany({ select: { id: true }, orderBy: { id: 'asc' } })
+  const orgs = await prisma.organization.findMany({
+    where: { status: { in: RUNNABLE } },
+    select: { id: true },
+    orderBy: { id: 'asc' },
+  })
   const authorization = request.headers.get('authorization') ?? ''
 
   const results = await Promise.all(

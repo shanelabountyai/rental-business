@@ -37,6 +37,10 @@ export interface LeaseBillingFacts {
   /// True while the lease is under a collection hold. R-047 owns the
   /// per-tenant switches that set it; this only reacts to it.
   collectionPaused: boolean
+  /// R-300a: the org is frozen - "subscriptions paused, not cancelled" (PRD
+  /// 10 §8). A hold of its own rather than a write to `collectionPaused`, so
+  /// a restore resumes only what the freeze paused.
+  orgFrozen?: boolean
   /// When the tenancy actually ends, for a cancellation that should take
   /// effect then rather than immediately.
   moveOutAt: Date | null
@@ -118,6 +122,12 @@ export function lifecycleDecision(
     }
   }
 
+  // A frozen org starts no billing (R-300a); a cancellation above still runs,
+  // because stopping a charge is never what a freeze is protecting against.
+  if (lease.orgFrozen && (!lease.stripeSubscriptionId || (stripe && STRIPE_TERMINAL.has(stripe.status)))) {
+    return { action: 'none', reason: 'The organisation is frozen, so no billing is started.' }
+  }
+
   // 3. Live, but nothing at Stripe.
   if (!lease.stripeSubscriptionId) {
     return { action: 'provision', reason: 'A live tenancy with no subscription.' }
@@ -137,10 +147,13 @@ export function lifecycleDecision(
 
   // 4. Collection hold.
   const stripePaused = stripe?.status === 'paused'
+  if (lease.orgFrozen && !stripePaused) {
+    return { action: 'pause', reason: 'The organisation is frozen.' }
+  }
   if (lease.collectionPaused && !stripePaused) {
     return { action: 'pause', reason: 'The lease is under a collection hold.' }
   }
-  if (!lease.collectionPaused && stripePaused) {
+  if (!lease.collectionPaused && !lease.orgFrozen && stripePaused) {
     return { action: 'resume', reason: 'The collection hold has been lifted.' }
   }
 

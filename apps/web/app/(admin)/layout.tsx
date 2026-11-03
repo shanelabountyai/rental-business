@@ -117,6 +117,14 @@ export default async function AdminLayout({
         </div>
 
         <main id="main" className="flex-1 p-4 md:p-6">
+          {actor.readOnly && (
+            // R-300a: every write control is already gone (their checks fail);
+            // this says why, once, above every page.
+            <p role="status" className="mb-4 rounded-md border p-4 text-sm break-words">
+              This organisation is frozen. Everything can still be read and exported, and nothing can be changed until
+              platform support restores it.
+            </p>
+          )}
           {children}
         </main>
       </div>

@@ -9,6 +9,7 @@
 // R-003 answers "who is this?"; this package answers "may they?".
 export * from './authority.ts'
 export * from './can.ts'
+export * from './org-lifecycle.ts'
 export * from './permissions.ts'
 export * from './platform.ts'
 export * from './support.ts'

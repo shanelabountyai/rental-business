@@ -1,11 +1,12 @@
 import { friendlyTimestamp } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { notFound } from 'next/navigation'
-import { OrgConfigurePanel, OrgGoLivePanel, OrgInvitesPanel, OrgNotificationsPanel, OrgSlugPanel } from '@/components/platform/create-org-form.tsx'
+import { OrgConfigurePanel, OrgGoLivePanel, OrgInvitesPanel, OrgLifecyclePanel, OrgNotificationsPanel, OrgSlugPanel } from '@/components/platform/create-org-form.tsx'
+import { purgeDate } from '@rental/core/rbac'
 import { ChecklistSteps } from '@/components/setup/checklist.tsx'
 import { isChecklist } from '@/lib/setup/checklist.ts'
 import { platformDecision, requirePlatform } from '@/lib/platform/guard.ts'
-import { changeOrgSlug, configureOrganization, manageOrgInvite, markOrgLive, switchOrgNotifications } from '@/lib/platform/org-actions.ts'
+import { changeOrgLifecycle, changeOrgSlug, configureOrganization, manageOrgInvite, markOrgLive, switchOrgNotifications } from '@/lib/platform/org-actions.ts'
 import { INTEGRATION_SELECT, orgOwners, providerName } from '@/lib/platform/orgs.ts'
 import { OrgHealthPanel } from '@/components/platform/org-health.tsx'
 import { SmsProvisioningPanel, type SmsProvisioningView } from '@/components/platform/sms-provisioning.tsx'
@@ -21,9 +22,11 @@ import Link from 'next/link'
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Organisation' }
 
+const STATUS_LABEL = { PROVISIONING: 'being set up', ACTIVE: 'live', FROZEN: 'frozen', OFFBOARDED: 'offboarded' } as const
+
 // PRD 11 §4.4 (R-303): what the platform may know about one organisation,
 // and a stated line that nothing inside it shows without a grant (D-320).
-// Not here yet, each with the row that builds it: status history (R-300), the
+// Not here yet, each with the row that builds it: status history (R-300b), the
 // fee (R-296). The checklist (R-291a) is OrgHealth's booleans, never a count
 // the console ran itself. Pending invites
 // with "Resend" and "Revoke" are R-304a's. "Re-run" is on /platform/jobs (R-303b, PRD 11 §4.10).
@@ -47,6 +50,8 @@ export default async function PlatformOrgPage({
       colorAccent: true,
       notificationsEnabled: true,
       status: true,
+      frozenAt: true,
+      offboardAt: true,
       createdAt: true,
       health: true,
       integrations: { select: INTEGRATION_SELECT, orderBy: { provider: 'asc' } },
@@ -64,6 +69,13 @@ export default async function PlatformOrgPage({
   const configure = await platformDecision(admin, 'org.configure')
   const canConfigure = configure.allowed
   const canProvision = (await platformDecision(admin, 'integration.provision')).allowed
+  // Step-up permissions: offered when held, and the press asks for the code.
+  const offerable = async (p: 'org.freeze' | 'org.offboard') => {
+    const d = await platformDecision(admin, p)
+    return d.allowed || d.reason === 'stepup_required'
+  }
+  const [canFreeze, canOffboard] = [await offerable('org.freeze'), await offerable('org.offboard')]
+  const purgeOn = org.offboardAt ?? (org.frozenAt && purgeDate(org.frozenAt))
   const sms = smsView(await twilioRow(org.id), now)
   const email = emailView(await resendRow(org.id), now)
   const domain = await domainView(org.id, now)
@@ -81,7 +93,7 @@ export default async function PlatformOrgPage({
       <header className="flex flex-col gap-2 break-words">
         <h1 className="text-2xl font-semibold tracking-tight">{org.name}</h1>
         <p className="text-muted-foreground text-sm">
-          {org.slug} · {org.status === 'ACTIVE' ? 'live' : 'being set up'} · created{' '}
+          {org.slug} · {STATUS_LABEL[org.status]} · created{' '}
           {friendlyTimestamp(org.createdAt, 'UTC')} · notifications{' '}
           {org.notificationsEnabled ? 'on' : 'switched off'}
         </p>
@@ -149,7 +161,7 @@ export default async function PlatformOrgPage({
         <OrgGoLivePanel
           action={markOrgLive}
           slug={org.slug}
-          live={org.status === 'ACTIVE'}
+          live={org.status !== 'PROVISIONING'}
           canConfigure={canConfigure}
         />
       </section>
@@ -157,6 +169,16 @@ export default async function PlatformOrgPage({
       {org.status === 'PROVISIONING' && (
         <OrgSlugPanel action={changeOrgSlug} slug={org.slug} canConfigure={canConfigure} />
       )}
+
+      <OrgLifecyclePanel
+        action={changeOrgLifecycle}
+        slug={org.slug}
+        status={org.status}
+        purgeOn={purgeOn ? friendlyTimestamp(purgeOn, 'UTC') : null}
+        scheduled={org.offboardAt !== null}
+        canFreeze={canFreeze}
+        canOffboard={canOffboard}
+      />
 
       <OrgNotificationsPanel
         action={switchOrgNotifications}
