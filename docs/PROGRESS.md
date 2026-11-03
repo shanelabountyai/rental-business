@@ -15297,7 +15297,7 @@ Tests: `lib/platform/settings.test.ts` (no secret value in the output, the kill 
 
 ## R-299 — Full organisation export
 
-**SHA:** `PENDING`
+**SHA:** `d0bafc3`
 
 **What it built.** `/settings/export` (nav "Export data", owner-only) starts the export with a code typed at the press (`startOrgExport`, `lib/export/actions.ts`, reusing `verifyStaffStepUp`). It claims a `JobRun` (`org.export`, no property), audits `org.exported`, and runs the work in `after()`. `buildOrgExport` (`lib/export/org-export.ts`) reads the tables from `Prisma.dmmf`: every model with `orgId` in schema order (118), plus `Organization` and the org's member `StaffUser`s. It writes `tables/NNN-Model.csv` through `toCsv`, every `Document` file under `documents/`, and `manifest.json` (latest migration, rows per table, files missing from storage). `lib/export/zip.ts` is a hand-written deflate zip that uses node:zlib and has no dependency. The archive goes to storage under `org-exports/<org>/<run>.zip`. `/api/org-export/[id]` serves it to the same owner guard for 7 days and returns a 404 for another org's id. The action has a manifest entry, and all three files are on `RESOURCE_LESS_GUARDS` with their reasons.
 

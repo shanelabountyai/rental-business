@@ -1,6 +1,6 @@
-**2026-11-05 (latest): R-291b done (`28f88cd`, D-384).** Step 9's "Send a test text" and "Bill me $1" are on `/settings/setup`. The paid $1 lands in `SetupTestPayment` (never `LedgerEntry`), from the paid `invoice.updated` marked `metadata.purpose = setup_test`. The e2e now walks to a successful go-live.
+**2026-11-05 (latest): R-299 done (`d0bafc3`, D-385).** `/settings/export`: an owner types a code, and a `JobRun` writes one zip (a CSV per `orgId` table read from the schema, every Document file, and a manifest) to storage. It downloads from `/api/org-export/[id]` for 7 days.
 
-A bare `go` is **R-299** (backlog row 276): the full organisation export. R-297 is gated on OQ-16, and R-298 depends on R-278, which is gated on OQ-14. Recommend Opus, because the export reads every org-owned table and must not leak another org's rows.
+A bare `go` is **R-300** (backlog row 277): the offboarding state machine and retention purge. Its retention windows are gated on OQ-26, so build to the defaults (90-day freeze, 7 years for append-only tables). R-299's `buildOrgExport` is the export that offboarding delivers. Recommend Opus: the item purges rows, freezes writes and pauses billing.
 
 **Machine note:** run the unit suite as `npm test -- --maxWorkers=4` and check `pgrep -fl "$PWD.*playwright"` first. A bare `pgrep playwright` matches other projects' idle VS Code test servers. Pass e2e specs as bare names: `npm run test:e2e -- provisioning-checklist`. A unit-suite monitor must not grep a bare ` × `, because proration log lines contain one.
 
