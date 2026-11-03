@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { businessDateToUtc, utcToBusinessDate } from '@rental/core/scheduling'
-import { type OrgStatus, type Prisma, prisma } from '@rental/db'
+import { type OrgStatus, type Prisma, prisma, withOrg } from '@rental/db'
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { isAuthorizedCron } from '@/lib/cron/authorize.ts'
 import { type CronChild, recordOrgHealth } from '@/lib/cron/org-health.ts'
@@ -69,7 +69,9 @@ export async function cronRoute(
   }
 
   try {
-    const result = await runForOrg(orgId)
+    // Under row-level security as this org (R-287a): the child is the one
+    // place a whole org's rows are swept without a guard in front of it.
+    const result = await withOrg(orgId, () => runForOrg(orgId))
     await recordOrgHealth(orgId, child, result.ok)
     return Response.json(result)
   } catch (error) {

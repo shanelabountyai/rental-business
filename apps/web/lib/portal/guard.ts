@@ -1,7 +1,7 @@
 import 'server-only'
 
 import type { TenantScope } from '@rental/core/portal'
-import { prisma } from '@rental/db'
+import { openOrgContext, prisma } from '@rental/db'
 import { redirect } from 'next/navigation'
 import { auth } from '@/auth.ts'
 
@@ -31,8 +31,12 @@ export async function requireTenant(): Promise<{
   name: string
   email: string | null
 }> {
+  // The org as the row-level-security context, opened before the await so
+  // the caller sees it (R-287a; see actorInOrg in lib/auth/guard.ts).
+  const bind = openOrgContext()
   const session = await auth()
   const principal = session?.principal
+  if (principal) bind(principal.orgId)
 
   if (!principal || principal.kind !== 'tenant') {
     redirect('/portal/login')

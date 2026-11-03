@@ -454,6 +454,23 @@ describe('orgId on every org-owned table (R-285a)', () => {
       WHERE t.tgname = 'org_scope'`
     const names = new Set(triggered.map((r) => r.table))
     expect(owned.map(([, n]) => n).filter((n) => n !== 'LegalEntity' && !names.has(n!))).toEqual([])
+
+    // R-287a: and row-level security on, with the org_isolation policy. A
+    // table a later migration adds is granted to rental_rls by default
+    // privileges but gets no policy - with RLS off it would not be isolated,
+    // and with it on and no policy it would read empty. Either way, here.
+    const policed = await prisma.$queryRaw<{ table: string }[]>`
+      SELECT c.relname AS table FROM pg_class c JOIN pg_policy p ON p.polrelid = c.oid
+      WHERE c.relrowsecurity AND p.polname = 'org_isolation'`
+    const withPolicy = new Set(policed.map((r) => r.table))
+    expect(owned.map(([, n]) => n).filter((n) => !withPolicy.has(n!))).toEqual([])
+  })
+
+  it('every trigger function runs as its owner, so RLS cannot blind an invariant (R-287a)', async () => {
+    const invoker = await prisma.$queryRaw<{ fn: string }[]>`
+      SELECT DISTINCT p.proname AS fn FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid
+      WHERE NOT t.tgisinternal AND NOT p.prosecdef`
+    expect(invoker).toEqual([])
   })
 
   it('derives a child row\'s org from its parent and refuses a cross-org reference', async () => {

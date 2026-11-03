@@ -14,6 +14,7 @@ import {
   scopeIsEmpty,
   scopeNone,
 } from '@rental/core/rbac'
+import { openOrgContext } from '@rental/db'
 import { redirect } from 'next/navigation'
 import { currentSupportSession } from '@/lib/support/session.ts'
 import { currentActor } from './actor.ts'
@@ -57,6 +58,18 @@ export class AuthorizationError extends Error {
   }
 }
 
+/// The actor, and its org as the row-level-security context for every query
+/// the caller makes after awaiting this (R-287a, packages/db/rls.ts). NOT
+/// `async`: the context has to open in the caller's synchronous frame, and
+/// every guard below makes this its first await so that frame is the caller's.
+function actorInOrg(): Promise<Actor | null> {
+  const bind = openOrgContext()
+  return currentActor().then((actor) => {
+    if (actor) bind(actor.orgId)
+    return actor
+  })
+}
+
 /// The signed-in staff actor, or a redirect to sign-in. Use at the top of any
 /// staff page or action.
 ///
@@ -64,7 +77,7 @@ export class AuthorizationError extends Error {
 /// reads what staff read and writes nothing, because every write behind this
 /// floor also asks for a write permission it does not hold (PLAT-06).
 export async function requireStaff(): Promise<Actor> {
-  const actor = await currentActor()
+  const actor = await actorInOrg()
   if (!actor || (actor.kind !== 'staff' && actor.kind !== 'support') || !actor.active) redirect(await signInPath())
   return actor
 }
@@ -76,7 +89,7 @@ async function signInPath(): Promise<string> {
 }
 
 export async function requireTenant(): Promise<Actor> {
-  const actor = await currentActor()
+  const actor = await actorInOrg()
   if (!actor || actor.kind !== 'tenant' || !actor.active) {
     redirect('/portal/login')
   }
@@ -96,7 +109,7 @@ export async function requirePermission(
   permission: Permission,
   resource: Resource = {},
 ): Promise<Actor> {
-  const actor = await currentActor()
+  const actor = await actorInOrg()
   if (!actor) redirect(await signInPath())
 
   const decision = can(actor, permission, resource)
@@ -125,7 +138,7 @@ export async function actorCan(
   permission: Permission,
   resource: Resource = {},
 ): Promise<boolean> {
-  const actor = await currentActor()
+  const actor = await actorInOrg()
   return actor ? can(actor, permission, resource).allowed : false
 }
 
@@ -148,7 +161,7 @@ export async function actorDecision(
   permission: Permission,
   resource: Resource = {},
 ): Promise<Decision> {
-  const actor = await currentActor()
+  const actor = await actorInOrg()
   if (!actor) return { allowed: false, reason: 'no_permission' }
   return can(actor, permission, resource)
 }
@@ -189,7 +202,7 @@ export function propertyResource(property: {
 export async function currentScope(
   permission: Permission,
 ): Promise<PropertyScope> {
-  const actor = await currentActor()
+  const actor = await actorInOrg()
   if (!actor) return scopeNone()
   return propertyScope(actor, permission)
 }

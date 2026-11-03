@@ -11,7 +11,7 @@
 //   The write spy answers "did THIS call write", which is the question.
 import { globSync, readFileSync } from 'node:fs'
 import path from 'node:path'
-import { Prisma } from '@rental/db'
+import { Prisma, asRequest } from '@rental/db'
 import { PUBLIC_ROUTES } from '@/app/public-routes.ts'
 import { type Entry, type Tag, manifest } from './actions.manifest.ts'
 import type { Org } from './fixture.ts'
@@ -213,7 +213,9 @@ export async function call(f: Found, pick: (tag: Tag, path: string) => string, e
   ops.length = 0
   let o: Omit<Outcome, 'ops'>
   try {
-    o = { kind: 'returned', detail: await fn(...args) }
+    // Its own context, as a request is: the RLS org its guard opens (R-287a)
+    // must not outlive the call into the fixture's next write.
+    o = { kind: 'returned', detail: await asRequest(() => fn(...args)) }
   } catch (e) {
     if (e instanceof NavSignal) {
       o = e.kind === 'notFound' ? { kind: 'notFound' } : { kind: LOGINS.includes(e.to!.split('?')[0]!) ? 'guard' : 'redirect', detail: e.to }

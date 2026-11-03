@@ -10,7 +10,15 @@ import { NavSignal, discover, manifestModels, runCrossOrg } from './harness.ts'
 // org-scoped fails here.
 
 vi.mock('@rental/db', async (importOriginal) => {
+  // Without row-level security (R-287a, D-317): this harness proves the
+  // APPLICATION scopes its queries, and RLS would hide exactly the bug it is
+  // here to name - its controls go silent with RLS on. Read before the
+  // client is built, which is at import.
+  // Restored at once: a worker's process.env outlives this file.
+  const enforce = process.env.RLS_ENFORCE
+  process.env.RLS_ENFORCE = '0'
   const db = await importOriginal<typeof import('@rental/db')>()
+  process.env.RLS_ENFORCE = enforce
   const { withWriteSpy } = await import('./write-spy.ts')
   return { ...db, prisma: withWriteSpy(db.prisma) }
 })

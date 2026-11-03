@@ -90,6 +90,8 @@ jobs:
           {
             echo 'DATABASE_URL=postgresql://ci:ci@localhost:5432/ci'
             echo 'DIRECT_URL=postgresql://ci:ci@localhost:5432/ci'
+            # Row-level security enforced, as in .env.test (R-287a, D-391).
+            echo 'RLS_ENFORCE=1'
             echo "AUTH_SECRET=$(openssl rand -base64 32)"
             # Must agree with playwright.config.ts's port, which is 3100 -
             # this repo owns 3100 so it can never adopt the sibling
@@ -205,6 +207,8 @@ jobs:
           {
             echo 'DATABASE_URL=postgresql://ci:ci@localhost:5432/ci'
             echo 'DIRECT_URL=postgresql://ci:ci@localhost:5432/ci'
+            # Row-level security enforced, as in .env.test (R-287a, D-391).
+            echo 'RLS_ENFORCE=1'
             echo "AUTH_SECRET=$(openssl rand -base64 32)"
             echo 'AUTH_URL=http://localhost:3100'
             # WRITTEN ONLY WHEN THE SECRET EXISTS, and the absence is a

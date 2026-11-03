@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { prisma } from '@rental/db'
+import { asRequest, prisma } from '@rental/db'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildPartyChange, loadLeaseForPartyChange } from '@/lib/leases/party-change-builder.ts'
 import { updateUnit } from '@/lib/units/actions.ts'
@@ -159,7 +159,7 @@ describe('SEC-10: updateUnit refuses a unit from another property', () => {
 
   it("does not touch another org's unit, even for a portfolio-wide owner", async () => {
     session.staffId = portfolioOwnerId
-    await expect(updateUnit(a.property.id, c.unit.id, {}, form('1'))).rejects.toThrow()
+    await expect(asRequest(() => updateUnit(a.property.id, c.unit.id, {}, form('1')))).rejects.toThrow()
     const after = await prisma.unit.findUniqueOrThrow({ where: { id: c.unit.id } })
     expect(after.name).toBe(`U-${unique}`)
   })

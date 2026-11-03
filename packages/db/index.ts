@@ -4,6 +4,7 @@
 // ERR_UNSUPPORTED_DIR_IMPORT. The extension is correct everywhere either way -
 // it is the file Prisma actually emits.
 import { PrismaClient } from './generated/client/index.js'
+import { rlsEnforced, withRowLevelSecurity } from './rls.ts'
 
 /**
  * CAP THE POOL WHEN THE DATABASE IS LOCAL, because the test suites run many
@@ -57,10 +58,16 @@ export function localPoolCap(url: string | undefined): string | undefined {
 // Reused across hot reloads in dev so Next.js doesn't open a new pool per edit.
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient }
 
+// RLS_ENFORCE=1 (vitest, the e2e server, CI) wraps it in the org-scoped role;
+// otherwise it is the plain client, untouched (R-287a, D-391; see rls.ts).
 export const prisma =
   globalForPrisma.prisma ??
-  new PrismaClient({ datasourceUrl: localPoolCap(process.env.DATABASE_URL) })
+  (() => {
+    const base = new PrismaClient({ datasourceUrl: localPoolCap(process.env.DATABASE_URL) })
+    return rlsEnforced() ? withRowLevelSecurity(base) : base
+  })()
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
 
 export * from './generated/client/index.js'
+export { asRequest, openOrgContext, rlsOrgId, withOrg } from './rls.ts'
