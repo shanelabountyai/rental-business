@@ -142,6 +142,11 @@ export const AUDIT_ACTIONS = [
   'integration.provision_started',
   'integration.polled',
   'integration.retired',
+  /// R-280 (PRD 09 Q1): an entity's QuickBooks file connected, disconnected,
+  /// or a refresh refused (SYSTEM, `after.reason`). Never the tokens.
+  'integration.connected',
+  'integration.disconnected',
+  'integration.reconnect_needed',
   'platform_role.revoked',
   /// R-295a (PRD 11 §4.7, §4.14, §4.16): a support grant's lifecycle. The
   /// platform's rows carry `supportGrantId`; an owner's are STAFF rows about

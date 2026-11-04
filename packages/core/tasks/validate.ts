@@ -67,6 +67,8 @@ export const TASK_SUBJECT_TYPES = [
   'Notification',
   /// R-277b: about the whole org - its Stripe account cannot collect.
   'Organization',
+  /// R-280: an entity's QuickBooks connection needs the owner to reconnect.
+  'QuickBooksConnection',
   'RenterInsurancePolicy',
   'Showing',
   /// R-295a: platform support is asking to view the org (PRD 11 §4.7).

@@ -74,6 +74,7 @@ export const SUBJECT_ROUTES: Record<TaskSubjectType, SubjectRoute | null> = {
   Inspection: { permission: 'inspection.read', label: 'Open the inspection', hrefs: direct((id) => `/inspections/${id}`) },
   Thread: { permission: 'message.read', label: 'Open the conversation', hrefs: direct((id) => `/messages/${id}`) },
   Organization: { permission: 'billing.connect', portfolioWide: true, label: 'Open the Stripe account', hrefs: direct(() => '/money/stripe') },
+  QuickBooksConnection: { permission: 'billing.connect', portfolioWide: true, label: 'Open QuickBooks connections', hrefs: direct(() => '/money/quickbooks') },
   // R-295a: answering it is an owner's act (staff.manage + audit.read, §4.14).
   SupportAccessGrant: { permission: 'staff.manage', portfolioWide: true, label: 'Answer the support request', hrefs: direct(() => '/settings/support-access') },
   JobRun: { permission: 'job.manage', portfolioWide: true, label: 'Open scheduled jobs', hrefs: direct(() => '/jobs') },

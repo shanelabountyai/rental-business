@@ -52,6 +52,7 @@ export const PERMISSIONS = [
   'report.financial',
   /// Connecting the org's own Stripe account (R-277b, PRD 10 §2.2): where
   /// the rent is banked. Owner-only by construction, as `property.export` is.
+  /// Also the org's QuickBooks files (R-280): where the books are kept.
   'billing.connect',
   /// Assembling the sale/acquisition handoff packet for a property (DOC-06,
   /// RISK-09; R-092).

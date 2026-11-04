@@ -56,7 +56,7 @@ QuickBooks Desktop is out of scope; QBO's REST API and OAuth 2.0 are the only ta
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| Q1 | Connect to QBO via Intuit OAuth 2.0; store refresh token encrypted in `OrgIntegration` (provider = quickbooks); refresh before expiry; surface "reconnect needed" on failure | Must |
+| Q1 | Connect to QBO via Intuit OAuth 2.0; store refresh token encrypted in ~~`OrgIntegration` (provider = quickbooks)~~ `QuickBooksConnection`, one per legal entity (D-394, D-396; built R-280); refresh before expiry; surface "reconnect needed" on failure | Must |
 | Q2 | Mapping screen lists every platform ledger category with a QBO account dropdown fetched live; unmapped categories block sync with a clear message | Must |
 | Q3 | Nightly job (property-local midnight + 1 h, existing scheduler) selects ledger lines with `syncedAt IS NULL`, groups by posting date and property, posts one QBO JournalEntry per group, stores QBO id and `syncedAt` on each line | Must |
 | Q4 | Reversing corrections in the ledger post as reversing journal entries, never edits or deletes in QBO | Must |

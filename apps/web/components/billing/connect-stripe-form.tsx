@@ -9,7 +9,7 @@ type Action = (state: StripeFormState, formData: FormData) => Promise<StripeForm
 
 /// R-277b: the action answers with Stripe's page (or the way back from it),
 /// and the browser opens it as a full navigation, as it would Stripe's.
-function useOpening(action: Action) {
+export function useOpening(action: Action) {
   const [state, formAction, pending] = useActionState(action, {})
   useEffect(() => {
     if (state.openUrl) window.location.assign(state.openUrl)

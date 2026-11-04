@@ -717,6 +717,7 @@ model Organization {
   applicantInfoRequests          ApplicantInfoRequest[]
   applicantNotes                 ApplicantNote[]
   integrations                   OrgIntegration[]
+  quickBooksConnections          QuickBooksConnection[]
   jurisdictions                  OrgJurisdiction[]
   platformFees                   PlatformFee[]
   setupTestPayments              SetupTestPayment[]
@@ -763,6 +764,61 @@ model OrgIntegration {
   updatedAt    DateTime            @updatedAt
 
   @@unique([orgId, provider])
+}
+
+/// R-280 (PRD 09 Q1, D-393 to D-396): one QuickBooks Online company file per
+/// legal entity (D-394), so its own table rather than an `OrgIntegration` row,
+/// which is one per (org, provider). `secret` is sealed by
+/// lib/integrations/quickbooks.ts with a key bound to (orgId, legalEntityId),
+/// as store.ts binds OrgIntegration's. `status` is CONNECTING (consent page
+/// open) → CONNECTED → RECONNECT_NEEDED (a refresh was refused) or
+/// DISCONNECTED; `statusReason` is the provider's words.
+model QuickBooksConnection {
+  id             String                  @id @default(cuid())
+  /// Derived from the entity and immutable (org_scope trigger).
+  orgId          String
+  organization   Organization            @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  legalEntityId  String                  @unique
+  legalEntity    LegalEntity             @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
+  /// D-393: chosen at connect time, no default.
+  basis          AccountingBasis
+  /// D-395: which QuickBooks field carries the property.
+  propertyField  AccountingPropertyField @default(CLASS)
+  status         String                  @default("CONNECTING")
+  statusReason   String?
+  /// QuickBooks' company id. Unique, so one file cannot hold two entities' books.
+  realmId        String?                 @unique
+  secret         String?
+  /// SHA-256 of the OAuth `state` while consent is open; single use.
+  oauthStateHash String?                 @unique
+  oauthStartedAt DateTime?
+  connectedAt    DateTime?
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+}
+
+enum AccountingBasis {
+  CASH
+  ACCRUAL
+}
+
+enum AccountingPropertyField {
+  CLASS
+  LOCATION
+}
+
+/// R-280: the SIMULATED Intuit's own record of a consent it granted (D-27).
+/// Org-less, as Intuit's would be. Refresh tokens rotate on every use and the
+/// old one dies at once - stricter than Intuit, so a lost rotation shows.
+model SimulatedQuickBooksGrant {
+  id           String    @id @default(cuid())
+  realmId      String
+  code         String    @unique
+  codeUsedAt   DateTime?
+  refreshToken String    @unique
+  accessToken  String
+  revokedAt    DateTime?
+  createdAt    DateTime  @default(now())
 }
 
 /// R-298a (PRD 10 §7.2, D-389): a state this org operates in. The statute
@@ -938,17 +994,17 @@ model OrgHealth {
 }
 
 model LegalEntity {
-  id                      String          @id @default(cuid())
+  id                      String                @id @default(cuid())
   /// Immutable once written (trigger). No default (R-301, D-348): a create
   /// that names no org fails instead of landing in org #0.
   orgId                   String
-  organization            Organization    @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  organization            Organization          @relation(fields: [orgId], references: [id], onDelete: Restrict)
   name                    String
   type                    LegalEntityType
   formationState          String? // two-letter, e.g. "TX"
   registeredAgent         String?
   notes                   String?
-  active                  Boolean         @default(true)
+  active                  Boolean               @default(true)
   /// MAINT-04's "my configured cost threshold": a work order estimated above
   /// this needs an explicit approval before it can be dispatched. Set on the
   /// ENTITY rather than the property or a global singleton because the LLC is
@@ -961,8 +1017,9 @@ model LegalEntity {
   actualsTolerancePercent Int?
   /// Above this, collect competing bids rather than dispatching one vendor.
   bidThresholdCents       Int?
-  createdAt               DateTime        @default(now())
-  updatedAt               DateTime        @updatedAt
+  quickBooksConnection    QuickBooksConnection?
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
 
   properties      Property[]
   complianceItems ComplianceItem[]

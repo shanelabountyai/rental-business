@@ -437,6 +437,8 @@ describe('orgId on every org-owned table (R-285a)', () => {
     'SimulatedVercelDomain',
     // R-277b: the simulated Stripe's own state, the same way.
     'SimulatedStripeAccount',
+    // R-280: the simulated Intuit's grants, the same way.
+    'SimulatedQuickBooksGrant',
   ]
 
   it('every model but the org-less list has orgId and an org_scope trigger', async () => {

@@ -96,6 +96,14 @@ export default async function MoneyPage() {
           >
             Deposits
           </Link>
+          {holdsAnywhere(actor, 'billing.connect').allowed && (
+            <Link
+              href="/money/quickbooks"
+              className="focus-visible:ring-ring w-fit text-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:outline-none"
+            >
+              QuickBooks
+            </Link>
+          )}
         </div>
       </header>
 
