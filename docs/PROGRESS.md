@@ -15381,7 +15381,7 @@ Tests: `lib/platform/settings.test.ts` (no secret value in the output, the kill 
 
 **Gate.** No runtime code changed, only a comment in `rls.ts`. `lint` and `typecheck` were run.
 
-## R-279 — `AccountingAdapter` and the simulated company file
+## R-279 — `AccountingAdapter` and the simulated company file (`24dcd6ec`)
 
 **What it built.** `packages/core/accounting`, exported as `@rental/core/accounting`. `buildJournalEntry` takes one property's facts for one posting day and returns one balanced entry (D-311). Each fact is a ledger entry already classified as a debit account, a credit account and a signed cents amount. Lines are aggregated per (account, side). A negative amount is a reversal: it swaps the sides and never nets. A charge and its same-day reversal therefore produce four lines, which is how Q4 says a correction should look. Every line amount is positive. It refuses non-integer cents, a fact that debits and credits the same account, and a DocNumber outside QuickBooks' 1–21 characters. It returns `null` when every fact is zero, and every ledger id is still listed so the sync can link it. `ACCOUNT_DEFAULTS` holds PRD 09 §4's proposed account names, plus Accounts Receivable for accrual. The `AccountingAdapter` interface has `findJournalEntry(docNumber)` and `postJournalEntry`. `postOnce` is the find-then-post sequence that Q5's idempotency rests on. `SimulatedAccountingAdapter` injects `timeout`, `malformed_response` and `partial_failure` faults; `partial_failure` posts the entry and then throws.
 
