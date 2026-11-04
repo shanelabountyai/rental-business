@@ -1,6 +1,10 @@
-**2026-11-04 (latest): R-279 done (`24dcd6ec`).** `@rental/core/accounting` now has `buildJournalEntry`, the `AccountingAdapter` interface, `postOnce` and `SimulatedAccountingAdapter`. Shane answered three questions: OQ-22 → D-393 (basis is a per-org setting, both bases built), OQ-13 → D-394 (one QuickBooks file per LegalEntity), OQ-21 → D-395 (Class or Location per connection, default Class).
+**2026-11-04 (latest): R-280 done (`6450fdf6`).** Each LegalEntity can now connect its own QuickBooks file at `/money/quickbooks`, using `QuickBooksConnection` (D-396: its own table, not `OrgIntegration`). `quickBooksAccessToken(legalEntityId)` is the only way to get a token: it refreshes under an advisory lock, and when Intuit refuses a refresh it marks the connection RECONNECT_NEEDED and raises a task. Intuit is simulated (`SimulatedQuickBooksGrant`).
 
-A bare `go` is **R-280**: QuickBooks Online OAuth connect/disconnect, token refresh and the "reconnect needed" state, size M. Key the connection by (org, LegalEntity) per D-394. Store the basis (D-393) and the Class/Location choice (D-395) on it, and require the basis at connect time. Tokens go in `OrgIntegration`, which R-275 built. After R-280 come R-281 (mapping) and then R-282 (sync). **The earlier NEXT.md claim that R-282 was the earliest open row was wrong**, because R-279 to R-281 had not been built.
+A bare `go` is **R-281**: chart-of-accounts mapping and property → Class/Location mapping, size M. Fetch the account list through `quickBooksAccessToken`. That needs an accounts call on the adapter, and the simulator must hold its own chart of accounts (D-27). Read the property field from `QuickBooksConnection.propertyField`. An unmapped category blocks the sync. R-282 (sync) comes after.
+
+**Real-Intuit carry-over:** Intuit needs one registered redirect URI, but the callback is built on each org's host. The real driver needs a callback on the platform host that hands back to the org host.
+
+**Local test DB is bloated:** `rental_test` is 3.3 GB with 1.79M `Notification` rows. Under machine load the full unit run times out in notification-heavy files (`due-notices`, `notifications`, `follow-up`, `verify`, `jurisdiction/actions`), and all of them pass alone. Rebuilding `rental_test` from scratch would likely restore the full local run. Ask Shane before dropping it.
 
 **Open for R-282:** `Payment` carries no Stripe fee amount and nothing projects one. Q8 needs a source, either the balance transaction or the charge.
 
