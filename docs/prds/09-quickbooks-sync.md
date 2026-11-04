@@ -30,7 +30,7 @@ QuickBooks Desktop is out of scope; QBO's REST API and OAuth 2.0 are the only ta
 
 - Per-organization QBO connection via OAuth 2.0 from the settings page; owner can connect, disconnect and see last-sync status
 - Nightly push of new ledger lines since the last successful sync, grouped by day and property into QBO journal entries
-- Chart-of-accounts mapping screen: owner maps platform categories (rent income, late fees, security deposits held, repairs, management fees, owner draws) to QBO accounts; sensible defaults proposed
+- *(D-397, 2026-11-04: not built. The mapping is customer-specific, so Shane sets it during onboarding, with no screen. The proposed defaults below are his starting point.)* ~~Chart-of-accounts mapping screen:~~ owner maps platform categories (rent income, late fees, security deposits held, repairs, management fees, owner draws) to QBO accounts; sensible defaults proposed
 - Property as QBO Class (or Location) so the CPA can run P&L by property
 - Renters as QBO Customers and vendors as QBO Vendors, created on first reference
 - Reconciliation report: platform total vs QBO total per month, with drill-down on mismatches

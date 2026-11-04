@@ -1,6 +1,8 @@
 **2026-11-04 (latest): R-280 done (`6450fdf6`).** Each LegalEntity can now connect its own QuickBooks file at `/money/quickbooks`, using `QuickBooksConnection` (D-396: its own table, not `OrgIntegration`). `quickBooksAccessToken(legalEntityId)` is the only way to get a token: it refreshes under an advisory lock, and when Intuit refuses a refresh it marks the connection RECONNECT_NEEDED and raises a task. Intuit is simulated (`SimulatedQuickBooksGrant`).
 
-A bare `go` is **R-281**: chart-of-accounts mapping and property → Class/Location mapping, size M. Fetch the account list through `quickBooksAccessToken`. That needs an accounts call on the adapter, and the simulator must hold its own chart of accounts (D-27). Read the property field from `QuickBooksConnection.propertyField`. An unmapped category blocks the sync. R-282 (sync) comes after.
+A bare `go` is **R-282**: the nightly sync job and journal-entry builder, size L. **R-281 is withdrawn (D-397):** the account and Class/Location mapping is customer-specific, so Shane sets it during onboarding and there is no screen. R-282 therefore carries the minimum mapping store, filled by an onboarding script or seed rather than a UI, plus the rule that an unmapped category blocks the sync. Fetch tokens through `quickBooksAccessToken` and read the property field from `QuickBooksConnection.propertyField`. CI for R-280 went red on three registries (`actions.manifest.ts`, `route-guards.test.ts`, the org-less model list), fixed in `61cb373a`. A new action, route or org-less model needs all three.
+
+**Local only:** `org-01-05-06.test.ts`'s ORG-01 control ("flags a write before the guard") fails on this machine on an unchanged tree and passes in CI. Not investigated.
 
 **Real-Intuit carry-over:** Intuit needs one registered redirect URI, but the callback is built on each org's host. The real driver needs a callback on the platform host that hands back to the org host.
 

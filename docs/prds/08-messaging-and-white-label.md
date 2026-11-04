@@ -231,7 +231,7 @@ Recommendation: offer the realtor's group a hosted, white-labeled organization o
 3. Provision Twilio subaccount, register 10DLC brand and campaign, assign number
 4. Verify email sending domain
 5. Import properties, units, renters and active leases from CSV (template provided)
-6. Connect any one-off integrations (QuickBooks first, if his group uses it)
+6. Connect any one-off integrations (QuickBooks first, if his group uses it). For QuickBooks, Shane maps the customer's chart of accounts and the property → Class/Location choice during onboarding; there is no self-serve mapping screen (D-397)
 7. Owner reviews and edits all message templates
 8. Test send to owner's own phone; test $1 payment; go live
 
