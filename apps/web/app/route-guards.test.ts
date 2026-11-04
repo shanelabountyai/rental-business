@@ -168,6 +168,11 @@ const RESOURCE_LESS_GUARDS: Record<string, string> = {
     "The org's Stripe account (R-277b, PRD 10 §2.2) banks every property's rent at once, so there is no property to scope it to. `billing.connect` is owner-only by construction.",
   'app/(admin)/money/stripe/simulated/[accountId]/page.tsx': 'Same as the Stripe account page above: the simulated hosted onboarding for that one org-wide account.',
   'lib/integrations/stripe-actions.ts': 'Same as the Stripe account pages above. The org is the session\'s, never a form field.',
+  'app/(admin)/money/quickbooks/page.tsx':
+    "QuickBooks connections (R-280, PRD 09 Q1) are listed for every entity of the org on one page, like the Stripe account; `billing.connect` is owner-only by construction, and each action checks the entity is the org's own.",
+  'app/(admin)/money/quickbooks/callback/route.ts': 'Same as the QuickBooks page above: the OAuth return finds its row by a hashed, single-use state within the session\'s org.',
+  'app/(admin)/money/quickbooks/simulated/page.tsx': 'Same as the QuickBooks page above: the simulated consent screen, 404 for another org\'s state.',
+  'lib/integrations/quickbooks-actions.ts': 'Same as the QuickBooks pages above. The org is the session\'s, never a form field.',
   'app/(admin)/settings/support-access/page.tsx':
     'A support grant is about the whole organisation (PRD 11 §4.14, R-295a), not a property: `audit.read` portfolio-wide reads it, and answering needs `staff.manage` as well, which only an owner holds.',
   'lib/support/actions.ts': 'Same as the support-access page above. The org is the session\'s, never a form field.',

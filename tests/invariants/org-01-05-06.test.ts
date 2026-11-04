@@ -124,6 +124,7 @@ const ORG_LESS: Record<string, string> = {
   SimulatedResendDomain: "the simulated Resend's own state (R-293b, D-27): another company's database, keyed by domain id",
   SimulatedVercelDomain: "the simulated Vercel's own state (R-276, D-27): another company's database, keyed by domain name",
   SimulatedStripeAccount: "the simulated Stripe's own state (R-277b, D-27): another company's database, keyed by account id",
+  SimulatedQuickBooksGrant: "the simulated Intuit's own state (R-280, D-27): another company's database, keyed by realm id",
 }
 
 describe('ORG-06: every org-owned model', () => {

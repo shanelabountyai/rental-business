@@ -55,6 +55,10 @@ export const manifest: Record<string, Entry> = {
   // The account id is Stripe's, not a row id; the action 404s one outside the org.
   'lib/integrations/stripe-actions.ts#connectStripe': {},
   'lib/integrations/stripe-actions.ts#submitSimulatedStripe': { accountId: 'value' },
+  // lib/integrations/quickbooks-actions.ts (R-280): the org is the session's; the entity must be one of its own.
+  'lib/integrations/quickbooks-actions.ts#connectQuickBooks': { 'form.legalEntityId': 'legalEntity', 'form.basis': '=CASH' },
+  'lib/integrations/quickbooks-actions.ts#disconnectQuickBooksAction': { legalEntityId: 'legalEntity' },
+  'lib/integrations/quickbooks-actions.ts#answerSimulatedQuickBooks': { state: 'value', 'form.realmId': 'value' },
   // lib/support/actions.ts (R-295a): an owner answering platform support.
   // One action, four intents; `deny` reaches a write on the fixture's pending grant.
   'lib/support/actions.ts#answerSupportAccess': { 'form.grantId': 'supportAccessGrant', 'form.intent': '=deny' },
