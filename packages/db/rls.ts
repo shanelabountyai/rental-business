@@ -22,9 +22,9 @@ import type { PrismaClient } from './generated/client/index.js'
  * the absence of a context rather than a flag anyone can set.
  *
  * ENFORCED ONLY WHEN RLS_ENFORCE=1 (D-391): vitest, the e2e server and CI.
- * Production does not wrap anything yet - R-287b measures the Neon cost of a
- * transaction per query and decides, and owns auditing the bypass if it goes
- * on there.
+ * Production stays off (D-392): a wrapped query is 4 round trips instead of 1,
+ * measured on Neon. D-392's restore note lists what turning it on needs,
+ * including the audited bypass this file does not have.
  */
 
 type Context = { orgId?: string; inBatch?: true; inTx?: true }
