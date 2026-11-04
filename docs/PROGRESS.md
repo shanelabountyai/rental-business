@@ -15371,7 +15371,7 @@ Tests: `lib/platform/settings.test.ts` (no secret value in the output, the kill 
 
 **Gate.** `lint` (0 errors), `typecheck`, `check:ship-deps`, `db:ci` (all migrations from scratch, seed, no drift). `npm test -- --maxWorkers=4` with RLS on: 3,896 passed + 4 skipped = 3,900, 0 failed. Earlier runs were killed by orphaned vitest workers starving the machine (memory at 1%). A runner `pkill` leaves `node (vitest N)` children alive, so kill those by cwd too. e2e on the production build, desktop-chrome: `staff`, `portal*`, `portal-guarantor`, `vendor-link`, `properties`, `workorders`, 81 passed + 1 skipped of 82 listed, none flaky. CI owns the full sweep.
 
-## R-287b — Row-level security in production: stays off
+## R-287b — Row-level security in production: stays off (`b051f77d`)
 
 **What it built.** No product code. It measured what R-287a's wrapper costs on Neon. A scratch script ran 30 timed calls of each shape against the `rentalbusiness` Neon project (`aws-us-east-2`) from the laptop. Plain `SELECT 1`: p50 44.7ms. The `rls.ts` batch shape, `$transaction([set_config, query])`: p50 184.7ms. An interactive transaction: p50 189.7ms. **A wrapped query is 4.1 round trips**, as D-391 predicted (BEGIN, set_config, query, COMMIT). The script used a custom GUC instead of `set_config('role')` because the Neon dev branch has no migrations applied (see below). The cost per round trip is the same either way. The `rls.ts` header comment now points at D-392.
 
