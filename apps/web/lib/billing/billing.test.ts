@@ -454,6 +454,11 @@ describe('processStripeEvent', () => {
     expect(entries[0]!.amountCents).toBe(-150_000)
     expect(entries[0]!.type).toBe('PAYMENT')
     expect(entries[0]!.stripeEventId).toBe(event.id)
+    // What Stripe kept (R-282b): the simulator's card-shaped 2.9% + 30c.
+    expect(await prisma.stripeProcessingFee.findUnique({ where: { paymentId: payment.id } })).toMatchObject({
+      amountCents: 4_380,
+      stripeEventId: event.id,
+    })
     // 20s like its neighbours: the payment path now also resolves any
     // charges named on the invoice line metadata, and the whole thing walks
     // provisioning plus a full projection.
@@ -1188,6 +1193,8 @@ describe('out-of-band money already recorded at the counter (D-177)', () => {
     })
     expect(entries).toHaveLength(1)
     expect(entries[0]!.paymentId).toBe(payment.id)
+    // A cheque went through no card or bank rail: no fee to read (R-282b).
+    expect(await prisma.stripeProcessingFee.count({ where: { paymentId: payment.id } })).toBe(0)
   }, 30_000)
 
   it('gives two same-amount counter payments one row each, not one shared row', async () => {

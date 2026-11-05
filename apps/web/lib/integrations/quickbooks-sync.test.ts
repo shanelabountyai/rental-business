@@ -136,6 +136,34 @@ describe('QuickBooks nightly sync (R-282a)', () => {
     expect(new Set(qbo.posted.slice(before).map((e) => e.docNumber)).size).toBe(1)
   })
 
+  it('posts the fee once in the entry of its payment, blocked until Merchant Fees is mapped (R-282b)', async () => {
+    const threeDaysAgo = new Date(Date.now() - 3 * DAY)
+    const payment = await prisma.payment.create({
+      data: { propertyId, leaseId, leasePayerId, channel: 'CARD', status: 'SETTLED', amountCents: 100_000, receivedAt: threeDaysAgo },
+    })
+    // Allocated over two debts: two entries, one fee.
+    await entry('PAYMENT', -60_000, threeDaysAgo, payment.id)
+    await entry('PAYMENT', -40_000, threeDaysAgo, payment.id)
+    const fee = await prisma.stripeProcessingFee.create({
+      data: { orgId, paymentId: payment.id, amountCents: 2_930, stripeBalanceTransactionId: `txn_${stamp}`, details: [], stripeEventId: `evt_${stamp}` },
+    })
+
+    expect((await sync())[0]).toMatchObject({ outcome: 'blocked', reason: /accounts MERCHANT_FEES\)/ })
+    await prisma.quickBooksMapping.create({
+      data: { orgId, connectionId, kind: 'ACCOUNT', platformKey: 'MERCHANT_FEES', externalId: 'qbo-MERCHANT_FEES', externalName: 'Merchant Fees' },
+    })
+    const before = qbo.posted.length
+    expect((await sync())[0]).toMatchObject({ outcome: 'synced', planned: 1, posted: 1 })
+    const [posted] = qbo.posted.slice(before)
+    expect(posted!.lines).toEqual([
+      expect.objectContaining({ side: 'CREDIT', account: 'ACCOUNTS_RECEIVABLE', amountCents: 100_000 }),
+      expect.objectContaining({ side: 'CREDIT', account: 'UNDEPOSITED_FUNDS', amountCents: 2_930 }),
+      expect.objectContaining({ side: 'DEBIT', account: 'MERCHANT_FEES', amountCents: 2_930 }),
+      expect.objectContaining({ side: 'DEBIT', account: 'UNDEPOSITED_FUNDS', amountCents: 100_000 }),
+    ])
+    await expect(prisma.stripeProcessingFee.delete({ where: { id: fee.id } })).rejects.toThrow()
+  })
+
   it('refuses to delete a sync link, which would post the entry again', async () => {
     const [link] = await links()
     await expect(prisma.quickBooksSyncLink.delete({ where: { ledgerEntryId: link!.ledgerEntryId } })).rejects.toThrow()

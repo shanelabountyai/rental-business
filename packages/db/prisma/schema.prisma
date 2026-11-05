@@ -721,6 +721,7 @@ model Organization {
   quickBooksMappings             QuickBooksMapping[]
   quickBooksJournals             QuickBooksJournal[]
   quickBooksSyncLinks            QuickBooksSyncLink[]
+  stripeProcessingFees           StripeProcessingFee[]
   jurisdictions                  OrgJurisdiction[]
   platformFees                   PlatformFee[]
   setupTestPayments              SetupTestPayment[]
@@ -881,6 +882,30 @@ model QuickBooksSyncLink {
 
   @@index([journalId])
   @@index([connectionId])
+  @@index([orgId])
+}
+
+/// R-282b (PRD 09 Q8, D-398): what Stripe kept from one payment, read from
+/// its balance transaction on the connected account when the payment settled.
+/// The landlord's cost, never the tenant's, so it is its own append-only row
+/// and never a `LedgerEntry`. The sync posts it as a Merchant Fees line in the
+/// payment's journal, so the net matches the bank deposit.
+model StripeProcessingFee {
+  id                         String       @id @default(cuid())
+  /// Derived from the payment by org_scope() and immutable.
+  orgId                      String
+  organization               Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  paymentId                  String       @unique
+  payment                    Payment      @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  /// The balance transaction's `fee`: Stripe's and the platform's together,
+  /// because both come out of the same deposit.
+  amountCents                Int
+  stripeBalanceTransactionId String
+  /// The balance transaction's `fee_details`, verbatim.
+  details                    Json
+  stripeEventId              String
+  createdAt                  DateTime     @default(now())
+
   @@index([orgId])
 }
 
@@ -5543,6 +5568,7 @@ model Payment {
   receiptDocument     Document?             @relation("PaymentReceipt", fields: [receiptDocumentId], references: [id], onDelete: Restrict)
   depositSlipDocument Document?             @relation("PaymentDepositSlip", fields: [depositSlipDocumentId], references: [id], onDelete: Restrict)
   invoiceSplits       PaymentInvoiceSplit[]
+  processingFee       StripeProcessingFee?
 
   @@unique([orgId, stripePaymentIntentId])
   @@index([leaseId, receivedAt])

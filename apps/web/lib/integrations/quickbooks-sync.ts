@@ -10,6 +10,7 @@ import {
   buildJournalEntry,
   classifyLedgerEntry,
   postOnce,
+  processingFeeFact,
 } from '@rental/core/accounting'
 import { businessDate, businessDateToUtc, utcToBusinessDate } from '@rental/core/scheduling'
 import { type Prisma, type QuickBooksConnection, prisma } from '@rental/db'
@@ -33,8 +34,10 @@ import { quickBooksAccessToken } from './quickbooks.ts'
 // projected tomorrow for today would find today's DocNumber already posted
 // and be skipped for ever.
 //
-// Payments post GROSS to Undeposited Funds; the Stripe fee line is R-282b
-// (D-398). Entries projected before the connection existed are R-284's
+// Payments post gross to Undeposited Funds, and the fee Stripe kept from each
+// one posts in the same journal as a Merchant Fees line (R-282b, D-398), so
+// the net is what reached the bank. A fee read after its journal posted is
+// not added later. Entries projected before the connection existed are R-284's
 // backfill, not this job's.
 
 /// Pending entries planned per connection per run.
@@ -172,6 +175,7 @@ async function planJournals(connection: QuickBooksConnection, now: Date) {
       const groups = new Map<string, { propertyId: string; day: string; ids: string[] }>()
       const excluded: { ledgerEntryId: string; reason: string }[] = []
       const accounts: AccountKey[] = []
+      const feePayments = new Set<string>()
       for (const entry of entries) {
         const zone = byId.get(entry.propertyId)!.timezone
         const day = businessDate(entry.occurredAt, zone)
@@ -184,12 +188,16 @@ async function planJournals(connection: QuickBooksConnection, now: Date) {
           continue
         }
         accounts.push(classified.fact.debit, classified.fact.credit)
+        if (entry.paymentId && entry.amountCents < 0) feePayments.add(entry.paymentId)
         const key = `${entry.propertyId}|${day}`
         const group = groups.get(key) ?? { propertyId: entry.propertyId, day, ids: [] }
         group.ids.push(entry.id)
         groups.set(key, group)
       }
 
+      if (feePayments.size > 0 && (await tx.stripeProcessingFee.count({ where: { paymentId: { in: [...feePayments] } } })) > 0) {
+        accounts.push('MERCHANT_FEES')
+      }
       const missing = unmapped(
         await mappingsOf(connection.id, tx),
         accounts,
@@ -230,6 +238,39 @@ async function planJournals(connection: QuickBooksConnection, now: Date) {
   )
 }
 
+/**
+ * The Merchant Fees facts for one journal (R-282b). A payment allocated over
+ * several debts has several entries, and a batch boundary can put them in
+ * different journals, so its fee goes only in the journal holding its
+ * lowest-id money-in entry that reached a journal. Every rebuild of the same
+ * journal picks the same one.
+ */
+async function feeFacts(journalId: string, entries: Pick<LedgerPick, 'paymentId' | 'amountCents'>[]) {
+  const paymentIds = [...new Set(entries.filter((e) => e.paymentId && e.amountCents < 0).map((e) => e.paymentId!))]
+  if (paymentIds.length === 0) return []
+  const fees = await prisma.stripeProcessingFee.findMany({
+    where: { paymentId: { in: paymentIds } },
+    orderBy: { paymentId: 'asc' },
+    select: {
+      amountCents: true,
+      payment: {
+        select: {
+          ledgerEntries: {
+            where: { amountCents: { lt: 0 }, quickBooksSyncLink: { journalId: { not: null } } },
+            orderBy: { id: 'asc' },
+            take: 1,
+            select: { id: true, quickBooksSyncLink: { select: { journalId: true } } },
+          },
+        },
+      },
+    },
+  })
+  return fees.flatMap(({ amountCents, payment }) => {
+    const anchor = payment.ledgerEntries[0]
+    return anchor?.quickBooksSyncLink?.journalId === journalId ? [processingFeeFact(anchor.id, amountCents)] : []
+  })
+}
+
 /// Oldest first, stopping at the first failure so the books fill in order.
 async function postPending(connection: QuickBooksConnection, adapter: AccountingAdapter) {
   const journals = await prisma.quickBooksJournal.findMany({
@@ -252,6 +293,7 @@ async function postPending(connection: QuickBooksConnection, adapter: Accounting
       if (classified.kind !== 'fact') throw new Error(`Ledger entry ${ledgerEntry.id} no longer classifies as a fact.`)
       return classified.fact
     })
+    facts.push(...(await feeFacts(journal.id, journal.links.map(({ ledgerEntry }) => ledgerEntry))))
     const draft = buildJournalEntry({
       docNumber: docNumber(journal.number),
       txnDate: utcToBusinessDate(journal.txnDate),

@@ -9,6 +9,7 @@ import type {
   BillingProvider,
   CustomerInput,
   PauseBehaviour,
+  ProcessingFee,
   ProvisionedCustomer,
   ProvisionedSetupIntent,
   ProvisionedSubscription,
@@ -575,6 +576,21 @@ export class SimulatedBillingProvider implements BillingProvider {
   /// no invoice to find.
   async findInvoiceForPaymentIntent(): Promise<string | null> {
     return null
+  }
+
+  /// A card-shaped fee on whatever it is asked about. Nothing else in the
+  /// codebase computes a processing fee, so this cannot agree with the code
+  /// it tests by construction (D-27).
+  // ponytail: one card rate for every rail; Stripe's ACH rate differs, and no
+  // decision here reads the rail.
+  async getProcessingFee(input: { amountCents: number }): Promise<ProcessingFee | null> {
+    const amountCents = Math.round(input.amountCents * 0.029) + 30
+    console.info(`[billing:simulated] processing fee ${amountCents}c on ${input.amountCents}c`)
+    return {
+      amountCents,
+      stripeBalanceTransactionId: stripeId('txn'),
+      details: [{ type: 'stripe_fee', amount: amountCents, currency: 'usd' }],
+    }
   }
 }
 

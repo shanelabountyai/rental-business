@@ -369,4 +369,34 @@ describe('what the driver actually sends', () => {
       expect(await provider().paymentMethodExpiry('pm_gone')).toBeNull()
     })
   })
+
+  it('reads the fee off the balance transaction, and refuses to guess between two same-amount invoice payments (R-282b)', async () => {
+    const answer = (paid: { amount_paid: number; payment: { type: string; payment_intent?: string } }[]) => {
+      const urls: string[] = []
+      globalThis.fetch = (async (url: string | URL | Request) => {
+        urls.push(String(url))
+        const body = String(url).includes('/invoice_payments')
+          ? { data: paid }
+          : { latest_charge: { balance_transaction: { id: 'txn_1', fee: 4_380, fee_details: [{ type: 'stripe_fee', amount: 4_380 }] } } }
+        return new Response(JSON.stringify(body), { status: 200 })
+      }) as typeof fetch
+      return urls
+    }
+    const read = () => provider().getProcessingFee({ stripePaymentIntentId: null, stripeInvoiceId: 'in_1', amountCents: 150_000 })
+
+    const urls = answer([
+      { amount_paid: 50_000, payment: { type: 'payment_intent', payment_intent: 'pi_other' } },
+      { amount_paid: 150_000, payment: { type: 'payment_intent', payment_intent: 'pi_1' } },
+    ])
+    expect(await read()).toEqual({ amountCents: 4_380, stripeBalanceTransactionId: 'txn_1', details: [{ type: 'stripe_fee', amount: 4_380 }] })
+    expect(urls[1]).toContain('/payment_intents/pi_1?expand[]=latest_charge.balance_transaction')
+
+    answer([
+      { amount_paid: 150_000, payment: { type: 'payment_intent', payment_intent: 'pi_1' } },
+      { amount_paid: 150_000, payment: { type: 'payment_intent', payment_intent: 'pi_2' } },
+    ])
+    expect(await read()).toBeNull()
+    answer([{ amount_paid: 150_000, payment: { type: 'payment_record' } }])
+    expect(await read()).toBeNull()
+  })
 })

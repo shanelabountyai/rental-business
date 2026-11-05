@@ -485,4 +485,25 @@ export interface BillingProvider {
    * names only the intent, reaches its payment through this.
    */
   findInvoiceForPaymentIntent(stripePaymentIntentId: string): Promise<string | null>
+
+  /**
+   * What Stripe kept from one settled payment (R-282b, PRD 09 Q8, D-398): the
+   * `fee` on its charge's balance transaction, read on the connected account.
+   * An invoice-settled payment names only the invoice, so its intent is found
+   * through the invoice's payment of exactly this amount. Null when there is
+   * no charge to read or Stripe cannot say which charge it was: a guessed fee
+   * must never reach somebody's books.
+   */
+  getProcessingFee(input: {
+    stripePaymentIntentId: string | null
+    stripeInvoiceId: string | null
+    amountCents: number
+  }): Promise<ProcessingFee | null>
+}
+
+export interface ProcessingFee {
+  amountCents: number
+  stripeBalanceTransactionId: string
+  /// `fee_details` as Stripe sent it: Stripe's own fee and any application fee.
+  details: unknown[]
 }

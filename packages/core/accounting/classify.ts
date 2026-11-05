@@ -98,3 +98,12 @@ export function classifyLedgerEntry(row: SyncLedgerRow, basis: SyncBasis): Class
     fact: { ledgerEntryId: row.id, debit: 'ACCOUNTS_RECEIVABLE', credit: income, amountCents: row.amountCents },
   }
 }
+
+/// The fee Stripe kept from one payment (R-282b, PRD 09 Q8, D-398). It never
+/// reached the bank, so it leaves Undeposited Funds for Merchant Fees, and the
+/// day's net then matches the deposit. Not a ledger entry: it is carried on
+/// the id of the payment's own entry in the same journal. Same on both bases,
+/// because it is money that moved.
+export function processingFeeFact(paymentLedgerEntryId: string, feeCents: number): JournalFact {
+  return { ledgerEntryId: paymentLedgerEntryId, debit: 'MERCHANT_FEES', credit: 'UNDEPOSITED_FUNDS', amountCents: feeCents }
+}

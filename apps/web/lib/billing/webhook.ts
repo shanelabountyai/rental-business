@@ -11,7 +11,7 @@ import type { AutopayEnrolment } from '@rental/core/billing'
 import { formatCents } from '@rental/core/money'
 import { returnAction, reversalAmountCents } from '@rental/core/payments'
 import { businessDate } from '@rental/core/scheduling'
-import { prisma } from '@rental/db'
+import { type Prisma, prisma } from '@rental/db'
 import {
   findApplicantByStripeCustomer,
   projectApplicationFeeEvent,
@@ -513,6 +513,15 @@ async function projectClaimed(
   // not make Stripe redeliver money we have already counted.
   if (intent.kind === 'payment_succeeded' && intent.principalCents != null && paymentId) {
     await applySettledPortalPayment(orgId, paymentId, intent, payer)
+  }
+
+  // WHAT STRIPE KEPT (R-282b, D-398), for the QuickBooks journal. After the
+  // commit and never throwing, like the receipt: the payment is the fact, and
+  // a Stripe read failing must not make Stripe redeliver it.
+  if (intent.kind === 'payment_succeeded' && paymentId) {
+    await recordProcessingFee(orgId, paymentId, intent, event.id).catch((error) => {
+      console.error(`[stripe] processing fee read failed for payment ${paymentId}`, error)
+    })
   }
 
   // The receipt (PAY-01), OUTSIDE the transaction and only on settlement.
@@ -1035,6 +1044,39 @@ export async function recentStripeEvents(orgId: string, limit = 25) {
  * would refuse it as a duplicate - so the retry would not even resend the
  * receipt it was retrying for.
  */
+/**
+ * Stores the fee on one settled payment, once. Money staff recorded by hand
+ * (`receivedByStaffId`) went through no card or bank rail, so there is
+ * nothing to read. A payment with no readable fee posts gross.
+ */
+async function recordProcessingFee(orgId: string, paymentId: string, intent: ProjectionIntent, stripeEventId: string) {
+  const payment = await prisma.payment.findUniqueOrThrow({
+    where: { id: paymentId },
+    select: { receivedByStaffId: true, processingFee: { select: { id: true } } },
+  })
+  if (payment.receivedByStaffId || payment.processingFee) return
+  const fee = await getBillingProvider(orgId).getProcessingFee({
+    stripePaymentIntentId: intent.stripePaymentIntentId,
+    stripeInvoiceId: intent.stripeInvoiceId,
+    amountCents: intent.amountCents,
+  })
+  if (!fee) return
+  try {
+    await prisma.stripeProcessingFee.create({
+      data: {
+        orgId,
+        paymentId,
+        amountCents: fee.amountCents,
+        stripeBalanceTransactionId: fee.stripeBalanceTransactionId,
+        details: fee.details as Prisma.InputJsonValue,
+        stripeEventId,
+      },
+    })
+  } catch (error) {
+    if (!isUniqueViolation(error)) throw error
+  }
+}
+
 async function sendPaymentReceipt(
   payer: { id: string; leaseId: string; propertyId: string },
   intent: ProjectionIntent,

@@ -7,6 +7,7 @@ import type {
   BillingProvider,
   CustomerInput,
   PauseBehaviour,
+  ProcessingFee,
   ProvisionedCustomer,
   ProvisionedSetupIntent,
   ProvisionedSubscription,
@@ -728,6 +729,38 @@ export class StripeBillingProvider implements BillingProvider {
     )
     const first = (list?.data as { invoice?: unknown }[] | undefined)?.[0]
     return typeof first?.invoice === 'string' ? first.invoice : null
+  }
+
+  async getProcessingFee(input: {
+    stripePaymentIntentId: string | null
+    stripeInvoiceId: string | null
+    amountCents: number
+  }): Promise<ProcessingFee | null> {
+    let intentId = input.stripePaymentIntentId
+    if (!intentId && input.stripeInvoiceId) {
+      const list = await this.#get(
+        `/invoice_payments?invoice=${encodeURIComponent(input.stripeInvoiceId)}&status=paid&limit=100`,
+      )
+      const data = (list?.data ?? []) as { amount_paid?: number; payment?: { type?: string; payment_intent?: unknown } }[]
+      // A payment record (money recorded out of band) has no charge, and two
+      // payments of the same amount cannot be told apart: null, not a guess.
+      const matches = data.filter((p) => p.amount_paid === input.amountCents && p.payment?.type === 'payment_intent')
+      const paid = matches.length === 1 ? matches[0]!.payment!.payment_intent : null
+      intentId = typeof paid === 'string' ? paid : null
+    }
+    if (!intentId) return null
+    const intent = await this.#get(
+      `/payment_intents/${encodeURIComponent(intentId)}?expand[]=latest_charge.balance_transaction`,
+    )
+    const txn = (intent?.latest_charge as { balance_transaction?: unknown } | undefined)?.balance_transaction as
+      | { id?: unknown; fee?: unknown; fee_details?: unknown }
+      | undefined
+    if (typeof txn?.id !== 'string' || !Number.isInteger(txn.fee)) return null
+    return {
+      amountCents: txn.fee as number,
+      stripeBalanceTransactionId: txn.id,
+      details: Array.isArray(txn.fee_details) ? txn.fee_details : [],
+    }
   }
 
   async getOpenInvoices(input: { stripeCustomerId: string }): Promise<OpenInvoice[] | null> {

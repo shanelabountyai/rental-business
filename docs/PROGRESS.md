@@ -15441,3 +15441,29 @@ Tests: `lib/platform/settings.test.ts` (no secret value in the output, the kill 
 - Plans are capped at 5,000 entries per night per connection.
 
 **Gate.** `lint` (the same 16 warnings as before, none new), `typecheck`, `check:ship-deps` clean. Full unit suite (`--maxWorkers=4`): 3,927 passed + 4 skipped = 3,931, with no hook timeouts this run. The control was done by hand: with `postOnce` replaced by a bare post, the exactly-once test fails. `db:ci`: every migration from scratch, no drift. `e2e/quickbooks.spec.ts` on both projects, run against the production build: 2 of 2 passed, matching `--list`.
+
+## R-282b — Stripe processing fee in the QuickBooks journal (`PENDING`)
+
+**What it built.** New table `StripeProcessingFee` (migration `20261113100000`): one row per `Payment` (`paymentId` unique) holding the balance transaction's `fee`, its id and its `fee_details`. It is append-only by trigger and has `org_scope` from `Payment` and an RLS policy. It is never a `LedgerEntry` (D-398, D-11). `BillingProvider.getProcessingFee` reads the fee:
+- **Stripe driver.** Retrieves the PaymentIntent with `expand[]=latest_charge.balance_transaction` on the connected account. An invoice-settled payment names only its invoice, so the intent is found from `/invoice_payments?invoice=…&status=paid`.
+- **Simulator.** Answers 2.9% + 30c.
+
+After the projection commits, the webhook stores the fee for every `payment_succeeded` with a Payment row, never throwing (`recordProcessingFee`). In the sync, `processingFeeFact` debits `MERCHANT_FEES` and credits `UNDEPOSITED_FUNDS`, so the day's net is what reached the bank. If any planned payment has a fee and `MERCHANT_FEES` is unmapped, the whole connection blocks, the same as any other unmapped key.
+
+**What it decided.**
+- **The fee posted is the balance transaction's whole `fee`, Stripe's and the platform's application fee together.** Both come out of the same deposit, and `PlatformFee` is not synced anywhere else, so posting only Stripe's part would leave the net short by the platform fee. `details` keeps the split.
+- **A payment's fee goes in exactly one journal:** the one holding its lowest-id money-in entry that reached a journal. One payment allocated over several debts has several entries, and a batch boundary can split them.
+- **Money staff recorded by hand (`receivedByStaffId`) is never read.** It went through no rail.
+- **The invoice lookup returns null rather than guessing.** That covers two paid invoice payments of the same amount, a payment record, and a balance transaction with no fee.
+- **Refunds do not reverse the fee**, because Stripe keeps it.
+
+**What it left behind.**
+- **A fee read that fails is not retried.** The payment posts gross, and it posts gross for ever if the journal posts before a fee lands. The read happens seconds after settlement and journals post only after the day ends, so this is a narrow window. R-283's reconciliation page is where a missing fee should surface (`ponytail:`-level gap, no comment in code).
+- **Dispute fees (`charge.dispute` fee balance transactions) are not read.**
+- **R-284's backfill must read fees for historical payments.** Nothing fetches them for payments that settled before this item.
+- **The simulator uses one card rate for every rail.**
+
+**Gate.** `lint` (the same 16 warnings, none new), `typecheck`, and `db:ci` (every migration from scratch, no drift). Full unit suite (`--maxWorkers=4`): 3,929 passed + 4 skipped = 3,933. Unit tests:
+- `quickbooks-sync.test.ts`: 5 passed, including the new fee test (blocks until Merchant Fees is mapped, posts the fee once for a payment split over two entries, refuses a delete).
+- `stripe-adapter.test.ts`: 27 passed, including the balance-transaction read and the no-guess cases.
+- `billing.test.ts`: an online payment stores 4,380c, and a counter cheque stores nothing.

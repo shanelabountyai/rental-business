@@ -122,6 +122,7 @@ export function buildJournalEntry(input: {
     txnDate: input.txnDate,
     propertyId: input.propertyId,
     lines,
-    ledgerEntryIds: facts.map((f) => f.ledgerEntryId),
+    // A fee line carries its payment's entry id (`processingFeeFact`).
+    ledgerEntryIds: [...new Set(facts.map((f) => f.ledgerEntryId))],
   }
 }
