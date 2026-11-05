@@ -15442,7 +15442,7 @@ Tests: `lib/platform/settings.test.ts` (no secret value in the output, the kill 
 
 **Gate.** `lint` (the same 16 warnings as before, none new), `typecheck`, `check:ship-deps` clean. Full unit suite (`--maxWorkers=4`): 3,927 passed + 4 skipped = 3,931, with no hook timeouts this run. The control was done by hand: with `postOnce` replaced by a bare post, the exactly-once test fails. `db:ci`: every migration from scratch, no drift. `e2e/quickbooks.spec.ts` on both projects, run against the production build: 2 of 2 passed, matching `--list`.
 
-## R-282b — Stripe processing fee in the QuickBooks journal (`PENDING`)
+## R-282b — Stripe processing fee in the QuickBooks journal (`6824ccd3`)
 
 **What it built.** New table `StripeProcessingFee` (migration `20261113100000`): one row per `Payment` (`paymentId` unique) holding the balance transaction's `fee`, its id and its `fee_details`. It is append-only by trigger and has `org_scope` from `Payment` and an RLS policy. It is never a `LedgerEntry` (D-398, D-11). `BillingProvider.getProcessingFee` reads the fee:
 - **Stripe driver.** Retrieves the PaymentIntent with `expand[]=latest_charge.balance_transaction` on the connected account. An invoice-settled payment names only its invoice, so the intent is found from `/invoice_payments?invoice=…&status=paid`.

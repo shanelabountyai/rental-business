@@ -1,16 +1,18 @@
-**2026-11-04 (latest): R-282a done (`b8c6e867`).** The nightly QuickBooks sync now runs from the daily cron. `syncQuickBooks(orgId)` plans unsynced ledger entries into `QuickBooksJournal`s, one per (property, finished posting day), links each entry once in the append-only `QuickBooksSyncLink` (D-312), and posts them with `postOnce` under DocNumber `RB-<n>`. An unmapped account or property blocks the whole connection, and the reason is written to `QuickBooksConnection.syncProblem`. The mapping is filled with `npm run db:quickbooks-map -- --entity <id> [--file mapping.json]` (D-397). Payments post gross.
+**2026-11-04 (latest): R-282b done (`6824ccd3`).** Every settled Stripe payment now stores what Stripe kept from it in the append-only `StripeProcessingFee` (one row per payment, never a `LedgerEntry`). The webhook reads it after the projection commits, through `BillingProvider.getProcessingFee`. The QuickBooks sync adds a Merchant Fees debit and an Undeposited Funds credit to the payment's journal, so the net matches the bank. An unmapped `MERCHANT_FEES` blocks the sync like any other key. The fee posted is the whole balance-transaction `fee`, Stripe's and the platform's together.
 
-A bare `go` is **R-282b** (D-398): the Stripe processing fee. Read the fee from the payment's balance transaction on the connected account when the success webhook lands, store it in its own append-only table keyed by payment (never a `LedgerEntry`), and add a `MERCHANT_FEES` line to the payment's journal. The classifier lives in `packages/core/accounting/classify.ts` and the posting loop in `apps/web/lib/integrations/quickbooks-sync.ts`. The fee is a separate fact, debit Merchant Fees and credit Undeposited Funds, added when a journal is built, for the payments it links. Size M, money, so Opus.
+A bare `go` is **R-283**: the reconciliation page plus "sync now" and "replay date" (PRD 09 Q9, Q10). It is Owner/Admin only and audited. The page has a month picker, the platform total against the QuickBooks total per mapped account, and a list of unsynced or failed lines. That list includes the exclusions R-282a links with `excludedReason`, journals carrying `lastError`, and settled card or ACH payments with no `StripeProcessingFee` row. A fee read that failed is not retried; the page should surface it. Size M, permissions plus money, so Opus.
 
-**Left by R-282a:** deposit disposition (refund or forfeit) never reaches `LedgerEntry`, so Security Deposits Held only grows in QuickBooks. Exclusions (ADJUSTMENT rows and OTHER charges) are linked with a reason, waiting for R-283's page. The simulated company file is in memory per process.
+**Left by R-282a/b:**
+- Deposit disposition (refund or forfeit) never reaches `LedgerEntry`, so Security Deposits Held only grows in QuickBooks.
+- The simulated company file is in memory per process.
+- Dispute fees are not read.
+- R-284's backfill must also read fees for payments settled before R-282b.
 
 **Local only:** `org-01-05-06.test.ts`'s ORG-01 control ("flags a write before the guard") fails on this machine on an unchanged tree and passes in CI. Not investigated.
 
 **Real-Intuit carry-over:** Intuit needs one registered redirect URI, but the callback is built on each org's host. The real driver needs a callback on the platform host that hands back to the org host.
 
 **Local test DB is bloated:** `rental_test` is 3.3 GB with 1.79M `Notification` rows. Under machine load the full unit run times out in notification-heavy files (`due-notices`, `notifications`, `follow-up`, `verify`, `jurisdiction/actions`), and all of them pass alone. Rebuilding `rental_test` from scratch would likely restore the full local run. Ask Shane before dropping it.
-
-**Open for R-282:** `Payment` carries no Stripe fee amount and nothing projects one. Q8 needs a source, either the balance transaction or the charge.
 
 **Machine note:** run the unit suite as `npm test -- --maxWorkers=4`. On 2026-11-04 the cleanup hooks in `escalation.test.ts` and `notifications.test.ts` hit their 10s timeout under parallel load. Both files pass on their own, so rerun them alone before suspecting code. A killed vitest leaves `node (vitest N)` workers alive; kill them by cwd. Pass e2e specs as bare names. A new org-scoped table needs an `org_scope` trigger and an RLS policy, and a unit test that crosses orgs wraps the call in `asRequest`. `cron.spec.ts:59` fails locally and passes in CI.
 
