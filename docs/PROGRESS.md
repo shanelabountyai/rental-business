@@ -15415,7 +15415,7 @@ Tests: `lib/platform/settings.test.ts` (no secret value in the output, the kill 
 
 **Gate.** `lint` (no new warnings) and `typecheck` passed. `quickbooks.test.ts`: 9 passed. The touched-area unit tests passed: integrations, tasks, core audit, rbac and tasks, plus `schema.test.ts` (which needed `SimulatedQuickBooksGrant` on its org-less list) and `rls.test.ts`. The full unit suite was killed under machine saturation and was not reconciled locally; CI owns it. e2e `quickbooks` + `stripe-onboarding` against the production build (which is also the `build` check): 4 passed of `Total: 4 tests in 2 files`, both projects.
 
-## R-282a — Nightly QuickBooks sync, payments gross (`SHA-PENDING`)
+## R-282a — Nightly QuickBooks sync, payments gross (`b8c6e867`)
 
 **What it built.** `classifyLedgerEntry` in `@rental/core/accounting` turns one `LedgerEntry` into a journal fact on the connection's basis (D-393). Any row that carries a payment, or any `PAYMENT` row, is money moving: it debits Undeposited Funds by the negated amount and credits A/R (accrual) or the income account directly (cash). Every other row is an obligation: on accrual it debits A/R and credits income, and on cash it is ignored. Reversals keep their sign, which swaps the sides (Q4). `DEPOSIT` is Security Deposits Held on both bases (Q7). The work adds six account keys, one per income kind, so a CPA can keep them apart. Three tables (migration `20261112100000`), each with `org_scope` and an RLS policy:
 - `QuickBooksMapping`: account key or property id → QuickBooks id, per connection.
