@@ -245,9 +245,27 @@ describe('QuickBooks reconciliation, sync now and replay (R-283)', () => {
     expect(await replayQuickBooksDate(orgId, entityId, '2026-03-20', { adapterFor: () => qbo })).toMatchObject({ ok: false, error: /No journal/ })
   })
 
+  // Holds the run's own lock rather than racing two syncs: the lock is taken
+  // only after the token fetch, so on a fast runner the first sync can finish
+  // before the second starts and both report "synced" (red in CI on R-297's push).
   it('lets only one run post per connection at a time', async () => {
-    const [a, b] = await Promise.all([sync(), sync()])
-    expect([a[0]!.outcome, b[0]!.outcome].sort()).toEqual(['busy', 'synced'])
+    let release!: () => void
+    const held = new Promise<void>((resolve) => (release = resolve))
+    let locked!: () => void
+    const taken = new Promise<void>((resolve) => (locked = resolve))
+    const holder = prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`quickbooks-post:${connectionId}`}))`
+      locked()
+      await held
+    })
+    await taken
+    try {
+      expect((await sync())[0]!.outcome).toBe('busy')
+    } finally {
+      release()
+      await holder
+    }
+    expect((await sync())[0]!.outcome).toBe('synced')
   })
 })
 
