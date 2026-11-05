@@ -12,6 +12,7 @@ import { sweepUnansweredTenantMessages } from '@/lib/comms/unanswered-sweep.ts'
 import { pollTwilioProvisioning } from '@/lib/integrations/twilio-provisioning.ts'
 import { pollResendProvisioning } from '@/lib/integrations/resend-provisioning.ts'
 import { pollDomainProvisioning } from '@/lib/integrations/vercel-domain.ts'
+import { syncQuickBooks } from '@/lib/integrations/quickbooks-sync.ts'
 import { sweepPendingDelists } from '@/lib/listings/delist-sweep.ts'
 import { dispatchPendingNotifications } from '@/lib/notifications/send.ts'
 import { sweepShowingReminders } from '@/lib/showings/reminders.ts'
@@ -97,6 +98,10 @@ async function runDaily(orgId: string) {
   // R-295a (PRD 11 §5.3): stamps EXPIRY on support grants past their window,
   // for the record. Liveness never waited for it - it is computed.
   const supportGrantsExpired = await expireSupportGrants(orgId)
+  // R-282a (PRD 09 Q3): the nightly QuickBooks push, one connection per
+  // entity. Reports per connection and never throws: a blocked or failing
+  // file is that entity's problem, written on its connection, not the tick's.
+  const quickBooks = await syncQuickBooks(orgId)
 
   const ran = runs.filter((r) => r.outcome === 'ran')
   // R-174. A run that filled a business date an earlier tick missed, counted
@@ -160,6 +165,7 @@ async function runDaily(orgId: string) {
     emailProvisioning,
     domainProvisioning,
     supportGrantsExpired,
+    quickBooks: quickBooks.map((sync) => sync.outcome),
     durationMs: Date.now() - startedAt,
   }
 }

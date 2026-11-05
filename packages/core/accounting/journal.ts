@@ -14,11 +14,18 @@
 
 import type { BusinessDate } from '../scheduling/local-time.ts'
 
-/// Platform-side account keys. R-281 maps each to an account in the
-/// connected company file. The names are PRD 09 §4's proposed defaults.
+/// Platform-side account keys. Each is mapped to an account in the connected
+/// company file during onboarding (D-397, `QuickBooksMapping`). The names are
+/// PRD 09 §4's proposed defaults, plus one key per income kind R-282a
+/// classifies, so a CPA who wants them apart can have them apart.
 export const ACCOUNT_DEFAULTS = {
   RENTAL_INCOME: 'Rental Income',
   LATE_FEE_INCOME: 'Late Fee Income',
+  FEE_INCOME: 'Fee Income',
+  UTILITY_REIMBURSEMENTS: 'Utility Reimbursements',
+  TENANT_CHARGEBACKS: 'Tenant Chargebacks',
+  RENT_CONCESSIONS: 'Rent Concessions',
+  LEGAL_COST_RECOVERY: 'Legal Cost Recovery',
   SECURITY_DEPOSITS_HELD: 'Security Deposits Held',
   ACCOUNTS_RECEIVABLE: 'Accounts Receivable',
   UNDEPOSITED_FUNDS: 'Undeposited Funds',

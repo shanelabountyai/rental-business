@@ -15414,3 +15414,30 @@ Tests: `lib/platform/settings.test.ts` (no secret value in the output, the kill 
 **Bug found along the way.** The shared `rental_test` database is 3.3 GB, with 1.79M `Notification` rows. Combined with macOS background load (load average 185), a full unit run timed out in `due-notices`, `notifications`, `follow-up`, `jurisdiction/actions` and `workorders/verify`, at 20 to 90 seconds per test. All five pass when run alone. That is environment, not code.
 
 **Gate.** `lint` (no new warnings) and `typecheck` passed. `quickbooks.test.ts`: 9 passed. The touched-area unit tests passed: integrations, tasks, core audit, rbac and tasks, plus `schema.test.ts` (which needed `SimulatedQuickBooksGrant` on its org-less list) and `rls.test.ts`. The full unit suite was killed under machine saturation and was not reconciled locally; CI owns it. e2e `quickbooks` + `stripe-onboarding` against the production build (which is also the `build` check): 4 passed of `Total: 4 tests in 2 files`, both projects.
+
+## R-282a — Nightly QuickBooks sync, payments gross (`SHA-PENDING`)
+
+**What it built.** `classifyLedgerEntry` in `@rental/core/accounting` turns one `LedgerEntry` into a journal fact on the connection's basis (D-393). Any row that carries a payment, or any `PAYMENT` row, is money moving: it debits Undeposited Funds by the negated amount and credits A/R (accrual) or the income account directly (cash). Every other row is an obligation: on accrual it debits A/R and credits income, and on cash it is ignored. Reversals keep their sign, which swaps the sides (Q4). `DEPOSIT` is Security Deposits Held on both bases (Q7). The work adds six account keys, one per income kind, so a CPA can keep them apart. Three tables (migration `20261112100000`), each with `org_scope` and an RLS policy:
+- `QuickBooksMapping`: account key or property id → QuickBooks id, per connection.
+- `QuickBooksJournal`: one planned JournalEntry, with an autoincrement `number`; its DocNumber is `RB-<number>`.
+- `QuickBooksSyncLink`: keyed by `ledgerEntryId` (D-312). It is append-only by trigger, and exactly one of `journalId` and `excludedReason` is set (CHECK).
+
+`apps/web/lib/integrations/quickbooks-sync.ts` exports `syncQuickBooks(orgId)`, which the daily cron calls per org. `db:quickbooks-map` is the onboarding script (D-397): `--entity` alone prints a template of every key and property, and `--file` upserts the mapping and writes an `integration.mapped` audit row. `/money/quickbooks` shows "Last sync" and "Sync problem". `QuickBooksConnection` gains `lastSyncedAt` and `syncProblem`. The `AccountingAdapter` now posts a `PostableJournalEntry`, which is a draft plus the resolved account refs and the property's Class or Location.
+
+**What it decided.** D-398 (Shane): R-282 is split. The fee is R-282b, sourced from the balance transaction. Build decisions:
+- **Plan, then post.** Each run fixes entries to a new journal with its own DocNumber before posting, and a retry reposts the same set under the same number through `postOnce`. A DocNumber per (property, day) would have silently skipped any entry projected later for a day already posted. The test proves the late-entry case: that entry lands in a second journal on the same `txnDate`.
+- **A day posts only once it has ended in the property's zone.** In the normal case that gives one entry per day per property.
+- **Any unmapped account or property blocks the whole connection,** and nothing is planned. A partial sync leaves the books inconsistent; a blocked one only leaves them late. The block is checked only against what the night's entries need.
+- **`ADJUSTMENT` rows (D-306, D-307) and `OTHER` charges are excluded with a reason,** and linked so they are not re-read. They are never posted to a guessed account.
+- **Accrual posts a charge on its ledger `occurredAt`** (when it was invoiced), not the `Charge.dueOn` the tax export uses. The sync keys on ledger entries (D-312), and a `Charge` with no ledger entry has not been projected yet.
+- **Only entries created after the connection row was created are synced.** History before that is R-284's backfill.
+- **A failed post stops that connection's run, in order.** The journal keeps `lastError` and is retried the next night.
+
+**What it left behind.**
+- No Stripe fee line. Payments post gross; that is R-282b.
+- The simulated company file lives in memory per process (`ponytail:` note); the real Intuit driver replaces it.
+- Deposit disposition (refund or forfeit) never reaches `LedgerEntry`, so Security Deposits Held only grows in QuickBooks until it does.
+- There is no "sync now" or replay, and no page listing exclusions; both are R-283.
+- Plans are capped at 5,000 entries per night per connection.
+
+**Gate.** `lint` (the same 16 warnings as before, none new), `typecheck`, `check:ship-deps` clean. Full unit suite (`--maxWorkers=4`): 3,927 passed + 4 skipped = 3,931, with no hook timeouts this run. The control was done by hand: with `postOnce` replaced by a bare post, the exactly-once test fails. `db:ci`: every migration from scratch, no drift. `e2e/quickbooks.spec.ts` on both projects, run against the production build: 2 of 2 passed, matching `--list`.

@@ -3,9 +3,9 @@ import {
   type AccountingAdapter,
   type AccountingFault,
   AccountingError,
+  type PostableJournalEntry,
   type PostedJournalEntry,
 } from './adapter.ts'
-import type { JournalEntryDraft } from './journal.ts'
 
 // The simulated QuickBooks company file (D-7, R-279).
 //
@@ -21,7 +21,7 @@ import type { JournalEntryDraft } from './journal.ts'
 export class SimulatedAccountingAdapter implements AccountingAdapter {
   readonly name = 'simulated'
   /// Every entry posted, in order. Public so a test can count duplicates.
-  readonly posted: (JournalEntryDraft & { externalId: string })[] = []
+  readonly posted: (PostableJournalEntry & { externalId: string })[] = []
 
   constructor(
     private readonly opts: {
@@ -37,7 +37,7 @@ export class SimulatedAccountingAdapter implements AccountingAdapter {
     return hit ? { externalId: hit.externalId, docNumber } : null
   }
 
-  async postJournalEntry(entry: JournalEntryDraft): Promise<PostedJournalEntry> {
+  async postJournalEntry(entry: PostableJournalEntry): Promise<PostedJournalEntry> {
     const fault = this.opts.fault?.('post', entry.docNumber)
     if (fault !== 'partial_failure') this.fail('post', entry.docNumber, fault)
     const externalId = randomBytes(4).readUInt32BE().toString()

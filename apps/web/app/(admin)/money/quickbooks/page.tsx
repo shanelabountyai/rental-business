@@ -88,6 +88,20 @@ export default async function QuickBooksPage({ searchParams }: { searchParams: P
                     <dd className="min-w-0">{friendlyTimestamp(row.connection.connectedAt, zone)}</dd>
                   </>
                 )}
+                {row.connection?.status === 'CONNECTED' && (
+                  <>
+                    <dt className="text-muted-foreground">Last sync</dt>
+                    <dd className="min-w-0">
+                      {row.connection.lastSyncedAt ? friendlyTimestamp(row.connection.lastSyncedAt, zone) : 'Not yet'}
+                    </dd>
+                  </>
+                )}
+                {row.connection?.syncProblem && (
+                  <>
+                    <dt className="text-muted-foreground">Sync problem</dt>
+                    <dd className="min-w-0 break-words">{row.connection.syncProblem}</dd>
+                  </>
+                )}
                 {row.connection?.statusReason && (
                   <>
                     <dt className="text-muted-foreground">Reason</dt>

@@ -147,6 +147,9 @@ export const AUDIT_ACTIONS = [
   'integration.connected',
   'integration.disconnected',
   'integration.reconnect_needed',
+  /// R-282a (D-397): `db:quickbooks-map` set an entity's account and property
+  /// mapping during onboarding (SYSTEM, `after` is what was written).
+  'integration.mapped',
   'platform_role.revoked',
   /// R-295a (PRD 11 §4.7, §4.14, §4.16): a support grant's lifecycle. The
   /// platform's rows carry `supportGrantId`; an owner's are STAFF rows about

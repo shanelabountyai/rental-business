@@ -335,6 +335,8 @@ export type QuickBooksRow = {
     propertyField: AccountingPropertyField
     realmId: string | null
     connectedAt: Date | null
+    lastSyncedAt: Date | null
+    syncProblem: string | null
   } | null
 }
 
@@ -347,7 +349,7 @@ export async function quickBooksRows(orgId: string): Promise<QuickBooksRow[]> {
       id: true,
       name: true,
       quickBooksConnection: {
-        select: { id: true, status: true, statusReason: true, basis: true, propertyField: true, realmId: true, connectedAt: true },
+        select: { id: true, status: true, statusReason: true, basis: true, propertyField: true, realmId: true, connectedAt: true, lastSyncedAt: true, syncProblem: true },
       },
     },
   })

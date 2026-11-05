@@ -718,6 +718,9 @@ model Organization {
   applicantNotes                 ApplicantNote[]
   integrations                   OrgIntegration[]
   quickBooksConnections          QuickBooksConnection[]
+  quickBooksMappings             QuickBooksMapping[]
+  quickBooksJournals             QuickBooksJournal[]
+  quickBooksSyncLinks            QuickBooksSyncLink[]
   jurisdictions                  OrgJurisdiction[]
   platformFees                   PlatformFee[]
   setupTestPayments              SetupTestPayment[]
@@ -793,8 +796,92 @@ model QuickBooksConnection {
   oauthStateHash String?                 @unique
   oauthStartedAt DateTime?
   connectedAt    DateTime?
+  /// R-282a: the last sync that finished, and why the last one stopped short
+  /// (an unmapped account or property, a provider error). Null when clean.
+  lastSyncedAt   DateTime?
+  syncProblem    String?
   createdAt      DateTime                @default(now())
   updatedAt      DateTime                @updatedAt
+  mappings       QuickBooksMapping[]
+  journals       QuickBooksJournal[]
+  syncLinks      QuickBooksSyncLink[]
+}
+
+/// R-282a (D-397): which object in this connection's company file each
+/// platform account key (ACCOUNT, an `AccountKey`) and each property
+/// (PROPERTY, a property id) posts to. Filled by `db:quickbooks-map` during
+/// onboarding, never by a screen; a key the sync needs and cannot find here
+/// blocks the whole connection's sync.
+model QuickBooksMapping {
+  id           String                @id @default(cuid())
+  /// Derived from the connection and immutable (org_scope trigger).
+  orgId        String
+  organization Organization          @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  connectionId String
+  connection   QuickBooksConnection  @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+  kind         QuickBooksMappingKind
+  platformKey  String
+  externalId   String
+  externalName String
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  @@unique([connectionId, kind, platformKey])
+  @@index([orgId])
+}
+
+enum QuickBooksMappingKind {
+  ACCOUNT
+  PROPERTY
+}
+
+/// R-282a: one planned QuickBooks JournalEntry, one per (connection, posting
+/// day, property) per run. Its ledger entries are fixed when it is planned
+/// (`QuickBooksSyncLink`), so a retry posts exactly the same set under the
+/// same DocNumber (`RB-<number>`, Q5), and an entry projected later for an
+/// old day lands in a NEW journal rather than being skipped as "already
+/// posted". PENDING → POSTED, or EMPTY when every line was zero.
+model QuickBooksJournal {
+  id           String               @id @default(cuid())
+  orgId        String
+  organization Organization         @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  connectionId String
+  connection   QuickBooksConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+  number       Int                  @unique @default(autoincrement())
+  propertyId   String
+  property     Property             @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  txnDate      DateTime             @db.Date
+  status       String               @default("PENDING")
+  externalId   String?
+  lastError    String?
+  postedAt     DateTime?
+  createdAt    DateTime             @default(now())
+  links        QuickBooksSyncLink[]
+
+  @@index([connectionId, status])
+  @@index([orgId])
+}
+
+/// R-282a (D-312): the sync state of one ledger entry, in its own table
+/// because `LedgerEntry` is append-only. Exactly one of `journalId` (posted
+/// in that journal) and `excludedReason` (deliberately not posted, listed for
+/// the reconciliation page) is set. The primary key is the ledger entry, so
+/// no entry can be synced twice.
+model QuickBooksSyncLink {
+  ledgerEntryId  String               @id
+  ledgerEntry    LedgerEntry          @relation(fields: [ledgerEntryId], references: [id], onDelete: Restrict)
+  orgId          String
+  organization   Organization         @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  connectionId   String
+  connection     QuickBooksConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+  journalId      String?
+  journal        QuickBooksJournal?   @relation(fields: [journalId], references: [id], onDelete: Restrict)
+  excludedReason String?
+  createdAt      DateTime             @default(now())
+
+  @@index([journalId])
+  @@index([connectionId])
+  @@index([orgId])
 }
 
 enum AccountingBasis {
@@ -1156,6 +1243,8 @@ model Property {
   accommodations      AccommodationRequest[]
   abandonmentCases    AbandonmentCase[]
   violationCases      ViolationCase[]
+
+  quickBooksJournals QuickBooksJournal[]
 
   @@index([legalEntityId])
   @@index([orgId])
@@ -5588,13 +5677,14 @@ model LedgerEntry {
   // own comment. This table's append-only trigger rejects every UPDATE, so a
   // SET NULL cascade could never actually run; RESTRICT says the true thing,
   // which is that a row the ledger points at cannot be deleted.
-  property   Property     @relation(fields: [propertyId], references: [id])
-  lease      Lease        @relation(fields: [leaseId], references: [id])
-  leasePayer LeasePayer?  @relation(fields: [leasePayerId], references: [id], onDelete: Restrict)
-  charge     Charge?      @relation(fields: [chargeId], references: [id], onDelete: Restrict)
-  payment    Payment?     @relation(fields: [paymentId], references: [id], onDelete: Restrict)
-  reverses   LedgerEntry? @relation("LedgerReversal", fields: [reversesId], references: [id], onDelete: Restrict)
-  reversedBy LedgerEntry? @relation("LedgerReversal")
+  property           Property            @relation(fields: [propertyId], references: [id])
+  lease              Lease               @relation(fields: [leaseId], references: [id])
+  leasePayer         LeasePayer?         @relation(fields: [leasePayerId], references: [id], onDelete: Restrict)
+  charge             Charge?             @relation(fields: [chargeId], references: [id], onDelete: Restrict)
+  payment            Payment?            @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  reverses           LedgerEntry?        @relation("LedgerReversal", fields: [reversesId], references: [id], onDelete: Restrict)
+  reversedBy         LedgerEntry?        @relation("LedgerReversal")
+  quickBooksSyncLink QuickBooksSyncLink?
 
   @@index([leaseId, occurredAt])
   @@index([propertyId, occurredAt])

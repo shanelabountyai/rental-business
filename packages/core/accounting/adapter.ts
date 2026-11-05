@@ -2,7 +2,7 @@
 // Online is the first real driver (R-280 onward); the simulated adapter below
 // is the contract fixture for it, including fault injection.
 
-import type { JournalEntryDraft } from './journal.ts'
+import type { AccountKey, JournalEntryDraft } from './journal.ts'
 
 /// PRD 00 §14's faults, minus the delayed webhook: this push has no callback.
 /// `partial_failure` is the one idempotency exists for - the entry posted and
@@ -26,13 +26,28 @@ export interface PostedJournalEntry {
   docNumber: string
 }
 
+/// A QuickBooks object as the company file names it (an Account, a Class or
+/// a Location): the id is what the API takes, the name is for people.
+export interface ExternalRef {
+  id: string
+  name: string
+}
+
+/// A draft with the company file's own ids resolved from the onboarding
+/// mapping (D-397), which is what a driver needs to post it.
+export interface PostableJournalEntry extends JournalEntryDraft {
+  accounts: Partial<Record<AccountKey, ExternalRef>>
+  /// Carried on every line as a Class or a Location (D-395).
+  property: ExternalRef & { field: 'CLASS' | 'LOCATION' }
+}
+
 export interface AccountingAdapter {
   readonly name: string
   /// QuickBooks does not enforce a unique DocNumber, so a retry MUST call
   /// this before `postJournalEntry` (Q5) - posting twice is a duplicate entry
   /// in somebody's books, not an error.
   findJournalEntry(docNumber: string): Promise<PostedJournalEntry | null>
-  postJournalEntry(entry: JournalEntryDraft): Promise<PostedJournalEntry>
+  postJournalEntry(entry: PostableJournalEntry): Promise<PostedJournalEntry>
 }
 
 /**
@@ -41,7 +56,7 @@ export interface AccountingAdapter {
  */
 export async function postOnce(
   adapter: AccountingAdapter,
-  entry: JournalEntryDraft,
+  entry: PostableJournalEntry,
 ): Promise<PostedJournalEntry> {
   return (await adapter.findJournalEntry(entry.docNumber)) ?? adapter.postJournalEntry(entry)
 }
