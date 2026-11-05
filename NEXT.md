@@ -1,5 +1,9 @@
 **2026-11-05 (latest): R-297 done** (`86f399c5`, D-401). Screening criteria versions and decision reasons are per org now. A reason must rest on a criterion that is in force in the applicant's pinned version. Owners add and retire reasons on `/screening-criteria`. The quarterly adverse-action report is at `/screening-criteria/report`, with a CSV. Setup step 8 now also needs published criteria and one selectable reason.
 
+CI is green (run 42126436044). R-297 also fixed R-283's racy `quickbooks-sync.test.ts` lock test.
+
+A bare `go` now means R-298 is next by PRD 10 §10's order. Check the backlog first: R-272, R-273 and R-278 are gated, and R-296 is the last item.
+
 **Left by R-297:** a new org starts with no criteria and no reasons; step 8 says so. The criterion check inside `recordScreeningDecision` has no test that drives the action. The list's wording is still gated on OQ-16. Each deployed DB must run `db:migrate` (`20261115100000_per_org_screening_criteria`).
 
 A bare `go` is **the next unticked row in `docs/prds/06-backlog.md`**. PRD 09's rows are all done now. Read the backlog's order note for Milestone 19 before you pick.
