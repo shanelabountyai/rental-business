@@ -59,6 +59,10 @@ export type SetupFacts = {
   /// no reviewed rule in force, or not enabled for the org with its counsel's
   /// review recorded (R-298a, D-389; D-383 before it read the rule alone).
   unreviewedStates: string[]
+  /// R-297 (PRD 10 §7.1): the org has published its own screening criteria
+  /// and at least one active reason resting on a criterion, so its first
+  /// application has something to be screened and decided against.
+  screeningCriteria: boolean
   testText: boolean
   testPayment: boolean
 }
@@ -74,7 +78,7 @@ export function setupChecklist(f: SetupFacts): Checklist {
     // `twilioRowStatus` is ACTIVE only once the campaign is APPROVED.
     sms: f.twilio?.status === 'ACTIVE',
     email: f.resend?.status === 'VERIFIED' || f.marks.includes('shared_email'),
-    jurisdiction: f.properties > 0 && f.unreviewedStates.length === 0,
+    jurisdiction: f.properties > 0 && f.unreviewedStates.length === 0 && f.screeningCriteria,
     test: f.testText && f.testPayment,
     live: f.status !== 'PROVISIONING',
   }
@@ -119,9 +123,18 @@ export function stepReason(step: SetupStep, f: SetupFacts, c: Checklist): string
     case 'email':
       return `${provider(f.resend, 'Your email domain', 'VERIFIED')} Or send from the shared domain under your organisation's name.`
     case 'jurisdiction':
-      return f.properties === 0
-        ? 'No properties yet.'
-        : `Not confirmed for ${f.unreviewedStates.join(', ')}. Each needs a reviewed rule in force, which the platform publishes, and your counsel’s review recorded on the Jurisdiction rules page.`
+      return [
+        f.properties === 0
+          ? 'No properties yet.'
+          : f.unreviewedStates.length > 0
+            ? `Not confirmed for ${f.unreviewedStates.join(', ')}. Each needs a reviewed rule in force, which the platform publishes, and your counsel’s review recorded on the Jurisdiction rules page.`
+            : null,
+        f.screeningCriteria
+          ? null
+          : 'Publish your screening criteria and at least one decline reason on the Screening criteria page.',
+      ]
+        .filter(Boolean)
+        .join(' ')
     case 'test':
       return [
         f.testText ? null : "No text has been delivered to an owner's own phone yet.",
@@ -139,7 +152,7 @@ const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : 
 /// The facts, gathered inside one org. Counts and statuses only.
 export async function setupFacts(orgId: string, now = new Date()): Promise<SetupFacts> {
   const owners = await orgOwners(orgId)
-  const [org, activeMembers, entities, properties, templates, integrations, testText, testPayment, rentPayment, places, reviewed] =
+  const [org, activeMembers, entities, properties, templates, integrations, testText, testPayment, rentPayment, places, reviewed, criteria, reasons] =
     await Promise.all([
       prisma.organization.findUniqueOrThrow({ where: { id: orgId }, select: { status: true, setupMarks: true } }),
       prisma.orgMembership.count({ where: { orgId, removedAt: null, staffUser: { active: true } } }),
@@ -166,6 +179,8 @@ export async function setupFacts(orgId: string, now = new Date()): Promise<Setup
         distinct: ['state', 'county'],
       }),
       prisma.orgJurisdiction.findMany({ where: { orgId, counselReviewedAt: { not: null } }, select: { state: true } }),
+      prisma.screeningCriteria.count({ where: { orgId, effectiveTo: null } }),
+      prisma.decisionReason.count({ where: { orgId, retiredAt: null, criterion: { not: null } } }),
     ])
   const counselReviewed = new Set(reviewed.map((r) => r.state))
   const unreviewed = new Set<string>()
@@ -187,6 +202,7 @@ export async function setupFacts(orgId: string, now = new Date()): Promise<Setup
     twilio: row('TWILIO'),
     resend: row('RESEND'),
     unreviewedStates: [...unreviewed].sort(),
+    screeningCriteria: criteria > 0 && reasons > 0,
     testText: testText > 0,
     testPayment: testPayment + rentPayment > 0,
   }

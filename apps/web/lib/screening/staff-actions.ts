@@ -4,6 +4,7 @@ import { businessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import {
   ADVERSE_ACTION_TEMPLATE_VERSION,
   adverseActionNoticeText,
+  criterionInForce,
   evaluateCriteria,
 } from '@rental/core/screening'
 import { prisma } from '@rental/db'
@@ -79,15 +80,7 @@ export async function recordScreeningDecision(
         'Say why - an individualized-assessment note is required for anything but a plain approval.',
     }
   }
-  // R-269 (PRD 08 C3): a decline or a conditional approval names a reason
-  // from the list, recorded on the decision for the fair-housing audit. It
-  // is NOT put in the adverse-action notice while the list is unreviewed
-  // placeholder wording (OQ-16, D-333). A plain approval records none.
-  const reason =
-    decision !== 'APPROVED' && reasonCode
-      ? await prisma.decisionReason.findFirst({ where: { code: reasonCode, retiredAt: null } })
-      : null
-  if (decision !== 'APPROVED' && !reason) {
+  if (decision !== 'APPROVED' && !reasonCode) {
     return { error: 'Choose the reason for this decision from the list.' }
   }
 
@@ -111,6 +104,32 @@ export async function recordScreeningDecision(
   }
   if (!application.completedAt) {
     return { error: "This household's application is not complete yet." }
+  }
+
+  // The version this applicant was screened against, in their own org
+  // (R-297: each org numbers its versions from 1).
+  const criteria = await prisma.screeningCriteria.findUniqueOrThrow({
+    where: { orgId_version: { orgId: actor.orgId, version: applicant.screeningReport.criteriaVersion } },
+  })
+
+  // R-269 (PRD 08 C3): a decline or a conditional approval names a reason
+  // from the list, recorded on the decision for the fair-housing audit. It
+  // is NOT put in the adverse-action notice while the list is unreviewed
+  // placeholder wording (OQ-16, D-333). A plain approval records none.
+  // R-297 (PRD 10 §7.1): the org's own list, and the reason must rest on a
+  // criterion that version publishes - the stated reason is always a
+  // written, uniformly applied rule.
+  const reason =
+    decision !== 'APPROVED'
+      ? await prisma.decisionReason.findFirst({ where: { orgId: actor.orgId, code: reasonCode, retiredAt: null } })
+      : null
+  if (decision !== 'APPROVED') {
+    if (!reason) return { error: 'Choose the reason for this decision from the list.' }
+    if (!reason.criterion || !criterionInForce(criteria, reason.criterion)) {
+      return {
+        error: `"${reason.label}" does not rest on a criterion in the v${criteria.version} screening criteria this applicant was screened against. Choose a reason that does.`,
+      }
+    }
   }
 
   const outOfOrder = await outOfOrderApplicationIds(application)
@@ -180,9 +199,6 @@ export async function recordScreeningDecision(
     if (!owesAdverseAction) return { noticeId: null, autoServed: false, bodyText: null }
 
     const report = applicant.screeningReport!
-    const criteria = await tx.screeningCriteria.findUniqueOrThrow({
-      where: { version: applicant.screeningReport!.criteriaVersion },
-    })
     const factors = evaluateCriteria(criteria, {
       monthlyIncomeCents: applicant.monthlyIncomeCents,
       rentCents: application.listing.rentCents,

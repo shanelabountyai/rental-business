@@ -181,7 +181,9 @@ export async function buildPartyChange(
     return { error: 'One of the applicants named could not be found.' }
   }
 
+  // R-297: the lease's own org's criteria, current version.
   const criteria = await prisma.screeningCriteria.findFirst({
+    where: { orgId: lease.orgId, effectiveTo: null },
     orderBy: { version: 'desc' },
     select: { incomeToRentMultiplierX100: true },
   })

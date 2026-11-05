@@ -146,6 +146,13 @@ test('the owner makes step 9 with a test text and a paid $1, and the console mar
   await prisma.orgJurisdiction.create({
     data: { orgId: org.id, state, counselReviewedBy: 'E2E Counsel', counselReviewedAt: new Date('2026-01-02') },
   })
+  // R-297: step 8 also needs the org's own criteria and one reason on a criterion.
+  await prisma.screeningCriteria.create({
+    data: { orgId: org.id, version: 1, incomeToRentMultiplierX100: 300, evictionLookbackMonths: 84, criminalLookbackMonths: 84 },
+  })
+  await prisma.decisionReason.create({
+    data: { orgId: org.id, code: 'INCOME_BELOW_CRITERIA', label: 'Income below the written screening criteria', criterion: 'income' },
+  })
   // Steps 5 and 6 are the providers' to finish; their onboarding has its own specs.
   await prisma.orgIntegration.createMany({
     data: [

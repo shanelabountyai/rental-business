@@ -626,6 +626,7 @@ model Organization {
   applications                   Application[]
   applicants                     Applicant[]
   screeningCriterias             ScreeningCriteria[]
+  decisionReasons                DecisionReason[]
   screeningReports               ScreeningReport[]
   prospects                      Prospect[]
   showings                       Showing[]
@@ -2181,9 +2182,9 @@ model ScreeningCriteria {
 
   createdBy StaffUser? @relation(fields: [createdByStaffId], references: [id])
 
-  @@unique([version])
+  /// Per org (R-297): each org numbers its own versions from 1.
+  @@unique([orgId, version])
   @@index([effectiveTo])
-  @@index([orgId])
 }
 
 /// One consumer report per Applicant (LEASE-04, R-060) - screening is
@@ -2294,7 +2295,8 @@ model ScreeningReport {
   completedAt DateTime?
 
   applicant                 Applicant       @relation(fields: [applicantId], references: [id])
-  decisionReason            DecisionReason? @relation(fields: [decisionReasonCode], references: [code], onDelete: Restrict)
+  /// Composite so a report can only cite its own org's reason (R-297).
+  decisionReason            DecisionReason? @relation(fields: [orgId, decisionReasonCode], references: [orgId, code], onDelete: Restrict)
   decidedBy                 StaffUser?      @relation("ScreeningReportDecidedBy", fields: [decidedByStaffId], references: [id])
   adverseActionNotice       Notice?         @relation(fields: [adverseActionNoticeId], references: [id])
   adverseActionOverriddenBy StaffUser?      @relation("ScreeningReportAdverseActionOverriddenBy", fields: [adverseActionOverriddenByStaffId], references: [id])
@@ -8100,15 +8102,36 @@ model MessagingSettings {
 /// R-269 (PRD 08 C3). The decline-reason list a decision picks from. A
 /// PLACEHOLDER until counsel reviews it (OQ-16); seeded by the migration.
 /// Rows are added or retired, never relabelled, so the code a past decision
-/// recorded still means what it meant. R-297 makes the list per-organisation
-/// and maps each reason to a written criterion.
+/// recorded still means what it meant.
+///
+/// R-297 (PRD 10 §7.1, D-401): the org's own list, and every reason names
+/// the written criterion it rests on. A reason whose criterion is null, or
+/// is not in force in the version the applicant was screened against (a
+/// credit reason under a version with no credit floor), cannot be picked.
 model DecisionReason {
-  code      String    @id
-  label     String
-  createdAt DateTime  @default(now())
-  retiredAt DateTime?
+  /// Root table: named by its writer, never derived (D-348); org_scope() keeps it immutable.
+  orgId        String
+  organization Organization        @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  code         String
+  label        String
+  /// Null only on a reason that predates R-297 and maps to no column of
+  /// ScreeningCriteria (UNVERIFIED_INFORMATION); such a row is unselectable.
+  criterion    ScreeningCriterion?
+  createdAt    DateTime            @default(now())
+  retiredAt    DateTime?
 
   decisions ScreeningReport[]
+
+  @@id([orgId, code])
+}
+
+/// The written criteria a decision reason can rest on: one per evaluated
+/// column of ScreeningCriteria, and `evaluateCriteria`'s own keys.
+enum ScreeningCriterion {
+  income
+  credit
+  eviction
+  criminal
 }
 
 /// R-269 (PRD 08 C3, M3.4): "request more info" - the outcome that is not a

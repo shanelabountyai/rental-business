@@ -147,6 +147,9 @@ const RESOURCE_LESS_GUARDS: Record<string, string> = {
   'app/(admin)/screening-criteria/page.tsx':
     'ScreeningCriteria applies to every applicant across the whole portfolio at once (the model\'s own doc comment) - owner policy, not law, but the same "no scoped resource" shape jurisdiction/page.tsx is exempted for.',
   'app/(admin)/screening-criteria/new/page.tsx': 'Same as the screening-criteria list above.',
+  'app/(admin)/screening-criteria/report/page.tsx':
+    'R-297: the org-wide adverse-action report, owner-only on screening.criteria.write. A HUD inquiry asks about the whole org, not one property.',
+  'app/(admin)/screening-criteria/report/export/route.ts': 'The same report as a file, under the same guard as its page.',
   'lib/screening/criteria-actions.ts':
     'Same as the screening-criteria pages. Also a legal-release gate (OQ-6): a criteria change is the fair-housing standard every applicant in the portfolio is compared against.',
   'app/(admin)/messages/templates/page.tsx':

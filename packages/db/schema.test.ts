@@ -426,7 +426,7 @@ describe('orgId on every org-owned table (R-285a)', () => {
   // Adding a model means deciding which, here, on purpose.
   const ORGLESS = [
     'Organization', 'OrgMembership', 'StaffUser', 'StaffCredential', 'Role',
-    'JurisdictionRule', 'RateLimitCounter', 'AuthToken', 'DecisionReason',
+    'JurisdictionRule', 'RateLimitCounter', 'AuthToken',
     // R-294b: a platform admin is inside no org (PRD 11 §2.1).
     'PlatformAdmin', 'PlatformCredential', 'PlatformRole', 'PlatformRoleAssignment',
     // R-292b: the simulated Twilio's own state - another company's database.

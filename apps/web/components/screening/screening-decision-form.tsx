@@ -34,9 +34,10 @@ export function ScreeningDecisionForm({
   /// decision yet - shows the deviation-reason field up front instead of
   /// making staff guess why the form rejected a first attempt.
   outOfOrder: boolean
-  /// R-269: the active `DecisionReason` rows. The picked reason is recorded
-  /// on the decision; it stays out of the notice until counsel reviews the
-  /// list (OQ-16, D-333).
+  /// R-269: the active `DecisionReason` rows; R-297: only those resting on a
+  /// criterion the applicant's version publishes. The picked reason is
+  /// recorded on the decision; it stays out of the notice until counsel
+  /// reviews the list (OQ-16, D-333).
   reasons: readonly { value: string; label: string }[]
 }) {
   const [state, formAction] = useActionState<DecisionFormState, FormData>(action, {})

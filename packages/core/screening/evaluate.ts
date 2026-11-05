@@ -50,8 +50,37 @@ export interface ScreeningFacts {
 
 export type CriterionResult = 'MEETS' | 'FAILS' | 'UNKNOWN'
 
+export type CriterionKey = 'income' | 'credit' | 'eviction' | 'criminal'
+
+export const CRITERION_LABELS: Record<CriterionKey, string> = {
+  income: 'Income to rent',
+  credit: 'Credit score floor',
+  eviction: 'Eviction history lookback',
+  criminal: 'Criminal history lookback',
+}
+
+/**
+ * Whether a version actually publishes this criterion (R-297, PRD 10 §7.1).
+ * A decision reason may rest only on a criterion that is in force in the
+ * version the applicant was screened against: a credit reason under a
+ * version with no floor, or a lookback of zero months, names a rule that was
+ * never written down.
+ */
+export function criterionInForce(criteria: ScreeningCriteriaConfig, key: CriterionKey): boolean {
+  switch (key) {
+    case 'income':
+      return criteria.incomeToRentMultiplierX100 > 0
+    case 'credit':
+      return criteria.minCreditScore != null
+    case 'eviction':
+      return criteria.evictionLookbackMonths > 0
+    case 'criminal':
+      return criteria.criminalLookbackMonths > 0
+  }
+}
+
 export interface CriterionEvaluation {
-  key: 'income' | 'credit' | 'eviction' | 'criminal'
+  key: CriterionKey
   result: CriterionResult
   /// Plain-language statement of what was required and what was found -
   /// what the "alongside criteria" display actually renders.

@@ -239,6 +239,8 @@ What this PRD adds, per org:
 - **An adverse-action report per org** (quarter: decisions by outcome, by reason, by property; time from application to decision) — the record an org hands counsel or a HUD inquiry. Read-only, owner, exportable (§8).
 - The notice templates (adverse action, approval, more-info) are the org's managed templates (R-270) with the org's brand; the FCRA-required contents stay in the typed template (D-44) and are not editable.
 
+*(2026-11-05, D-401, as built in R-297: the table keeps the name `DecisionReason`, with `orgId` and a `criterion` that must be in force in the applicant's pinned version; the report is owner-only on `screening.criteria.write`; setup step 8 also needs published criteria and one selectable reason.)*
+
 ### 7.2 Jurisdiction per org, beyond seeded Texas
 
 `JurisdictionRule` stays what D-4 made it: versioned, effective-dated, per state (and county), **not per org** — a statute is the same for every landlord in the state. Two things are per org:

@@ -115,9 +115,35 @@ async function seedApplication(status: 'APPLIED' | 'INQUIRY' = 'APPLIED') {
 
 describe('currentScreeningCriteria', () => {
   it('returns the seeded, currently-effective version', async () => {
-    const criteria = await currentScreeningCriteria()
+    const criteria = await currentScreeningCriteria('org_0')
     expect(criteria.version).toBeGreaterThanOrEqual(1)
     expect(criteria.effectiveTo).toBeNull()
+  })
+
+  // R-297 (PRD 10 §7.1): each org's own criteria, never another org's.
+  it("refuses an org that has published none, rather than using another org's", async () => {
+    const stamp = `r297-${randomUUID().slice(0, 8)}`
+    const org = await prisma.organization.create({ data: { slug: stamp, name: stamp } })
+    await expect(currentScreeningCriteria(org.id)).rejects.toThrow(/published no screening criteria/)
+
+    // Its own v1 is its own, alongside org_0's v1.
+    await prisma.screeningCriteria.create({
+      data: { orgId: org.id, version: 1, incomeToRentMultiplierX100: 250, evictionLookbackMonths: 12, criminalLookbackMonths: 12 },
+    })
+    const own = await currentScreeningCriteria(org.id)
+    expect(own.incomeToRentMultiplierX100).toBe(250)
+    expect((await currentScreeningCriteria('org_0')).orgId).toBe('org_0')
+  })
+
+  it('refuses a report citing another org reason, at the database', async () => {
+    const stamp = `r297-${randomUUID().slice(0, 8)}`
+    const org = await prisma.organization.create({ data: { slug: stamp, name: stamp } })
+    await prisma.decisionReason.create({ data: { orgId: org.id, code: 'ONLY_IN_B', label: 'B only', criterion: 'income' } })
+    const { lead } = await seedApplication()
+    await orderScreeningForApplicant({ id: lead.id, applicationId: lead.applicationId, orgId: lead.orgId })
+    await expect(
+      prisma.screeningReport.update({ where: { applicantId: lead.id }, data: { decisionReasonCode: 'ONLY_IN_B' } }),
+    ).rejects.toThrow(/foreign key/i)
   })
 })
 

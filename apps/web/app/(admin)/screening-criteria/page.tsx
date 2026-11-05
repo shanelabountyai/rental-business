@@ -1,8 +1,10 @@
 import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { actorCan, requirePermission } from '@/lib/auth/guard.ts'
-import { listCriteriaVersions } from '@/lib/screening/criteria-queries.ts'
-import { activeDecisionReasons } from '@/lib/screening/queries.ts'
+import { CRITERION_LABELS, criterionInForce } from '@rental/core/screening'
+import { addDecisionReason, retireDecisionReason } from '@/lib/screening/criteria-actions.ts'
+import { listCriteriaVersions, listDecisionReasons } from '@/lib/screening/criteria-queries.ts'
+import { AddDecisionReasonForm, RetireDecisionReasonForm } from '@/components/screening/decision-reason-forms.tsx'
 import { PageHeader } from '@/components/page-header.tsx'
 import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
@@ -15,15 +17,18 @@ export const metadata = { title: 'Screening criteria' }
 // apply to every applicant across the whole portfolio at once
 // (ScreeningCriteria's own schema comment), so there is no scoped list to
 // build here.
+//
+// R-297 (PRD 10 §7.1): the versions and the reason list are the signed-in
+// org's own, and every reason names the criterion it rests on.
 export default async function ScreeningCriteriaPage({
   searchParams,
 }: {
   searchParams: Promise<{ versioned?: string }>
 }) {
-  await requirePermission('screening.criteria.read')
+  const actor = await requirePermission('screening.criteria.read')
   const [versions, reasons, canWrite, { versioned }] = await Promise.all([
-    listCriteriaVersions(),
-    activeDecisionReasons(),
+    listCriteriaVersions(actor.orgId),
+    listDecisionReasons(actor.orgId),
     actorCan('screening.criteria.write'),
     searchParams,
   ])
@@ -41,12 +46,20 @@ export default async function ScreeningCriteriaPage({
           </p>
         </PageHeader>
         {canWrite && (
-          <Link
-            href="/screening-criteria/new"
-            className={`${SUBMIT_BUTTON_CLASSES} flex min-h-11 items-center px-4 py-2 text-sm`}
-          >
-            New version
-          </Link>
+          <div className="flex flex-wrap gap-3">
+            <Link
+              href="/screening-criteria/report"
+              className="flex min-h-11 items-center text-sm underline underline-offset-2"
+            >
+              Adverse-action report
+            </Link>
+            <Link
+              href="/screening-criteria/new"
+              className={`${SUBMIT_BUTTON_CLASSES} flex min-h-11 items-center px-4 py-2 text-sm`}
+            >
+              New version
+            </Link>
+          </div>
         )}
       </header>
 
@@ -101,24 +114,56 @@ export default async function ScreeningCriteriaPage({
         </ul>
       )}
 
-      {/* R-269. Read-only here: adding and retiring reasons arrives with
-          R-297, which ties each one to a written criterion per organisation,
-          and the wording waits on counsel either way (OQ-16). */}
+      {/* R-269, made the org's own and tied to written criteria by R-297. The
+          wording still waits on counsel (OQ-16). */}
       <section aria-labelledby="decision-reasons" className="flex flex-col gap-2">
         <h2 id="decision-reasons" className="text-sm font-semibold">
           Decline reasons
         </h2>
-        <p className="text-warning text-sm">
-          A placeholder list, not reviewed by counsel (OQ-16). A decline or
-          conditional approval must pick one. It is recorded on the decision
-          and kept out of the adverse-action notice until counsel approves
-          this list.
+        <p className="text-warning max-w-prose text-sm">
+          Not reviewed by counsel (OQ-16). A decline or conditional approval
+          must pick one, and only a reason resting on a criterion in the
+          version the applicant was screened against can be picked. It is
+          recorded on the decision and kept out of the adverse-action notice
+          until counsel approves this list.
         </p>
-        <ul className="flex list-disc flex-col gap-1 pl-5 text-sm">
-          {reasons.map((reason) => (
-            <li key={reason.value}>{reason.label}</li>
-          ))}
-        </ul>
+        {reasons.length === 0 ? (
+          <p className="text-muted-foreground text-sm">
+            No reasons yet. Nothing can be declined until one is added.
+          </p>
+        ) : (
+          <ul className="flex list-disc flex-col gap-1 pl-5 text-sm break-words">
+            {reasons.map((reason) => (
+              <li key={reason.code}>
+                {reason.label}
+                <span className="text-muted-foreground">
+                  {' · '}
+                  {reason.criterion
+                    ? CRITERION_LABELS[reason.criterion]
+                    : 'no written criterion, cannot be picked'}
+                  {reason.criterion && current && !criterionInForce(current, reason.criterion)
+                    ? ` (not in v${current.version})`
+                    : ''}
+                  {reason.retiredAt ? ' · retired' : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {canWrite && (
+          <div className="flex flex-col gap-3 pt-2">
+            <AddDecisionReasonForm
+              action={addDecisionReason}
+              criteria={Object.entries(CRITERION_LABELS).map(([value, label]) => ({ value, label }))}
+            />
+            <RetireDecisionReasonForm
+              action={retireDecisionReason}
+              reasons={reasons
+                .filter((r) => !r.retiredAt)
+                .map((r) => ({ value: r.code, label: r.label }))}
+            />
+          </div>
+        )}
       </section>
     </div>
   )

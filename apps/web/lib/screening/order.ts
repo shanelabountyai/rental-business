@@ -34,14 +34,15 @@ export interface ApplicantToScreen {
  * JurisdictionRule (packages/core's own convention: a silently invented
  * default is worse than a loud failure here).
  */
-export async function currentScreeningCriteria() {
+export async function currentScreeningCriteria(orgId: string) {
+  // R-297: the org's own version. Another org's criteria are not a default.
   const criteria = await prisma.screeningCriteria.findFirst({
-    where: { effectiveTo: null },
+    where: { orgId, effectiveTo: null },
     orderBy: { version: 'desc' },
   })
   if (!criteria) {
     throw new Error(
-      'No ScreeningCriteria configured - seed.mts should have created v1. Screening cannot run with nothing to evaluate against.',
+      'This organisation has published no screening criteria (setup step 8). Screening cannot run with nothing to evaluate against.',
     )
   }
   return criteria
@@ -54,7 +55,7 @@ export async function orderScreeningForApplicant(applicant: ApplicantToScreen): 
   })
   if (existing) return
 
-  const criteria = await currentScreeningCriteria()
+  const criteria = await currentScreeningCriteria(applicant.orgId)
   // A hint to the provider only; the UTC day is close enough to limit a
   // search, and evaluate.ts re-checks every returned date anyway.
   const today = utcToBusinessDate(new Date())

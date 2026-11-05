@@ -115,7 +115,6 @@ const ORG_LESS: Record<string, string> = {
   JurisdictionRule: 'a statute is not per org (D-4)',
   RateLimitCounter: 'keys gain an org component instead (R-288)',
   AuthToken: 'points at a subject that has an org',
-  DecisionReason: 'global placeholder list until R-297 makes it per org',
   PlatformAdmin: 'a platform admin is inside no org (PRD 11 §2.1)',
   PlatformCredential: "a PlatformAdmin's password and MFA, as org-less as the admin",
   PlatformRole: 'a console role (R-302a); its permissions are platform permissions, which name no org',

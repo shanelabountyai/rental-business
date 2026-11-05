@@ -324,8 +324,9 @@ async function seedJurisdictionRules() {
 /// honestly-flagged posture seedJurisdictionRules() already gives its own
 /// un-reviewed seed.
 async function seedScreeningCriteria() {
+  // R-297: org_0's own v1 - each org numbers its versions from 1.
   const existing = await prisma.screeningCriteria.findFirst({
-    where: { version: 1 },
+    where: { orgId: 'org_0', version: 1 },
   })
   if (existing) {
     console.info('Screening criteria already seeded (v1).')

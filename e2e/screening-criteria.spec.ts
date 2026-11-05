@@ -168,4 +168,40 @@ test.describe('screening criteria', () => {
     const results = await axeScan(page)
     expect(results.violations).toEqual([])
   })
+
+  // R-297 (PRD 10 §7.1): the org's reason list, each tied to a criterion.
+  test('an owner adds a reason with its criterion, retires it, and reads the report', async ({ page }) => {
+    const staff = await createStaff('owner')
+    await signIn(page, staff.email)
+    await page.goto('/screening-criteria')
+
+    const label = `Credit below floor ${randomUUID().slice(0, 8)}`
+    await page.getByLabel('Reason, as it will be recorded').fill(label)
+    await page.getByLabel('Written criterion it rests on').selectOption({ label: 'Credit score floor' })
+    await page.getByRole('button', { name: 'Add reason' }).click()
+    await expect(page.getByText(`Added "${label}".`)).toBeVisible()
+    const row = await prisma.decisionReason.findFirstOrThrow({ where: { label } })
+    expect(row).toMatchObject({ orgId: 'org_0', criterion: 'credit', retiredAt: null })
+
+    await page.getByLabel('Reason to retire').selectOption({ label })
+    await page.getByRole('button', { name: 'Retire reason' }).click()
+    await expect(page.getByText(`Retired "${label}". Decisions that recorded it keep it.`)).toBeVisible()
+    await expect
+      .poll(async () => (await prisma.decisionReason.findFirstOrThrow({ where: { label } })).retiredAt)
+      .not.toBeNull()
+
+    await page.getByRole('link', { name: 'Adverse-action report' }).click()
+    await expect(page.getByRole('heading', { name: 'Adverse-action report', exact: true })).toBeVisible()
+    const csv = await page.request.get('/screening-criteria/report/export?quarter=2026-Q4')
+    expect(csv.status()).toBe(200)
+    expect(await csv.text()).toMatch(/^Decided on,Property,Outcome/)
+    expect((await axeScan(page)).violations).toEqual([])
+  })
+
+  test('a manager cannot read the adverse-action report', async ({ page }) => {
+    const staff = await createStaff('manager')
+    await signIn(page, staff.email)
+    await page.goto('/screening-criteria/report')
+    await page.waitForURL(/\/no-access/)
+  })
 })

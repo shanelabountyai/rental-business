@@ -1,6 +1,11 @@
 'use server'
 
-import { type ScreeningCriteriaInput, validateCriteriaInput } from '@rental/core/screening'
+import {
+  CRITERION_LABELS,
+  type CriterionKey,
+  type ScreeningCriteriaInput,
+  validateCriteriaInput,
+} from '@rental/core/screening'
 import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
@@ -82,7 +87,7 @@ export async function createCriteriaVersion(
     ])
   }
 
-  const previous = await currentCriteriaVersion()
+  const previous = await currentCriteriaVersion(actor.orgId)
 
   if (previous && effectiveFrom <= previous.effectiveFrom) {
     return {
@@ -107,8 +112,7 @@ export async function createCriteriaVersion(
 
     const created = await tx.screeningCriteria.create({
       data: {
-        // R-285b: named into the actor's org. Which version is current, and
-        // the global version number, stay as they are until R-297.
+        // R-297: the org's own sequence, numbered from its own last version.
         orgId: actor.orgId,
         version,
         incomeToRentMultiplierX100: input.incomeToRentMultiplierX100,
@@ -137,4 +141,84 @@ export async function createCriteriaVersion(
 
   revalidatePath('/screening-criteria')
   redirect('/screening-criteria?versioned=1')
+}
+
+const CRITERIA = Object.keys(CRITERION_LABELS) as CriterionKey[]
+
+export interface ReasonFormState {
+  error?: string
+  fieldErrors?: Record<string, string>
+  notice?: string
+}
+
+/**
+ * Adds a decision reason to the actor's org (R-297, PRD 10 §7.1). It must
+ * name the written criterion it rests on; there is no reason without one.
+ * Labels are never edited, so a code a past decision recorded keeps its
+ * meaning (D-333): a reworded reason is a new reason and a retired old one.
+ */
+export async function addDecisionReason(_previous: ReasonFormState, formData: FormData): Promise<ReasonFormState> {
+  const actor = await requirePermission('screening.criteria.write')
+  const label = str(formData, 'label')
+  const criterion = str(formData, 'criterion') as CriterionKey
+  const fieldErrors: Record<string, string> = {}
+  if (!label) fieldErrors.label = 'Say what the reason is.'
+  else if (label.length > 200) fieldErrors.label = 'Keep the reason under 200 characters.'
+  if (!CRITERIA.includes(criterion)) fieldErrors.criterion = 'Choose the written criterion this reason rests on.'
+  if (Object.keys(fieldErrors).length > 0) return { error: 'Fix the highlighted fields.', fieldErrors }
+
+  // A readable code from the label, unique in the org. Never shown to an
+  // applicant; it is what a decision and its audit row record.
+  const stem = label.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'REASON'
+  const taken = new Set(
+    (await prisma.decisionReason.findMany({
+      where: { orgId: actor.orgId, code: { startsWith: stem } },
+      select: { code: true },
+    })).map((r) => r.code),
+  )
+  let code = stem
+  for (let n = 2; taken.has(code); n++) code = `${stem}_${n}`
+
+  await prisma.$transaction(async (tx) => {
+    await tx.decisionReason.create({ data: { orgId: actor.orgId, code, label, criterion } })
+    await audit(
+      {
+        action: 'decision_reason.added',
+        entityType: 'DecisionReason',
+        entityId: code,
+        after: { code, label, criterion },
+      },
+      tx,
+    )
+  })
+  revalidatePath('/screening-criteria')
+  return { notice: `Added "${label}".` }
+}
+
+/** Retires a reason in the actor's org. Past decisions keep it. */
+export async function retireDecisionReason(_previous: ReasonFormState, formData: FormData): Promise<ReasonFormState> {
+  const actor = await requirePermission('screening.criteria.write')
+  const code = str(formData, 'code')
+  const reason = code
+    ? await prisma.decisionReason.findFirst({ where: { orgId: actor.orgId, code, retiredAt: null } })
+    : null
+  if (!reason) return { error: 'That reason is not on the active list.' }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.decisionReason.update({
+      where: { orgId_code: { orgId: actor.orgId, code } },
+      data: { retiredAt: new Date() },
+    })
+    await audit(
+      {
+        action: 'decision_reason.retired',
+        entityType: 'DecisionReason',
+        entityId: code,
+        before: { code, label: reason.label, criterion: reason.criterion },
+      },
+      tx,
+    )
+  })
+  revalidatePath('/screening-criteria')
+  return { notice: `Retired "${reason.label}". Decisions that recorded it keep it.` }
 }

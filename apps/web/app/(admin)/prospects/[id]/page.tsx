@@ -395,7 +395,7 @@ export default async function ProspectDetailPage({
                     applicantId={a.applicantId}
                     applicantName={`${a.firstName} ${a.lastName}`}
                     outOfOrder={screening.outOfOrder}
-                    reasons={screening.reasons}
+                    reasons={a.reasons}
                   />
                 )}
                 {!a.decision && (

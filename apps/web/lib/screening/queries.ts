@@ -2,7 +2,7 @@ import 'server-only'
 
 import { deliveryNarrative } from '@rental/core/comms'
 import { businessDate, friendlyTimestamp, utcToBusinessDate } from '@rental/core/scheduling'
-import { evaluateCriteria, type CriterionEvaluation } from '@rental/core/screening'
+import { criterionInForce, evaluateCriteria, type CriterionEvaluation } from '@rental/core/screening'
 import { prisma } from '@rental/db'
 import type { ResolvedScope } from '@/lib/scope/current-scope.ts'
 import { currentScreeningCriteria, outOfOrderApplicationIds } from './order.ts'
@@ -23,6 +23,9 @@ export interface ApplicantScreeningSummary {
   /// R-269: the label of the reason picked from `DecisionReason`.
   decisionReason: string | null
   decidedAt: Date | null
+  /// R-297: the reasons a decision may name against the version this
+  /// applicant was screened under (PRD 10 §7.1). The action re-checks.
+  reasons: { value: string; label: string }[]
   /// R-269: every "request more info", oldest first.
   infoRequests: { id: string; request: string; requestedAt: Date }[]
   /// R-270: every decision or info-request message sent to them, one line
@@ -49,8 +52,6 @@ export interface ApplicationScreeningSummary {
   /// for real at write time (a read can go stale between render and
   /// submit).
   outOfOrder: boolean
-  /// R-269: the active decline-reason list, for the decision form.
-  reasons: { value: string; label: string }[]
   /// R-270: the lease draft opened when the household was approved.
   leaseDraftId: string | null
   /// R-270 (D-336): every applicant approved and no draft - the household was
@@ -94,7 +95,7 @@ export async function screeningForApplication(
   })
   if (!application) return null
 
-  const currentCriteria = await currentScreeningCriteria()
+  const currentCriteria = await currentScreeningCriteria(application.orgId)
 
   const sent = await prisma.notification.findMany({
     where: {
@@ -119,11 +120,17 @@ export async function screeningForApplication(
     ),
   ]
   const pastCriteria = pinnedVersions.length
-    ? await prisma.screeningCriteria.findMany({ where: { version: { in: pinnedVersions } } })
+    ? await prisma.screeningCriteria.findMany({ where: { orgId: application.orgId, version: { in: pinnedVersions } } })
     : []
   const criteriaByVersion = new Map(
     [currentCriteria, ...pastCriteria].map((c) => [c.version, c]),
   )
+
+  // R-297: the org's active reasons that rest on a written criterion.
+  const reasonRows = await prisma.decisionReason.findMany({
+    where: { orgId: application.orgId, retiredAt: null, criterion: { not: null } },
+    orderBy: { createdAt: 'asc' },
+  })
 
   const applicants = application.applicants.map((applicant): ApplicantScreeningSummary => {
     const report = applicant.screeningReport
@@ -151,6 +158,9 @@ export async function screeningForApplication(
       decisionNotes: report?.decisionNotes ?? null,
       decisionReason: report?.decisionReason?.label ?? null,
       decidedAt: report?.decidedAt ?? null,
+      reasons: reasonRows
+        .filter((row) => criterionInForce(criteriaConfig, row.criterion!))
+        .map((row) => ({ value: row.code, label: row.label })),
       infoRequests: applicant.infoRequests,
       messages: sent
         .filter((n) => n.recipientId === applicant.id)
@@ -183,25 +193,13 @@ export async function screeningForApplication(
 
   const outOfOrder = (await outOfOrderApplicationIds(application)).length > 0
 
-  const reasons = await activeDecisionReasons()
-
   const allApproved =
     applicants.length > 0 &&
     applicants.every((a) => a.decision === 'APPROVED' || a.decision === 'APPROVED_WITH_CONDITIONS')
   return {
     applicants,
     outOfOrder,
-    reasons,
     leaseDraftId: application.leaseDraft?.id ?? null,
     approvedWithoutDraft: allApproved && !application.leaseDraft,
   }
-}
-
-/** R-269: the decline-reason list, oldest first, retired rows left out. */
-export async function activeDecisionReasons() {
-  const rows = await prisma.decisionReason.findMany({
-    where: { retiredAt: null },
-    orderBy: { createdAt: 'asc' },
-  })
-  return rows.map((row) => ({ value: row.code, label: row.label }))
 }

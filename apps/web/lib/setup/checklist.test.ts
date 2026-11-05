@@ -18,6 +18,7 @@ const done: SetupFacts = {
   twilio: { status: 'ACTIVE', statusReason: null },
   resend: { status: 'VERIFIED', statusReason: null },
   unreviewedStates: [],
+  screeningCriteria: true,
   testText: true,
   testPayment: true,
 }
@@ -45,6 +46,7 @@ describe('setupChecklist (PRD 10 §5, R-291a)', () => {
       { marks: [] },
       { twilio: { status: 'PROVISIONING', statusReason: null } },
       { unreviewedStates: ['OK'] },
+      { screeningCriteria: false },
       { properties: 0 },
       { testText: false },
       { testPayment: false },

@@ -9,8 +9,8 @@ export const metadata = { title: 'New screening criteria' }
 // No resource: per R-004 this only clears for a portfolio-wide
 // screening.criteria.write grant - see permissions.ts's own comment.
 export default async function NewScreeningCriteriaPage() {
-  await requirePermission('screening.criteria.write')
-  const previous = await currentCriteriaVersion()
+  const actor = await requirePermission('screening.criteria.write')
+  const previous = await currentCriteriaVersion(actor.orgId)
 
   return (
     <div className="flex flex-col gap-6">

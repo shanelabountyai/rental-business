@@ -397,6 +397,8 @@ export const manifest: Record<string, Entry> = {
   'lib/scra/actions.ts#recordScraTermination': { leaseId: 'lease' },
   // lib/screening/criteria-actions.ts
   'lib/screening/criteria-actions.ts#createCriteriaVersion': {  },
+  'lib/screening/criteria-actions.ts#addDecisionReason': {  },
+  'lib/screening/criteria-actions.ts#retireDecisionReason': { 'form.code': 'value' },
   // lib/screening/staff-actions.ts
   'lib/screening/staff-actions.ts#recordScreeningDecision': { 'form.applicantId': 'applicant', 'form.decision': '=APPROVED' },
   'lib/screening/staff-actions.ts#requestApplicantInfo': { 'form.applicantId': 'applicant', 'form.request': '=Please send proof of income' },

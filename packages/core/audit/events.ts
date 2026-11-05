@@ -455,6 +455,10 @@ export const AUDIT_ACTIONS = [
   /// shape as jurisdiction_rule.versioned - the one mutation this entity
   /// gets, since old versions are never edited in place.
   'screening_criteria.versioned',
+  /// R-297 (PRD 10 §7.1): the org's decision-reason list. Added or retired,
+  /// never relabelled, so a recorded code keeps its meaning (D-333).
+  'decision_reason.added',
+  'decision_reason.retired',
 
   /// R-011 (D-9): resolution (completed or canceled) of a task whose TYPE is
   /// in AUDITED_TASK_TYPES - not every task, just the ones a later item marks
