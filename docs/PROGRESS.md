@@ -15468,7 +15468,7 @@ After the projection commits, the webhook stores the fee for every `payment_succ
 - `stripe-adapter.test.ts`: 27 passed, including the balance-transaction read and the no-guess cases.
 - `billing.test.ts`: an online payment stores 4,380c, and a counter cheque stores nothing.
 
-## R-283 — QuickBooks reconciliation page, sync now and replay date (`SHA_PENDING`)
+## R-283 — QuickBooks reconciliation page, sync now and replay date (`1da4ba3d`)
 
 **What it built.** `/money/quickbooks/reconciliation`, owner-only (`billing.connect`), linked from the QuickBooks page. Pick a connected entity and a month (`<input type="month">`). It shows:
 - **Totals per QuickBooks account**, platform against QuickBooks, debit/credit, with the difference. `reconcileQuickBooks` in [quickbooks-reconcile.ts](apps/web/lib/integrations/quickbooks-reconcile.ts) builds the platform side from the month's journals (any status, rebuilt by the same `journalFacts` the sync posts with) plus unplanned entries and their fees. The QuickBooks side comes from the new `AccountingAdapter.listJournalEntries`, filtered to our `RB-<n>` DocNumbers. The simulator answers from what it was told (D-27).
