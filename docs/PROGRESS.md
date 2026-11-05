@@ -15467,3 +15467,23 @@ After the projection commits, the webhook stores the fee for every `payment_succ
 - `quickbooks-sync.test.ts`: 5 passed, including the new fee test (blocks until Merchant Fees is mapped, posts the fee once for a payment split over two entries, refuses a delete).
 - `stripe-adapter.test.ts`: 27 passed, including the balance-transaction read and the no-guess cases.
 - `billing.test.ts`: an online payment stores 4,380c, and a counter cheque stores nothing.
+
+## R-283 — QuickBooks reconciliation page, sync now and replay date (`SHA_PENDING`)
+
+**What it built.** `/money/quickbooks/reconciliation`, owner-only (`billing.connect`), linked from the QuickBooks page. Pick a connected entity and a month (`<input type="month">`). It shows:
+- **Totals per QuickBooks account**, platform against QuickBooks, debit/credit, with the difference. `reconcileQuickBooks` in [quickbooks-reconcile.ts](apps/web/lib/integrations/quickbooks-reconcile.ts) builds the platform side from the month's journals (any status, rebuilt by the same `journalFacts` the sync posts with) plus unplanned entries and their fees. The QuickBooks side comes from the new `AccountingAdapter.listJournalEntries`, filtered to our `RB-<n>` DocNumbers. The simulator answers from what it was told (D-27).
+- **Not in QuickBooks**: failed journals (with `lastError`), planned-but-unposted ones, unplanned entries (or "waiting" while the day runs), exclusions with their reason, and settled Stripe card/ACH payments with no `StripeProcessingFee` row.
+- **Sync now** (one entity) and **Replay day**, both audited with the outcome (`integration.sync_requested`, `integration.replayed`).
+
+`syncQuickBooks` takes an optional `legalEntityId`. `replayQuickBooksDate` re-sends a day's PENDING and POSTED journals through `postOnce`. Sync and replay run under a per-connection `pg_try_advisory_xact_lock`; a second run returns `busy`.
+
+**What it decided.** D-399: compare per company-file account against only our DocNumbers; "Owner/Admin" is `billing.connect` (there is no Admin role); replay re-sends rather than re-plans; one post run per connection.
+
+**What it left behind.**
+- **The real Intuit driver must implement `listJournalEntries`** (a JournalEntry query by TxnDate), as well as find and post.
+- **With the simulated driver the QuickBooks side is per process memory**, so on Vercel a page load may read an empty file and show every account as variance. Simulator only.
+- **The missing-fee list is advisory.** A failed fee read is still not retried; nothing re-reads it.
+- **The pre-existing sync had no lock between the cron and a second run**; it does now. Not a fix to a reported bug, a race this item's button would have made reachable.
+- Entries projected before the connection existed are left out of both sides (R-284's backfill).
+
+**Gate.** `lint` (the same warnings, none in touched files), `typecheck`, `check:ship-deps` clean. No schema change, so `db:ci` not rerun. `quickbooks-sync.test.ts`: 8 passed, three new (totals match after a sync and the problem list names exclusion and missing fee; a failed journal shows its variance, replay re-posts a deleted day exactly once and is a no-op the second time; two concurrent syncs give one `synced` and one `busy`). Full unit suite (`--maxWorkers=4`): 3,932 passed + 4 skipped, 2 failed, both the manifests not yet naming the new page and actions; registered, and those two files then passed 227 of 227. `e2e/quickbooks.spec.ts` (now also walks the reconciliation page, axe, both buttons and the two audit rows) on both projects against the production build: 2 of 2 passed.

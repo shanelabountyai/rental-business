@@ -4,6 +4,8 @@ import { FormAlerts, SubmitButton, pendingButtonProps } from '@/components/auth-
 import { INPUT_CLASSES, PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 import { useOpening } from '@/components/billing/connect-stripe-form.tsx'
 import type { StripeFormState } from '@/lib/integrations/stripe-actions.ts'
+import type { FormState } from '@/components/auth-form.tsx'
+import { useActionState } from 'react'
 
 type Action = (state: StripeFormState, formData: FormData) => Promise<StripeFormState>
 
@@ -105,6 +107,41 @@ export function SimulatedQuickBooksConsentForm({ action, suggestedRealm }: { act
         <button type="submit" name="answer" value="cancel" {...pendingButtonProps(pending)} className={`${PRIMARY_BUTTON_CLASSES} min-h-11 px-4`}>
           Cancel
         </button>
+      </div>
+    </form>
+  )
+}
+
+type PlainAction = (state: FormState, formData: FormData) => Promise<FormState>
+
+/// R-283 (Q10): run the sync for one entity now rather than tonight.
+export function SyncQuickBooksNowForm({ action }: { action: PlainAction }) {
+  const [state, formAction] = useActionState(action, {})
+  return (
+    <form action={formAction} className="flex flex-col gap-2">
+      <FormAlerts state={state} />
+      <div>
+        <SubmitButton label="Sync now" />
+      </div>
+    </form>
+  )
+}
+
+/// R-283 (Q10): send one day's journals through again. Ones QuickBooks still
+/// holds are left alone; ones deleted there are posted again.
+export function ReplayQuickBooksDateForm({ action, max }: { action: PlainAction; max: string }) {
+  const [state, formAction] = useActionState(action, {})
+  return (
+    <form action={formAction} className="flex flex-col gap-2">
+      <FormAlerts state={state} />
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="qb-replay-day" className="text-sm font-medium">
+          Day to replay
+        </label>
+        <input id="qb-replay-day" type="date" name="day" required max={max} className={`${INPUT_CLASSES} w-full sm:w-auto`} />
+      </div>
+      <div>
+        <SubmitButton label="Replay day" />
       </div>
     </form>
   )

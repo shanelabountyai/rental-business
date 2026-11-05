@@ -150,6 +150,10 @@ export const AUDIT_ACTIONS = [
   /// R-282a (D-397): `db:quickbooks-map` set an entity's account and property
   /// mapping during onboarding (SYSTEM, `after` is what was written).
   'integration.mapped',
+  /// R-283 (PRD 09 Q10): an owner pressed "sync now" or "replay date" on the
+  /// reconciliation page (`after` is the outcome, refusals included).
+  'integration.sync_requested',
+  'integration.replayed',
   'platform_role.revoked',
   /// R-295a (PRD 11 §4.7, §4.14, §4.16): a support grant's lifecycle. The
   /// platform's rows carry `supportGrantId`; an owner's are STAFF rows about

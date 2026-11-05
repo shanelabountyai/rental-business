@@ -59,6 +59,9 @@ export const manifest: Record<string, Entry> = {
   'lib/integrations/quickbooks-actions.ts#connectQuickBooks': { 'form.legalEntityId': 'legalEntity', 'form.basis': '=CASH' },
   'lib/integrations/quickbooks-actions.ts#disconnectQuickBooksAction': { legalEntityId: 'legalEntity' },
   'lib/integrations/quickbooks-actions.ts#answerSimulatedQuickBooks': { state: 'value', 'form.realmId': 'value' },
+  // R-283: sync now and replay date; the entity must be one of the org's own.
+  'lib/integrations/quickbooks-actions.ts#syncQuickBooksNowAction': { legalEntityId: 'legalEntity' },
+  'lib/integrations/quickbooks-actions.ts#replayQuickBooksDateAction': { legalEntityId: 'legalEntity', 'form.day': 'value' },
   // lib/support/actions.ts (R-295a): an owner answering platform support.
   // One action, four intents; `deny` reaches a write on the fixture's pending grant.
   'lib/support/actions.ts#answerSupportAccess': { 'form.grantId': 'supportAccessGrant', 'form.intent': '=deny' },

@@ -3,7 +3,8 @@ import { SimulatedAccountingAdapter } from '@rental/core/accounting'
 import { prisma } from '@rental/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { answerSimulatedConsent, completeQuickBooksConnect, startQuickBooksConnect } from './quickbooks.ts'
-import { docNumber, syncQuickBooks } from './quickbooks-sync.ts'
+import { reconcileQuickBooks } from './quickbooks-reconcile.ts'
+import { docNumber, replayQuickBooksDate, syncQuickBooks } from './quickbooks-sync.ts'
 
 // R-282a (PRD 09 Q3-Q5, Q7; D-312, D-397). One accrual connection in its own
 // org, against the simulated company file with fault injection. Ledger rows
@@ -20,7 +21,10 @@ let leaseId = ''
 let leasePayerId = ''
 let connectionId = ''
 let lose = false
-const qbo = new SimulatedAccountingAdapter({ fault: (op) => (op === 'post' && lose ? 'partial_failure' : null) })
+let down = false
+const qbo = new SimulatedAccountingAdapter({
+  fault: (op) => (op === 'post' && lose ? 'partial_failure' : op === 'post' && down ? 'timeout' : null),
+})
 const sync = () => syncQuickBooks(orgId, { adapterFor: () => qbo })
 
 beforeAll(async () => {
@@ -167,5 +171,82 @@ describe('QuickBooks nightly sync (R-282a)', () => {
   it('refuses to delete a sync link, which would post the entry again', async () => {
     const [link] = await links()
     await expect(prisma.quickBooksSyncLink.delete({ where: { ledgerEntryId: link!.ledgerEntryId } })).rejects.toThrow()
+  })
+})
+
+// R-283 (PRD 09 Q9, Q10), on the same fixture after R-282's tests have
+// mapped it. March 2026 is a month nothing above writes into.
+describe('QuickBooks reconciliation, sync now and replay (R-283)', () => {
+  const MONTH = '2026-03'
+  const reconcile = async () => {
+    const result = await reconcileQuickBooks(orgId, entityId, MONTH, { adapterFor: () => qbo })
+    if (!result.ok) throw new Error(result.error)
+    return result
+  }
+  const row = (rows: { name: string; platformCents: number; quickBooksCents: number | null }[], name: string) =>
+    rows.find((r) => r.name === name)
+
+  it('totals per mapped account on both sides, and lists what is not in QuickBooks yet and why', async () => {
+    const at = new Date('2026-03-10T18:00:00Z')
+    await entry('CHARGE', 120_000, at)
+    const paid = await prisma.payment.create({
+      data: { propertyId, leaseId, leasePayerId, channel: 'CARD', status: 'SETTLED', amountCents: 120_000, receivedAt: at },
+    })
+    await entry('PAYMENT', -120_000, at, paid.id)
+    await prisma.stripeProcessingFee.create({
+      data: { orgId, paymentId: paid.id, amountCents: 3_510, stripeBalanceTransactionId: `txn_${stamp}_m`, details: [], stripeEventId: `evt_${stamp}_m` },
+    })
+    // Settled by Stripe, fee never read: it posts gross.
+    const feeless = await prisma.payment.create({
+      data: { propertyId, leaseId, leasePayerId, channel: 'ACH', status: 'SETTLED', amountCents: 5_000, receivedAt: at },
+    })
+    await entry('PAYMENT', -5_000, at, feeless.id)
+    await entry('ADJUSTMENT', 700, at)
+
+    // Before the sync: the platform has it, QuickBooks does not.
+    const before = await reconcile()
+    expect(row(before.accounts, 'Merchant Fees')).toEqual(expect.objectContaining({ platformCents: 3_510, quickBooksCents: 0 }))
+    expect(before.problems.filter((p) => p.kind === 'not_synced')).toHaveLength(3)
+    expect(before.problems.map((p) => p.kind)).toEqual(expect.arrayContaining(['excluded', 'missing_fee']))
+
+    expect((await sync())[0]).toMatchObject({ outcome: 'synced' })
+    const after = await reconcile()
+    expect(after.quickBooksError).toBeNull()
+    for (const account of after.accounts) expect(account.quickBooksCents).toBe(account.platformCents)
+    // Accrual: A/R is the charge less both payments; cash is both payments less the fee.
+    expect(row(after.accounts, 'ACCOUNTS_RECEIVABLE')!.platformCents).toBe(120_000 - 120_000 - 5_000)
+    expect(row(after.accounts, 'UNDEPOSITED_FUNDS')!.platformCents).toBe(125_000 - 3_510)
+    expect(after.problems.map((p) => p.kind).sort()).toEqual(['excluded', 'missing_fee'])
+  })
+
+  it('shows a failed journal and the variance it leaves, and replay posts a day a bookkeeper deleted exactly once', async () => {
+    down = true
+    await entry('CHARGE', 9_900, new Date('2026-03-11T18:00:00Z'))
+    expect((await sync())[0]).toMatchObject({ outcome: 'blocked', reason: /timeout/ })
+    down = false
+    const failed = await reconcile()
+    expect(failed.problems).toEqual(expect.arrayContaining([expect.objectContaining({ kind: 'failed', day: '2026-03-11' })]))
+    expect(row(failed.accounts, 'RENTAL_INCOME')).toEqual(expect.objectContaining({ platformCents: -129_900, quickBooksCents: -120_000 }))
+
+    // The 11th goes through on replay; the 10th is deleted in QuickBooks, then replayed.
+    expect(await replayQuickBooksDate(orgId, entityId, '2026-03-11', { adapterFor: () => qbo })).toMatchObject({ ok: true, journals: 1, reposted: 0 })
+    const tenth = await prisma.quickBooksJournal.findFirstOrThrow({ where: { connectionId, txnDate: new Date('2026-03-10') } })
+    const index = qbo.posted.findIndex((e) => e.docNumber === docNumber(tenth.number))
+    qbo.posted.splice(index, 1)
+    expect(row((await reconcile()).accounts, 'Merchant Fees')).toEqual(expect.objectContaining({ platformCents: 3_510, quickBooksCents: 0 }))
+
+    expect(await replayQuickBooksDate(orgId, entityId, '2026-03-10', { adapterFor: () => qbo })).toMatchObject({ ok: true, journals: 1, reposted: 1 })
+    expect(await replayQuickBooksDate(orgId, entityId, '2026-03-10', { adapterFor: () => qbo })).toMatchObject({ ok: true, reposted: 0 })
+    expect(qbo.posted.filter((e) => e.docNumber === docNumber(tenth.number))).toHaveLength(1)
+    const clean = await reconcile()
+    for (const account of clean.accounts) expect(account.quickBooksCents).toBe(account.platformCents)
+    expect(clean.problems.map((p) => p.kind).sort()).toEqual(['excluded', 'missing_fee'])
+
+    expect(await replayQuickBooksDate(orgId, entityId, '2026-03-20', { adapterFor: () => qbo })).toMatchObject({ ok: false, error: /No journal/ })
+  })
+
+  it('lets only one run post per connection at a time', async () => {
+    const [a, b] = await Promise.all([sync(), sync()])
+    expect([a[0]!.outcome, b[0]!.outcome].sort()).toEqual(['busy', 'synced'])
   })
 })

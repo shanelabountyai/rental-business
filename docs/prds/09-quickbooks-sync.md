@@ -64,8 +64,8 @@ QuickBooks Desktop is out of scope; QBO's REST API and OAuth 2.0 are the only ta
 | Q6 | Each property maps to a QBO Class (owner chooses Class or Location at setup; default Class) | Must |
 | Q7 | Security deposits post to a liability account, not income | Must |
 | Q8 | Stripe processing fees post as an expense line in the same entry as the payment, so net deposit matches the bank feed | Must |
-| Q9 | Reconciliation page: month picker, platform total vs QBO total per mapped account, list of unsynced or failed lines | Must |
-| Q10 | "Sync now" and "replay date" actions, Owner/Admin only, logged to audit | Should |
+| Q9 | Reconciliation page: month picker, platform total vs QBO total per mapped account, list of unsynced or failed lines *(built R-283, D-399: QBO total counts only our DocNumbers)* | Must |
+| Q10 | "Sync now" and "replay date" actions, Owner/Admin only, logged to audit *(built R-283, D-399: Owner/Admin is `billing.connect`)* | Should |
 | Q11 | Backfill: on first connect, offer to push history from a chosen start date in daily batches respecting QBO rate limits (500 req/min per realm) | Should |
 | Q12 | Adapter interface `AccountingAdapter` with QBO as first implementation and a simulated adapter for tests, matching the master PRD §14 pattern | Must |
 

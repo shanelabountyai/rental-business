@@ -172,6 +172,8 @@ const RESOURCE_LESS_GUARDS: Record<string, string> = {
     "QuickBooks connections (R-280, PRD 09 Q1) are listed for every entity of the org on one page, like the Stripe account; `billing.connect` is owner-only by construction, and each action checks the entity is the org's own.",
   'app/(admin)/money/quickbooks/callback/route.ts': 'Same as the QuickBooks page above: the OAuth return finds its row by a hashed, single-use state within the session\'s org.',
   'app/(admin)/money/quickbooks/simulated/page.tsx': 'Same as the QuickBooks page above: the simulated consent screen, 404 for another org\'s state.',
+  'app/(admin)/money/quickbooks/reconciliation/page.tsx':
+    'Same as the QuickBooks page above: one connected entity\'s month (R-283, PRD 09 Q9), looked up within the session\'s org.',
   'lib/integrations/quickbooks-actions.ts': 'Same as the QuickBooks pages above. The org is the session\'s, never a form field.',
   'app/(admin)/settings/support-access/page.tsx':
     'A support grant is about the whole organisation (PRD 11 §4.14, R-295a), not a property: `audit.read` portfolio-wide reads it, and answering needs `staff.manage` as well, which only an owner holds.',

@@ -92,6 +92,22 @@ test('an owner connects an entity to QuickBooks through consent and the callback
   await expect(page.getByText('Accrual', { exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Connect an entity' })).toHaveCount(0)
 
+  // R-283 (Q9, Q10): the reconciliation page, and both buttons audited.
+  await page.getByRole('link', { name: 'Reconcile a month, sync now or replay a day' }).click()
+  await expect(page.getByRole('heading', { name: 'QuickBooks reconciliation' })).toBeVisible()
+  await expect(page.getByText('Every line of this month is synced.')).toBeVisible()
+  await axeScan(page)
+  await page.getByRole('button', { name: 'Sync now' }).click()
+  await expect(page.getByText('Synced: 0 journal entries posted, 0 excluded.')).toBeVisible()
+  await page.getByLabel('Day to replay').fill('2026-03-10')
+  await page.getByRole('button', { name: 'Replay day' }).click()
+  await expect(page.getByText('No journal is dated that day for this entity.')).toBeVisible()
+  const connection = await prisma.quickBooksConnection.findUniqueOrThrow({ where: { legalEntityId: entity.id } })
+  await expect
+    .poll(() => prisma.auditLog.count({ where: { entityId: connection.id, action: { in: ['integration.sync_requested', 'integration.replayed'] } } }))
+    .toBe(2)
+  await page.goto(`${host}/money/quickbooks`)
+
   await page.getByRole('button', { name: `Disconnect Ledger LLC ${tag}` }).click()
   await page.waitForURL(`${host}/money/quickbooks?result=disconnected`)
   await expect(page.getByText('Disconnected from QuickBooks.')).toBeVisible()

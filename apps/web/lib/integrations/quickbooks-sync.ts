@@ -12,7 +12,7 @@ import {
   postOnce,
   processingFeeFact,
 } from '@rental/core/accounting'
-import { businessDate, businessDateToUtc, utcToBusinessDate } from '@rental/core/scheduling'
+import { type BusinessDate, businessDate, businessDateToUtc, utcToBusinessDate } from '@rental/core/scheduling'
 import { type Prisma, type QuickBooksConnection, prisma } from '@rental/db'
 import { quickBooksAccessToken } from './quickbooks.ts'
 
@@ -39,6 +39,10 @@ import { quickBooksAccessToken } from './quickbooks.ts'
 // the net is what reached the bank. A fee read after its journal posted is
 // not added later. Entries projected before the connection existed are R-284's
 // backfill, not this job's.
+//
+// ONE RUN AT A TIME PER CONNECTION (R-283). "Sync now", "replay date" and the
+// cron can overlap, and two posters both finding a DocNumber missing would
+// both post it: a duplicate in somebody's books. The later one steps aside.
 
 /// Pending entries planned per connection per run.
 // ponytail: a fixed batch; the rest wait for the next night. R-284's backfill
@@ -51,7 +55,7 @@ export type AdapterFor = (connection: { realmId: string; accessToken: string }) 
 // between serverless invocations. Harmless for a simulator; the real Intuit
 // driver replaces this whole function.
 const simulatedFiles = new Map<string, SimulatedAccountingAdapter>()
-const simulatedAdapterFor: AdapterFor = ({ realmId }) => {
+export const simulatedAdapterFor: AdapterFor = ({ realmId }) => {
   let file = simulatedFiles.get(realmId)
   if (!file) simulatedFiles.set(realmId, (file = new SimulatedAccountingAdapter()))
   return file
@@ -59,17 +63,21 @@ const simulatedAdapterFor: AdapterFor = ({ realmId }) => {
 
 export type ConnectionSync =
   | { connectionId: string; outcome: 'synced'; planned: number; posted: number; excluded: number }
-  | { connectionId: string; outcome: 'blocked' | 'failed' | 'not_connected'; reason: string }
+  | { connectionId: string; outcome: 'blocked' | 'failed' | 'not_connected' | 'busy'; reason: string }
 
 export const docNumber = (journalNumber: number) => `RB-${journalNumber}`
 
-/** Every connected entity of one org, one after another. Never throws. */
+/** Every connected entity of one org (or just one), one after another. Never throws. */
 export async function syncQuickBooks(
   orgId: string,
-  { now = new Date(), adapterFor = simulatedAdapterFor }: { now?: Date; adapterFor?: AdapterFor } = {},
+  {
+    now = new Date(),
+    adapterFor = simulatedAdapterFor,
+    legalEntityId,
+  }: { now?: Date; adapterFor?: AdapterFor; legalEntityId?: string } = {},
 ): Promise<ConnectionSync[]> {
   const connections = await prisma.quickBooksConnection.findMany({
-    where: { orgId, status: 'CONNECTED' },
+    where: { orgId, status: 'CONNECTED', legalEntityId },
     orderBy: { createdAt: 'asc' },
   })
   const results: ConnectionSync[] = []
@@ -86,15 +94,69 @@ async function syncConnection(connection: QuickBooksConnection, now: Date, adapt
   if (!token.ok) return { connectionId, outcome: 'not_connected', reason: token.reason }
 
   try {
-    const plan = await planJournals(connection, now)
-    if (plan.missing) return await stop(connectionId, 'blocked', plan.missing)
-    const posted = await postPending(connection, adapterFor({ realmId: token.realmId, accessToken: token.accessToken }))
-    if (posted.problem) return await stop(connectionId, 'blocked', posted.problem)
-    await prisma.quickBooksConnection.update({ where: { id: connectionId }, data: { lastSyncedAt: now, syncProblem: null } })
-    return { connectionId, outcome: 'synced', planned: plan.planned, posted: posted.count, excluded: plan.excluded }
+    const run = await exclusively(connectionId, async (): Promise<ConnectionSync> => {
+      const plan = await planJournals(connection, now)
+      if (plan.missing) return await stop(connectionId, 'blocked', plan.missing)
+      const posted = await postJournals(connection, adapterFor({ realmId: token.realmId, accessToken: token.accessToken }), {
+        status: 'PENDING',
+      })
+      if (posted.problem) return await stop(connectionId, 'blocked', posted.problem)
+      await prisma.quickBooksConnection.update({ where: { id: connectionId }, data: { lastSyncedAt: now, syncProblem: null } })
+      return { connectionId, outcome: 'synced', planned: plan.planned, posted: posted.count, excluded: plan.excluded }
+    })
+    return run ?? { connectionId, outcome: 'busy', reason: BUSY }
   } catch (error) {
     return stop(connectionId, 'failed', error instanceof Error ? error.message : String(error))
   }
+}
+
+const BUSY = 'Another sync or replay for this entity is running. Try again in a minute.'
+
+/// Runs `fn` holding this connection's post lock, or returns null at once if
+/// another run holds it. The lock lives as long as the transaction, which
+/// `fn` does not use: it only has to outlive `fn`.
+async function exclusively<T>(connectionId: string, fn: () => Promise<T>): Promise<T | null> {
+  return prisma.$transaction(
+    async (tx) => {
+      const [row] = await tx.$queryRaw<{ locked: boolean }[]>`
+        SELECT pg_try_advisory_xact_lock(hashtext(${`quickbooks-post:${connectionId}`})) AS locked`
+      return row?.locked ? fn() : null
+    },
+    { timeout: 10 * 60_000, maxWait: 10_000 },
+  )
+}
+
+export type ReplayResult =
+  | { ok: true; connectionId: string; journals: number; reposted: number }
+  | { ok: false; connectionId?: string; error: string }
+
+/**
+ * Sends every journal dated `day` through `postOnce` again, posted ones too
+ * (R-283, PRD 09 Q10). One QuickBooks still holds is found by its DocNumber
+ * and left alone; one a bookkeeper deleted is posted again with the same
+ * DocNumber and lines. Plans nothing: the next sync does that.
+ */
+export async function replayQuickBooksDate(
+  orgId: string,
+  legalEntityId: string,
+  day: BusinessDate,
+  { now = new Date(), adapterFor = simulatedAdapterFor }: { now?: Date; adapterFor?: AdapterFor } = {},
+): Promise<ReplayResult> {
+  const connection = await prisma.quickBooksConnection.findFirst({ where: { orgId, legalEntityId, status: 'CONNECTED' } })
+  if (!connection) return { ok: false, error: 'That entity is not connected to QuickBooks.' }
+  const connectionId = connection.id
+  const token = await quickBooksAccessToken(legalEntityId, now)
+  if (!token.ok) return { ok: false, connectionId, error: token.reason }
+  const run = await exclusively(connectionId, () =>
+    postJournals(connection, adapterFor({ realmId: token.realmId, accessToken: token.accessToken }), {
+      txnDate: businessDateToUtc(day),
+      status: { in: ['PENDING', 'POSTED'] },
+    }),
+  )
+  if (!run) return { ok: false, connectionId, error: BUSY }
+  if (run.problem) return { ok: false, connectionId, error: run.problem }
+  if (run.journals === 0) return { ok: false, connectionId, error: 'No journal is dated that day for this entity.' }
+  return { ok: true, connectionId, journals: run.journals, reposted: run.reposted }
 }
 
 async function stop(connectionId: string, outcome: 'blocked' | 'failed', reason: string): Promise<ConnectionSync> {
@@ -102,7 +164,7 @@ async function stop(connectionId: string, outcome: 'blocked' | 'failed', reason:
   return { connectionId, outcome, reason }
 }
 
-const ledgerSelect = {
+export const ledgerSelect = {
   id: true,
   type: true,
   amountCents: true,
@@ -114,7 +176,7 @@ const ledgerSelect = {
 
 type LedgerPick = Prisma.LedgerEntryGetPayload<{ select: typeof ledgerSelect }>
 
-const toRow = (entry: LedgerPick): SyncLedgerRow => ({
+export const toRow = (entry: LedgerPick): SyncLedgerRow => ({
   id: entry.id,
   type: entry.type,
   amountCents: entry.amountCents,
@@ -124,10 +186,10 @@ const toRow = (entry: LedgerPick): SyncLedgerRow => ({
 
 /// Cash reads only rows where money moved (and the adjustments it excludes),
 /// so the charges it ignores are not re-read every night for ever.
-const basisWhere = (basis: QuickBooksConnection['basis']): Prisma.LedgerEntryWhereInput =>
+export const basisWhere = (basis: QuickBooksConnection['basis']): Prisma.LedgerEntryWhereInput =>
   basis === 'CASH' ? { OR: [{ paymentId: { not: null } }, { type: { in: ['PAYMENT', 'ADJUSTMENT'] } }] } : {}
 
-async function mappingsOf(connectionId: string, tx: Prisma.TransactionClient = prisma) {
+export async function mappingsOf(connectionId: string, tx: Prisma.TransactionClient = prisma) {
   const rows = await tx.quickBooksMapping.findMany({ where: { connectionId } })
   const ref = (row: (typeof rows)[number]): ExternalRef => ({ id: row.externalId, name: row.externalName })
   return {
@@ -271,34 +333,53 @@ async function feeFacts(journalId: string, entries: Pick<LedgerPick, 'paymentId'
   })
 }
 
+/**
+ * The facts one planned journal posts: its linked entries on the
+ * connection's basis, plus the fees anchored in it. Rebuilt the same way on
+ * every retry, and by the reconciliation page (R-283).
+ */
+export async function journalFacts(
+  connection: Pick<QuickBooksConnection, 'basis'>,
+  journal: { id: string; links: { ledgerEntry: LedgerPick }[] },
+): Promise<JournalFact[]> {
+  const facts = journal.links.map(({ ledgerEntry }) => {
+    const classified = classifyLedgerEntry(toRow(ledgerEntry), connection.basis)
+    // Planned as a fact under the same basis, and the basis cannot change.
+    if (classified.kind !== 'fact') throw new Error(`Ledger entry ${ledgerEntry.id} no longer classifies as a fact.`)
+    return classified.fact
+  })
+  facts.push(...(await feeFacts(journal.id, journal.links.map(({ ledgerEntry }) => ledgerEntry))))
+  return facts
+}
+
+export const journalSelect = {
+  id: true,
+  number: true,
+  status: true,
+  externalId: true,
+  lastError: true,
+  propertyId: true,
+  txnDate: true,
+  links: { select: { ledgerEntry: { select: ledgerSelect } }, orderBy: { ledgerEntryId: 'asc' } },
+} satisfies Prisma.QuickBooksJournalSelect
+
 /// Oldest first, stopping at the first failure so the books fill in order.
-async function postPending(connection: QuickBooksConnection, adapter: AccountingAdapter) {
+/// Callers hold `exclusively`.
+async function postJournals(connection: QuickBooksConnection, adapter: AccountingAdapter, where: Prisma.QuickBooksJournalWhereInput) {
   const journals = await prisma.quickBooksJournal.findMany({
-    where: { connectionId: connection.id, status: 'PENDING' },
+    where: { ...where, connectionId: connection.id },
     orderBy: { number: 'asc' },
-    select: {
-      id: true,
-      number: true,
-      propertyId: true,
-      txnDate: true,
-      links: { select: { ledgerEntry: { select: ledgerSelect } }, orderBy: { ledgerEntryId: 'asc' } },
-    },
+    select: journalSelect,
   })
   const mapping = await mappingsOf(connection.id)
   let count = 0
+  let reposted = 0
   for (const journal of journals) {
-    const facts: JournalFact[] = journal.links.map(({ ledgerEntry }) => {
-      const classified = classifyLedgerEntry(toRow(ledgerEntry), connection.basis)
-      // Planned as a fact under the same basis, and the basis cannot change.
-      if (classified.kind !== 'fact') throw new Error(`Ledger entry ${ledgerEntry.id} no longer classifies as a fact.`)
-      return classified.fact
-    })
-    facts.push(...(await feeFacts(journal.id, journal.links.map(({ ledgerEntry }) => ledgerEntry))))
     const draft = buildJournalEntry({
       docNumber: docNumber(journal.number),
       txnDate: utcToBusinessDate(journal.txnDate),
       propertyId: journal.propertyId,
-      facts,
+      facts: await journalFacts(connection, journal),
     })
     if (!draft) {
       await prisma.quickBooksJournal.update({ where: { id: journal.id }, data: { status: 'EMPTY' } })
@@ -308,7 +389,7 @@ async function postPending(connection: QuickBooksConnection, adapter: Accounting
     const accounts = Object.fromEntries(draft.lines.map((line) => [line.account, mapping.accounts.get(line.account)]))
     if (!property || Object.values(accounts).some((ref) => !ref)) {
       // A mapping removed between plan and post.
-      return { count, problem: `Journal ${draft.docNumber} lost its QuickBooks mapping; run db:quickbooks-map for this entity.` }
+      return { count, journals: journals.length, reposted, problem: `Journal ${draft.docNumber} lost its QuickBooks mapping; run db:quickbooks-map for this entity.` }
     }
     try {
       const posted = await postOnce(adapter, {
@@ -316,16 +397,25 @@ async function postPending(connection: QuickBooksConnection, adapter: Accounting
         accounts: accounts as Record<AccountKey, ExternalRef>,
         property: { ...property, field: connection.propertyField },
       })
-      await prisma.quickBooksJournal.update({
-        where: { id: journal.id },
-        data: { status: 'POSTED', externalId: posted.externalId, postedAt: new Date(), lastError: null },
-      })
+      // A replay that found the entry still there changes nothing.
+      if (journal.status !== 'POSTED' || journal.externalId !== posted.externalId) {
+        if (journal.status === 'POSTED') reposted += 1
+        await prisma.quickBooksJournal.update({
+          where: { id: journal.id },
+          data: { status: 'POSTED', externalId: posted.externalId, postedAt: new Date(), lastError: null },
+        })
+      }
       count += 1
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       await prisma.quickBooksJournal.update({ where: { id: journal.id }, data: { lastError: message } })
-      return { count, problem: `QuickBooks refused or did not answer for ${draft.docNumber}: ${message} It is retried next run.` }
+      return {
+        count,
+        journals: journals.length,
+        reposted,
+        problem: `QuickBooks refused or did not answer for ${draft.docNumber}: ${message} It is retried next run.`,
+      }
     }
   }
-  return { count, problem: null }
+  return { count, journals: journals.length, reposted, problem: null }
 }

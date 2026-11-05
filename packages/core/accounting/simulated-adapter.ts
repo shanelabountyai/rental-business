@@ -5,7 +5,9 @@ import {
   AccountingError,
   type PostableJournalEntry,
   type PostedJournalEntry,
+  type ProviderJournalEntry,
 } from './adapter.ts'
+import type { BusinessDate } from '../scheduling/local-time.ts'
 
 // The simulated QuickBooks company file (D-7, R-279).
 //
@@ -27,7 +29,7 @@ export class SimulatedAccountingAdapter implements AccountingAdapter {
     private readonly opts: {
       /// Called before every call; a fault code makes that call throw.
       /// `partial_failure` on a post stores the entry first, then throws.
-      fault?: (op: 'find' | 'post', docNumber: string) => AccountingFault | null
+      fault?: (op: 'find' | 'post' | 'list', docNumber: string) => AccountingFault | null
     } = {},
   ) {}
 
@@ -47,7 +49,18 @@ export class SimulatedAccountingAdapter implements AccountingAdapter {
     return { externalId, docNumber: entry.docNumber }
   }
 
-  private fail(op: 'find' | 'post', docNumber: string, fault: AccountingFault | null | undefined) {
+  async listJournalEntries({ from, to }: { from: BusinessDate; to: BusinessDate }): Promise<ProviderJournalEntry[]> {
+    this.fail('list', '', this.opts.fault?.('list', ''))
+    return this.posted
+      .filter((e) => e.txnDate >= from && e.txnDate <= to)
+      .map((e) => ({
+        docNumber: e.docNumber,
+        txnDate: e.txnDate,
+        lines: e.lines.map((line) => ({ accountId: e.accounts[line.account]!.id, side: line.side, amountCents: line.amountCents })),
+      }))
+  }
+
+  private fail(op: 'find' | 'post' | 'list', docNumber: string, fault: AccountingFault | null | undefined) {
     if (!fault) return
     console.info(`[accounting:simulated] FAULT (${fault}) on ${op} ${docNumber}`)
     throw new AccountingError(fault, `Simulated ${fault} on ${op} ${docNumber}.`)

@@ -2,6 +2,7 @@
 // Online is the first real driver (R-280 onward); the simulated adapter below
 // is the contract fixture for it, including fault injection.
 
+import type { BusinessDate } from '../scheduling/local-time.ts'
 import type { AccountKey, JournalEntryDraft } from './journal.ts'
 
 /// PRD 00 §14's faults, minus the delayed webhook: this push has no callback.
@@ -41,6 +42,14 @@ export interface PostableJournalEntry extends JournalEntryDraft {
   property: ExternalRef & { field: 'CLASS' | 'LOCATION' }
 }
 
+/// An entry as the company file holds it, read back for reconciliation
+/// (R-283, Q9). Lines carry the file's account ids, not our keys.
+export interface ProviderJournalEntry {
+  docNumber: string
+  txnDate: BusinessDate
+  lines: { accountId: string; side: 'DEBIT' | 'CREDIT'; amountCents: number }[]
+}
+
 export interface AccountingAdapter {
   readonly name: string
   /// QuickBooks does not enforce a unique DocNumber, so a retry MUST call
@@ -48,6 +57,8 @@ export interface AccountingAdapter {
   /// in somebody's books, not an error.
   findJournalEntry(docNumber: string): Promise<PostedJournalEntry | null>
   postJournalEntry(entry: PostableJournalEntry): Promise<PostedJournalEntry>
+  /// Every journal entry dated in the range, inclusive, whoever posted it.
+  listJournalEntries(range: { from: BusinessDate; to: BusinessDate }): Promise<ProviderJournalEntry[]>
 }
 
 /**

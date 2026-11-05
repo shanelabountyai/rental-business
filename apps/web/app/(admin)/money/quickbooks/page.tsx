@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { friendlyTimestamp } from '@rental/core/scheduling'
 import { PageHeader } from '@/components/page-header.tsx'
 import { ConnectQuickBooksForm, DisconnectQuickBooksForm } from '@/components/billing/quickbooks-forms.tsx'
@@ -115,6 +116,14 @@ export default async function QuickBooksPage({ searchParams }: { searchParams: P
             </li>
           ))}
         </ul>
+      )}
+
+      {rows.some((row) => row.connection?.status === 'CONNECTED') && (
+        <p className="text-sm">
+          <Link href="/money/quickbooks/reconciliation" className="underline">
+            Reconcile a month, sync now or replay a day
+          </Link>
+        </p>
       )}
 
       {connectable.length > 0 && (
