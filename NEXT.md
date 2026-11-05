@@ -2,7 +2,7 @@
 
 CI is green (run 42126436044). R-297 also fixed R-283's racy `quickbooks-sync.test.ts` lock test.
 
-A bare `go` now means R-298 is next by PRD 10 §10's order. Check the backlog first: R-272, R-273 and R-278 are gated, and R-296 is the last item.
+A bare `go` means **R-296** (platform fee, D-322), the last ungated row in PRD 10 §10's order. R-298, R-299 and R-300 are done. R-272, R-273 and R-278 are still gated.
 
 **Left by R-297:** a new org starts with no criteria and no reasons; step 8 says so. The criterion check inside `recordScreeningDecision` has no test that drives the action. The list's wording is still gated on OQ-16. Each deployed DB must run `db:migrate` (`20261115100000_per_org_screening_criteria`).
 
