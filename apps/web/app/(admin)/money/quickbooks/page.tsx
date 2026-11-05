@@ -1,9 +1,10 @@
 import Link from 'next/link'
-import { friendlyTimestamp } from '@rental/core/scheduling'
+import { addBusinessDays, businessDate, friendlyBusinessDate, friendlyTimestamp, utcToBusinessDate } from '@rental/core/scheduling'
 import { PageHeader } from '@/components/page-header.tsx'
-import { ConnectQuickBooksForm, DisconnectQuickBooksForm } from '@/components/billing/quickbooks-forms.tsx'
+import { ConnectQuickBooksForm, DisconnectQuickBooksForm, StartQuickBooksBackfillForm } from '@/components/billing/quickbooks-forms.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
-import { connectQuickBooks, disconnectQuickBooksAction } from '@/lib/integrations/quickbooks-actions.ts'
+import { connectQuickBooks, disconnectQuickBooksAction, startQuickBooksBackfillAction } from '@/lib/integrations/quickbooks-actions.ts'
+import { backfillNextDay } from '@/lib/integrations/quickbooks-sync.ts'
 import { quickBooksRows } from '@/lib/integrations/quickbooks.ts'
 import { orgTimezone } from '@/lib/support/grants.ts'
 
@@ -32,6 +33,14 @@ export default async function QuickBooksPage({ searchParams }: { searchParams: P
   const actor = await requirePermission('billing.connect')
   const [rows, { result }, zone] = await Promise.all([quickBooksRows(actor.orgId), searchParams, orgTimezone(actor.orgId)])
   const outcome = result ? OUTCOMES[result] : undefined
+  const yesterday = addBusinessDays(businessDate(new Date(), zone), -1)
+  const nextDays = new Map(
+    await Promise.all(
+      rows
+        .filter((row) => row.connection?.status === 'CONNECTED' && row.connection.backfillFrom)
+        .map(async (row) => [row.legalEntityId, await backfillNextDay(actor.orgId, row.legalEntityId)] as const),
+    ),
+  )
   const connectable = rows
     .filter((row) => row.connection?.status !== 'CONNECTED')
     .map((row) => ({ id: row.legalEntityId, name: row.entityName, firstConnect: !row.connection }))
@@ -97,6 +106,16 @@ export default async function QuickBooksPage({ searchParams }: { searchParams: P
                     </dd>
                   </>
                 )}
+                {row.connection?.status === 'CONNECTED' && row.connection.backfillFrom && (
+                  <>
+                    <dt className="text-muted-foreground">History</dt>
+                    <dd className="min-w-0">
+                      {nextDays.get(row.legalEntityId)
+                        ? `Pushing from ${friendlyBusinessDate(utcToBusinessDate(row.connection.backfillFrom))}; next day ${friendlyBusinessDate(nextDays.get(row.legalEntityId)!)}. Each sync carries on.`
+                        : `Pushed from ${friendlyBusinessDate(utcToBusinessDate(row.connection.backfillFrom))}.`}
+                    </dd>
+                  </>
+                )}
                 {row.connection?.syncProblem && (
                   <>
                     <dt className="text-muted-foreground">Sync problem</dt>
@@ -110,6 +129,14 @@ export default async function QuickBooksPage({ searchParams }: { searchParams: P
                   </>
                 )}
               </dl>
+              {row.connection?.status === 'CONNECTED' && (
+                <StartQuickBooksBackfillForm
+                  action={startQuickBooksBackfillAction.bind(null, row.legalEntityId)}
+                  max={yesterday}
+                  entityName={row.entityName}
+                  started={row.connection.backfillFrom !== null}
+                />
+              )}
               {row.connection && ['CONNECTED', 'RECONNECT_NEEDED'].includes(row.connection.status) && (
                 <DisconnectQuickBooksForm action={disconnectQuickBooksAction.bind(null, row.legalEntityId)} entityName={row.entityName} />
               )}

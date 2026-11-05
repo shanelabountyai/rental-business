@@ -14,6 +14,7 @@ import {
 } from '@rental/core/accounting'
 import { type BusinessDate, businessDate, businessDateToUtc, utcToBusinessDate } from '@rental/core/scheduling'
 import { type Prisma, type QuickBooksConnection, prisma } from '@rental/db'
+import { recordProcessingFee } from '@/lib/billing/webhook.ts'
 import { quickBooksAccessToken } from './quickbooks.ts'
 
 // The nightly QuickBooks sync (R-282a, PRD 09 Q3-Q5, Q7; D-312, D-393, D-397).
@@ -37,8 +38,8 @@ import { quickBooksAccessToken } from './quickbooks.ts'
 // Payments post gross to Undeposited Funds, and the fee Stripe kept from each
 // one posts in the same journal as a Merchant Fees line (R-282b, D-398), so
 // the net is what reached the bank. A fee read after its journal posted is
-// not added later. Entries projected before the connection existed are R-284's
-// backfill, not this job's.
+// not added later. Entries projected before the connection existed are the
+// backfill's (below), never the nightly plan's.
 //
 // ONE RUN AT A TIME PER CONNECTION (R-283). "Sync now", "replay date" and the
 // cron can overlap, and two posters both finding a DocNumber missing would
@@ -62,7 +63,7 @@ export const simulatedAdapterFor: AdapterFor = ({ realmId }) => {
 }
 
 export type ConnectionSync =
-  | { connectionId: string; outcome: 'synced'; planned: number; posted: number; excluded: number }
+  | { connectionId: string; outcome: 'synced'; planned: number; posted: number; excluded: number; backfilledDays: number }
   | { connectionId: string; outcome: 'blocked' | 'failed' | 'not_connected' | 'busy'; reason: string }
 
 export const docNumber = (journalNumber: number) => `RB-${journalNumber}`
@@ -95,14 +96,22 @@ async function syncConnection(connection: QuickBooksConnection, now: Date, adapt
 
   try {
     const run = await exclusively(connectionId, async (): Promise<ConnectionSync> => {
+      const budget = budgeted(adapterFor({ realmId: token.realmId, accessToken: token.accessToken }))
       const plan = await planJournals(connection, now)
       if (plan.missing) return await stop(connectionId, 'blocked', plan.missing)
-      const posted = await postJournals(connection, adapterFor({ realmId: token.realmId, accessToken: token.accessToken }), {
-        status: 'PENDING',
-      })
+      const posted = await postJournals(connection, budget.adapter, { status: 'PENDING' }, budget.spent)
       if (posted.problem) return await stop(connectionId, 'blocked', posted.problem)
+      const history = connection.backfillFrom ? await backfill(connection, budget, now) : { days: 0, problem: null }
+      if (history.problem) return await stop(connectionId, 'blocked', history.problem)
       await prisma.quickBooksConnection.update({ where: { id: connectionId }, data: { lastSyncedAt: now, syncProblem: null } })
-      return { connectionId, outcome: 'synced', planned: plan.planned, posted: posted.count, excluded: plan.excluded }
+      return {
+        connectionId,
+        outcome: 'synced',
+        planned: plan.planned,
+        posted: posted.count,
+        excluded: plan.excluded,
+        backfilledDays: history.days,
+      }
     })
     return run ?? { connectionId, outcome: 'busy', reason: BUSY }
   } catch (error) {
@@ -213,24 +222,38 @@ function unmapped(
   return `Nothing synced: not mapped in QuickBooks yet (${parts.join('; ')}). Run db:quickbooks-map for this entity.`
 }
 
-async function planJournals(connection: QuickBooksConnection, now: Date) {
+const entityProperties = (connection: QuickBooksConnection, tx: Prisma.TransactionClient = prisma) =>
+  tx.property.findMany({
+    where: { orgId: connection.orgId, legalEntityId: connection.legalEntityId },
+    select: { id: true, name: true, timezone: true },
+  })
+
+/// The nightly plan: entries projected since the connection existed.
+const planJournals = (connection: QuickBooksConnection, now: Date) =>
+  planEntries(connection, now, { createdAt: { gte: connection.createdAt } }, { id: 'asc' })
+
+/// Plans the unsynced entries `where` selects whose day has ended. Under the
+/// plan lock, so two plans never link the same entry.
+async function planEntries(
+  connection: QuickBooksConnection,
+  now: Date,
+  where: Prisma.LedgerEntryWhereInput,
+  orderBy: Prisma.LedgerEntryOrderByWithRelationInput,
+) {
   return prisma.$transaction(
     async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`quickbooks-sync:${connection.id}`}))`
-      const properties = await tx.property.findMany({
-        where: { orgId: connection.orgId, legalEntityId: connection.legalEntityId },
-        select: { id: true, name: true, timezone: true },
-      })
+      const properties = await entityProperties(connection, tx)
       const byId = new Map(properties.map((p) => [p.id, p]))
       const entries = await tx.ledgerEntry.findMany({
         where: {
+          ...where,
           propertyId: { in: [...byId.keys()] },
-          createdAt: { gte: connection.createdAt },
           quickBooksSyncLink: null,
           ...basisWhere(connection.basis),
         },
         select: ledgerSelect,
-        orderBy: { id: 'asc' },
+        orderBy,
         take: PLAN_BATCH,
       })
 
@@ -365,7 +388,12 @@ export const journalSelect = {
 
 /// Oldest first, stopping at the first failure so the books fill in order.
 /// Callers hold `exclusively`.
-async function postJournals(connection: QuickBooksConnection, adapter: AccountingAdapter, where: Prisma.QuickBooksJournalWhereInput) {
+async function postJournals(
+  connection: QuickBooksConnection,
+  adapter: AccountingAdapter,
+  where: Prisma.QuickBooksJournalWhereInput,
+  spent: () => boolean = () => false,
+) {
   const journals = await prisma.quickBooksJournal.findMany({
     where: { ...where, connectionId: connection.id },
     orderBy: { number: 'asc' },
@@ -375,6 +403,8 @@ async function postJournals(connection: QuickBooksConnection, adapter: Accountin
   let count = 0
   let reposted = 0
   for (const journal of journals) {
+    // Out of this run's QuickBooks budget: the rest stay PENDING for the next.
+    if (spent()) break
     const draft = buildJournalEntry({
       docNumber: docNumber(journal.number),
       txnDate: utcToBusinessDate(journal.txnDate),
@@ -418,4 +448,124 @@ async function postJournals(connection: QuickBooksConnection, adapter: Accountin
     }
   }
   return { count, journals: journals.length, reposted, problem: null }
+}
+
+// HISTORICAL BACKFILL (R-284, PRD 09 Q11, D-400).
+//
+// The owner picks a start day; from then on every sync, after its own work,
+// plans and posts the ledger entries projected BEFORE the connection existed,
+// one posting day at a time, oldest first, through exactly the nightly path
+// (same plan lock, same journals, same `postOnce`). There is no cursor: an
+// entry with a sync link is done, so the next day is always the oldest one
+// still unlinked, and a crash mid-day resumes where it stopped.
+//
+// A run stops at QUICKBOOKS_REQUESTS or BACKFILL_MS, whichever comes first:
+// QuickBooks allows 500 requests a minute per company file, each journal is
+// a lookup and at most one post, and the cron that runs it has 60 seconds
+// for everything else too. History catches up a few dozen days a night, or
+// faster from "Sync now".
+//
+// Fees: a payment settled before R-282b has no `StripeProcessingFee`, so the
+// backfill reads it from Stripe before planning the day, which is what puts
+// the Merchant Fees line in the payment's journal.
+
+/// Requests one run may send to one company file: under the 500 a minute.
+// ponytail: counted per run, not per minute across runs. Two "Sync now"
+// presses inside a minute can exceed it; QuickBooks then answers 429, the
+// journal records it as `lastError` and the next run retries it.
+const QUICKBOOKS_REQUESTS = 450
+/// Wall-clock one run may spend on history (the cron's maxDuration is 60s).
+const BACKFILL_MS = 20_000
+
+type Budget = { adapter: AccountingAdapter; spent: () => boolean; started: number }
+
+/// Counts the requests a run sends and stops it short of the budget: a
+/// journal is at most two requests, so stop while two still fit.
+function budgeted(inner: AccountingAdapter): Budget {
+  let requests = 0
+  const count = <T>(call: () => Promise<T>) => {
+    requests += 1
+    return call()
+  }
+  return {
+    adapter: {
+      name: inner.name,
+      findJournalEntry: (docNumber) => count(() => inner.findJournalEntry(docNumber)),
+      postJournalEntry: (entry) => count(() => inner.postJournalEntry(entry)),
+      listJournalEntries: (range) => count(() => inner.listJournalEntries(range)),
+    },
+    spent: () => requests + 2 > QUICKBOOKS_REQUESTS,
+    started: Date.now(),
+  }
+}
+
+/**
+ * The oldest posting day the backfill has not finished, and its entries:
+ * projected before the connection, on or after `backfillFrom` in their
+ * property's zone, day ended, and something the sync will link (a fact or
+ * an exclusion). Null when history is done.
+ */
+export async function nextBackfillDay(connection: QuickBooksConnection, now: Date) {
+  if (!connection.backfillFrom) return null
+  const from = utcToBusinessDate(connection.backfillFrom)
+  const properties = await entityProperties(connection)
+  const zoneOf = new Map(properties.map((p) => [p.id, p.timezone]))
+  const entries = await prisma.ledgerEntry.findMany({
+    where: {
+      propertyId: { in: [...zoneOf.keys()] },
+      createdAt: { lt: connection.createdAt },
+      // A day of margin: the exact edge is the property's zone, checked below.
+      occurredAt: { gte: new Date(businessDateToUtc(from).getTime() - 86_400_000) },
+      quickBooksSyncLink: null,
+      ...basisWhere(connection.basis),
+    },
+    select: { ...ledgerSelect, payment: { select: { stripePaymentIntentId: true, stripeInvoiceId: true, amountCents: true } } },
+    orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+    // ponytail: the margin day's pre-`from` rows are re-read each time; a
+    // first batch made only of them would read as "done". Fine at this scale.
+    take: PLAN_BATCH,
+  })
+  const dated = entries.flatMap((entry) => {
+    const zone = zoneOf.get(entry.propertyId)!
+    const day = businessDate(entry.occurredAt, zone)
+    if (day < from || day >= businessDate(now, zone)) return []
+    if (classifyLedgerEntry(toRow(entry), connection.basis).kind === 'not_on_basis') return []
+    return [{ entry, day }]
+  })
+  if (dated.length === 0) return null
+  const day = dated.reduce((min, d) => (d.day < min ? d.day : min), dated[0]!.day)
+  return { day, entries: dated.filter((d) => d.day === day).map((d) => d.entry) }
+}
+
+async function backfill(connection: QuickBooksConnection, budget: Budget, now: Date) {
+  const deadline = budget.started + BACKFILL_MS
+  let days = 0
+  while (!budget.spent() && Date.now() < deadline) {
+    const next = await nextBackfillDay(connection, now)
+    if (!next) break
+    const payments = new Map(
+      next.entries.filter((e) => e.paymentId && e.amountCents < 0 && e.payment).map((e) => [e.paymentId!, e.payment!]),
+    )
+    for (const [paymentId, payment] of payments) {
+      // Never throws the day away: a payment whose fee cannot be read posts gross.
+      await recordProcessingFee(connection.orgId, paymentId, payment, null).catch((error) => {
+        console.error(`[quickbooks] backfill fee read failed for payment ${paymentId}`, error)
+      })
+    }
+    const plan = await planEntries(connection, now, { id: { in: next.entries.map((e) => e.id) } }, { id: 'asc' })
+    if (plan.missing) return { days, problem: plan.missing }
+    const posted = await postJournals(connection, budget.adapter, { status: 'PENDING' }, budget.spent)
+    if (posted.problem) return { days, problem: posted.problem }
+    days += 1
+    // Defensive: a day that planned nothing would be the next day again.
+    if (plan.planned + plan.excluded === 0) break
+  }
+  return { days, problem: null }
+}
+
+/// The page's view of one entity's backfill: the next day still to push, or
+/// null when history is done (or never chosen).
+export async function backfillNextDay(orgId: string, legalEntityId: string, now = new Date()): Promise<BusinessDate | null> {
+  const connection = await prisma.quickBooksConnection.findFirst({ where: { orgId, legalEntityId, status: 'CONNECTED' } })
+  return connection ? ((await nextBackfillDay(connection, now))?.day ?? null) : null
 }

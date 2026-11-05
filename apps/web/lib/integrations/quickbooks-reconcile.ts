@@ -22,8 +22,8 @@ import {
 // journal dated in the month, whatever its status, rebuilt exactly as the
 // sync posts it, plus every entry dated in the month that no run has planned
 // yet. Excluded entries are never posted, so they are listed, not totalled.
-// Entries projected before the connection existed are R-284's backfill and
-// are left out of both sides' story.
+// Entries projected before the connection existed count only from the
+// backfill's chosen day on (R-284); before it they are nobody's story.
 //
 // QUICKBOOKS: the company file's own journal entries for the month, read
 // back through the adapter (D-27: never from our tables), and only the ones
@@ -138,18 +138,22 @@ export async function reconcileQuickBooks(
   const unplanned = await prisma.ledgerEntry.findMany({
     where: {
       propertyId: { in: propertyIds },
-      createdAt: { gte: connection.createdAt },
+      // Pre-connect rows only once a backfill is chosen; its day is checked below.
+      ...(connection.backfillFrom ? {} : { createdAt: { gte: connection.createdAt } }),
       quickBooksSyncLink: null,
       occurredAt: window,
       ...basisWhere(connection.basis),
     },
-    select: ledgerSelect,
+    select: { ...ledgerSelect, createdAt: true },
     orderBy: { id: 'asc' },
   })
   const unplannedPayments = new Map<string, string>()
+  const backfillFrom = connection.backfillFrom ? utcToBusinessDate(connection.backfillFrom) : null
   for (const entry of unplanned) {
     const day = dayOf(entry.occurredAt, entry.propertyId)
     if (!inMonth(day)) continue
+    const history = entry.createdAt < connection.createdAt
+    if (history && (!backfillFrom || day < backfillFrom)) continue
     const classified = classifyLedgerEntry(toRow(entry), connection.basis)
     if (classified.kind === 'not_on_basis') continue
     if (classified.kind === 'excluded') {
@@ -163,7 +167,9 @@ export async function reconcileQuickBooks(
       kind: waiting ? 'waiting' : 'not_synced',
       day,
       property: name(entry.propertyId),
-      text: `${isMoneyMoving(entry) ? 'Payment' : 'Charge'}: ${waiting ? 'its day has not ended yet.' : 'not synced yet; the next sync plans it.'}`,
+      text: `${isMoneyMoving(entry) ? 'Payment' : 'Charge'}: ${
+        waiting ? 'its day has not ended yet.' : history ? 'history not pushed yet; the backfill reaches it.' : 'not synced yet; the next sync plans it.'
+      }`,
       amountCents: entry.amountCents,
     })
   }
@@ -181,7 +187,9 @@ export async function reconcileQuickBooks(
   }
 
   // Card and bank payments Stripe settled whose fee was never read (R-282b
-  // does not retry a failed read): they posted gross.
+  // does not retry a failed read): they posted gross. A payment from before
+  // the connection counts only once it reached a journal: until then it is
+  // nobody's (no backfill) or the backfill's, which reads the fee first.
   const feeless = await prisma.payment.findMany({
     where: {
       propertyId: { in: propertyIds },
@@ -191,12 +199,19 @@ export async function reconcileQuickBooks(
       processingFee: null,
       receivedAt: window,
     },
-    select: { propertyId: true, receivedAt: true, amountCents: true },
+    select: {
+      propertyId: true,
+      receivedAt: true,
+      amountCents: true,
+      createdAt: true,
+      ledgerEntries: { where: { quickBooksSyncLink: { journalId: { not: null } } }, take: 1, select: { id: true } },
+    },
     orderBy: { receivedAt: 'asc' },
   })
   for (const payment of feeless) {
     const day = dayOf(payment.receivedAt, payment.propertyId)
     if (!inMonth(day)) continue
+    if (payment.createdAt < connection.createdAt && payment.ledgerEntries.length === 0) continue
     problems.push({
       kind: 'missing_fee',
       day,

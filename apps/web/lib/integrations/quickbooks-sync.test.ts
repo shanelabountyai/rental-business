@@ -4,7 +4,7 @@ import { prisma } from '@rental/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { answerSimulatedConsent, completeQuickBooksConnect, startQuickBooksConnect } from './quickbooks.ts'
 import { reconcileQuickBooks } from './quickbooks-reconcile.ts'
-import { docNumber, replayQuickBooksDate, syncQuickBooks } from './quickbooks-sync.ts'
+import { backfillNextDay, docNumber, replayQuickBooksDate, syncQuickBooks } from './quickbooks-sync.ts'
 
 // R-282a (PRD 09 Q3-Q5, Q7; D-312, D-397). One accrual connection in its own
 // org, against the simulated company file with fault injection. Ledger rows
@@ -248,5 +248,73 @@ describe('QuickBooks reconciliation, sync now and replay (R-283)', () => {
   it('lets only one run post per connection at a time', async () => {
     const [a, b] = await Promise.all([sync(), sync()])
     expect([a[0]!.outcome, b[0]!.outcome].sort()).toEqual(['busy', 'synced'])
+  })
+})
+
+// R-284 (PRD 09 Q11, D-400), on the same fixture after R-282 and R-283 have
+// mapped it. History is ledger rows projected BEFORE the connection existed,
+// dated in January and February 2026, months nothing above writes into.
+describe('QuickBooks historical backfill (R-284)', () => {
+  const history = async (type: 'CHARGE' | 'PAYMENT', amountCents: number, occurredAt: Date, paymentId: string | null = null) => {
+    const connection = await prisma.quickBooksConnection.findUniqueOrThrow({ where: { id: connectionId } })
+    return prisma.ledgerEntry.create({
+      data: {
+        propertyId, leaseId, leasePayerId, type, amountCents, description: `history ${type}`, occurredAt, paymentId,
+        createdAt: new Date(connection.createdAt.getTime() - 60_000),
+      },
+    })
+  }
+  const reconcile = async (month: string) => {
+    const result = await reconcileQuickBooks(orgId, entityId, month, { adapterFor: () => qbo })
+    if (!result.ok) throw new Error(result.error)
+    return result
+  }
+
+  it('leaves history alone until a start day is chosen, then pushes it a day at a time from that day, fee read from Stripe', async () => {
+    const january = await history('CHARGE', 111_000, new Date('2026-01-20T18:00:00Z'))
+    await history('CHARGE', 150_000, new Date('2026-02-03T18:00:00Z'))
+    // Settled before R-282b: no fee row yet.
+    const paid = await prisma.payment.create({
+      data: {
+        propertyId, leaseId, leasePayerId, channel: 'CARD', status: 'SETTLED', amountCents: 150_000, receivedAt: new Date('2026-02-03T18:00:00Z'),
+        createdAt: january.createdAt,
+      },
+    })
+    await history('PAYMENT', -150_000, new Date('2026-02-03T18:00:00Z'), paid.id)
+    await history('CHARGE', 4_200, new Date('2026-02-05T18:00:00Z'))
+
+    expect((await sync())[0]).toMatchObject({ outcome: 'synced', backfilledDays: 0 })
+    expect(await prisma.quickBooksSyncLink.count({ where: { connectionId, ledgerEntry: { description: { startsWith: 'history' } } } })).toBe(0)
+    expect((await reconcile('2026-02')).problems).toHaveLength(0)
+
+    await prisma.quickBooksConnection.update({ where: { id: connectionId }, data: { backfillFrom: new Date('2026-02-01') } })
+    expect(await backfillNextDay(orgId, entityId)).toBe('2026-02-03')
+    expect((await reconcile('2026-02')).problems.filter((p) => p.kind === 'not_synced')).toEqual([
+      expect.objectContaining({ day: '2026-02-03', text: expect.stringMatching(/history not pushed yet/) }),
+      expect.objectContaining({ day: '2026-02-03' }),
+      expect.objectContaining({ day: '2026-02-05' }),
+    ])
+
+    const before = qbo.posted.length
+    expect((await sync())[0]).toMatchObject({ outcome: 'synced', backfilledDays: 2 })
+    const pushed = qbo.posted.slice(before)
+    expect(pushed.map((e) => e.txnDate)).toEqual(['2026-02-03', '2026-02-05'])
+    const fee = await prisma.stripeProcessingFee.findUniqueOrThrow({ where: { paymentId: paid.id } })
+    expect(fee.stripeEventId).toBeNull()
+    expect(pushed[0]!.lines).toEqual(
+      expect.arrayContaining([expect.objectContaining({ side: 'DEBIT', account: 'MERCHANT_FEES', amountCents: fee.amountCents })]),
+    )
+    expect(await backfillNextDay(orgId, entityId)).toBeNull()
+    expect(await prisma.quickBooksSyncLink.findUnique({ where: { ledgerEntryId: january.id } })).toBeNull()
+
+    const february = await reconcile('2026-02')
+    for (const account of february.accounts) expect(account.quickBooksCents).toBe(account.platformCents)
+    expect(february.problems).toHaveLength(0)
+    expect((await reconcile('2026-01')).problems).toHaveLength(0)
+
+    // Done is done: the next sync pushes nothing more.
+    const after = qbo.posted.length
+    expect((await sync())[0]).toMatchObject({ outcome: 'synced', backfilledDays: 0 })
+    expect(qbo.posted).toHaveLength(after)
   })
 })

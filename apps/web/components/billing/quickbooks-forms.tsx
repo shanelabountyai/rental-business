@@ -5,7 +5,7 @@ import { INPUT_CLASSES, PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.t
 import { useOpening } from '@/components/billing/connect-stripe-form.tsx'
 import type { StripeFormState } from '@/lib/integrations/stripe-actions.ts'
 import type { FormState } from '@/components/auth-form.tsx'
-import { useActionState } from 'react'
+import { useActionState, useId } from 'react'
 
 type Action = (state: StripeFormState, formData: FormData) => Promise<StripeFormState>
 
@@ -143,6 +143,42 @@ export function ReplayQuickBooksDateForm({ action, max }: { action: PlainAction;
       <div>
         <SubmitButton label="Replay day" />
       </div>
+    </form>
+  )
+}
+
+/// R-284 (Q11): choose the day to push history from. Asked once per
+/// connection; every sync after it carries the backfill on. Stays mounted
+/// once `started`, so the press's own notice is not unmounted with the inputs.
+export function StartQuickBooksBackfillForm({
+  action,
+  max,
+  entityName,
+  started,
+}: {
+  action: PlainAction
+  max: string
+  entityName: string
+  started: boolean
+}) {
+  const [state, formAction] = useActionState(action, {})
+  const id = useId()
+  return (
+    <form action={formAction} className="flex flex-col gap-2">
+      <FormAlerts state={state} />
+      {!started && (
+        <>
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor={id} className="text-sm font-medium">
+              Push {entityName}&apos;s history from
+            </label>
+            <input id={id} type="date" name="from" required max={max} className={`${INPUT_CLASSES} w-full sm:w-auto`} />
+          </div>
+          <div>
+            <SubmitButton label="Push history" />
+          </div>
+        </>
+      )}
     </form>
   )
 }

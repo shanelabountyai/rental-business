@@ -154,6 +154,8 @@ export const AUDIT_ACTIONS = [
   /// reconciliation page (`after` is the outcome, refusals included).
   'integration.sync_requested',
   'integration.replayed',
+  /// R-284 (PRD 09 Q11): an owner chose the day to push QuickBooks history from.
+  'integration.backfill_started',
   'platform_role.revoked',
   /// R-295a (PRD 11 §4.7, §4.14, §4.16): a support grant's lifecycle. The
   /// platform's rows carry `supportGrantId`; an owner's are STAFF rows about

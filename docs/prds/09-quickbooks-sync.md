@@ -66,7 +66,7 @@ QuickBooks Desktop is out of scope; QBO's REST API and OAuth 2.0 are the only ta
 | Q8 | Stripe processing fees post as an expense line in the same entry as the payment, so net deposit matches the bank feed | Must |
 | Q9 | Reconciliation page: month picker, platform total vs QBO total per mapped account, list of unsynced or failed lines *(built R-283, D-399: QBO total counts only our DocNumbers)* | Must |
 | Q10 | "Sync now" and "replay date" actions, Owner/Admin only, logged to audit *(built R-283, D-399: Owner/Admin is `billing.connect`)* | Should |
-| Q11 | Backfill: on first connect, offer to push history from a chosen start date in daily batches respecting QBO rate limits (500 req/min per realm) | Should |
+| Q11 | Backfill: on first connect, offer to push history from a chosen start date in daily batches respecting QBO rate limits (500 req/min per realm) *(built R-284, D-400: the start day is set once; each sync then pushes history a posting day at a time inside 450 requests and 20 seconds per run)* | Should |
 | Q12 | Adapter interface `AccountingAdapter` with QBO as first implementation and a simulated adapter for tests, matching the master PRD §14 pattern | Must |
 
 ## 4. Data model additions and ledger-to-QBO mapping

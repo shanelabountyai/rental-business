@@ -337,6 +337,7 @@ export type QuickBooksRow = {
     connectedAt: Date | null
     lastSyncedAt: Date | null
     syncProblem: string | null
+    backfillFrom: Date | null
   } | null
 }
 
@@ -349,7 +350,7 @@ export async function quickBooksRows(orgId: string): Promise<QuickBooksRow[]> {
       id: true,
       name: true,
       quickBooksConnection: {
-        select: { id: true, status: true, statusReason: true, basis: true, propertyField: true, realmId: true, connectedAt: true, lastSyncedAt: true, syncProblem: true },
+        select: { id: true, status: true, statusReason: true, basis: true, propertyField: true, realmId: true, connectedAt: true, lastSyncedAt: true, syncProblem: true, backfillFrom: true },
       },
     },
   })

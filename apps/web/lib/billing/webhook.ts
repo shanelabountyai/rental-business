@@ -1049,7 +1049,13 @@ export async function recentStripeEvents(orgId: string, limit = 25) {
  * (`receivedByStaffId`) went through no card or bank rail, so there is
  * nothing to read. A payment with no readable fee posts gross.
  */
-async function recordProcessingFee(orgId: string, paymentId: string, intent: ProjectionIntent, stripeEventId: string) {
+export async function recordProcessingFee(
+  orgId: string,
+  paymentId: string,
+  intent: Pick<ProjectionIntent, 'stripePaymentIntentId' | 'stripeInvoiceId' | 'amountCents'>,
+  /// Null when R-284's backfill reads a payment that settled before R-282b.
+  stripeEventId: string | null,
+) {
   const payment = await prisma.payment.findUniqueOrThrow({
     where: { id: paymentId },
     select: { receivedByStaffId: true, processingFee: { select: { id: true } } },

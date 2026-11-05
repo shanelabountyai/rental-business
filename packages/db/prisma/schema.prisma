@@ -801,6 +801,9 @@ model QuickBooksConnection {
   /// (an unmapped account or property, a provider error). Null when clean.
   lastSyncedAt   DateTime?
   syncProblem    String?
+  /// R-284 (Q11, D-400): history is pushed from this day on, one posting day
+  /// at a time, after each sync. Null until the owner chooses it.
+  backfillFrom   DateTime?               @db.Date
   createdAt      DateTime                @default(now())
   updatedAt      DateTime                @updatedAt
   mappings       QuickBooksMapping[]
@@ -903,7 +906,8 @@ model StripeProcessingFee {
   stripeBalanceTransactionId String
   /// The balance transaction's `fee_details`, verbatim.
   details                    Json
-  stripeEventId              String
+  /// Null when R-284's backfill read it for a payment settled before R-282b.
+  stripeEventId              String?
   createdAt                  DateTime     @default(now())
 
   @@index([orgId])

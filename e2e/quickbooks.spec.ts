@@ -108,6 +108,15 @@ test('an owner connects an entity to QuickBooks through consent and the callback
     .toBe(2)
   await page.goto(`${host}/money/quickbooks`)
 
+  // R-284: history from a chosen day, asked once; the notice survives the form's inputs going.
+  await page.getByLabel(`Push Ledger LLC ${tag}'s history from`).fill('2026-01-01')
+  await page.getByRole('button', { name: 'Push history' }).click()
+  await expect(page.getByText(/Pushing history from 1 Jan 2026\. 0 days pushed so far/)).toBeVisible()
+  await expect(page.getByText('Pushed from 1 Jan 2026.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Push history' })).toHaveCount(0)
+  await expect.poll(() => prisma.auditLog.count({ where: { entityId: connection.id, action: 'integration.backfill_started' } })).toBe(1)
+  await axeScan(page)
+
   await page.getByRole('button', { name: `Disconnect Ledger LLC ${tag}` }).click()
   await page.waitForURL(`${host}/money/quickbooks?result=disconnected`)
   await expect(page.getByText('Disconnected from QuickBooks.')).toBeVisible()

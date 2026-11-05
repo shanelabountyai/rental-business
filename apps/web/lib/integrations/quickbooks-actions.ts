@@ -3,11 +3,13 @@
 import type { FormState } from '@/components/auth-form.tsx'
 import type { StripeFormState } from '@/lib/integrations/stripe-actions.ts'
 import type { BusinessDate } from '@rental/core/scheduling'
-import { friendlyBusinessDate } from '@rental/core/scheduling'
+import { businessDate, businessDateToUtc, friendlyBusinessDate } from '@rental/core/scheduling'
+import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { authUrl } from '@/lib/auth/org-url.ts'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { audit } from '@/lib/audit/index.ts'
+import { orgTimezone } from '@/lib/support/grants.ts'
 import { replayQuickBooksDate, syncQuickBooks } from './quickbooks-sync.ts'
 import { answerSimulatedConsent, disconnectQuickBooks, orgIdForQuickBooksState, startQuickBooksConnect } from './quickbooks.ts'
 
@@ -85,7 +87,9 @@ export async function syncQuickBooksNowAction(legalEntityId: string, _previous: 
   revalidatePath(RECONCILE)
   if (result.outcome !== 'synced') return { error: result.reason }
   return {
-    notice: `Synced: ${result.posted} journal ${result.posted === 1 ? 'entry' : 'entries'} posted, ${result.excluded} excluded.`,
+    notice: `Synced: ${result.posted} journal ${result.posted === 1 ? 'entry' : 'entries'} posted, ${result.excluded} excluded.${
+      result.backfilledDays > 0 ? ` ${result.backfilledDays} ${result.backfilledDays === 1 ? 'day' : 'days'} of history pushed.` : ''
+    }`,
   }
 }
 
@@ -109,4 +113,38 @@ export async function replayQuickBooksDateAction(legalEntityId: string, _previou
   return {
     notice: `Replayed ${friendlyBusinessDate(day as BusinessDate)}: ${result.journals} journal ${result.journals === 1 ? 'entry' : 'entries'} checked, ${result.reposted} posted again.`,
   }
+}
+
+// R-284 (PRD 09 Q11, D-400): the owner picks the day to push history from,
+// once per connection, and the first batch runs at once. Every later sync
+// carries it on until history is done.
+
+export async function startQuickBooksBackfillAction(legalEntityId: string, _previous: FormState, formData: FormData): Promise<FormState> {
+  const actor = await requirePermission('billing.connect')
+  const from = String(formData.get('from') ?? '')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || Number.isNaN(Date.parse(from))) return { error: 'Choose the day to push history from.' }
+  if (from >= businessDate(new Date(), await orgTimezone(actor.orgId))) return { error: 'Choose a day before today.' }
+  const connection = await prisma.quickBooksConnection.findFirst({
+    where: { orgId: actor.orgId, legalEntityId, status: 'CONNECTED' },
+    select: { id: true, backfillFrom: true },
+  })
+  if (!connection) return { error: 'That entity is not connected to QuickBooks.' }
+  // Once: a second press cannot move a backfill that is already running.
+  const { count } = await prisma.quickBooksConnection.updateMany({
+    where: { id: connection.id, backfillFrom: null },
+    data: { backfillFrom: businessDateToUtc(from as BusinessDate) },
+  })
+  if (count === 0) return { error: 'History is already being pushed for this entity.' }
+  const [result] = await syncQuickBooks(actor.orgId, { legalEntityId })
+  await audit({
+    action: 'integration.backfill_started',
+    entityType: 'QuickBooksConnection',
+    entityId: connection.id,
+    orgId: actor.orgId,
+    after: { backfillFrom: from, firstRun: result ?? null },
+  })
+  revalidatePath('/money/quickbooks')
+  const start = `Pushing history from ${friendlyBusinessDate(from as BusinessDate)}.`
+  if (!result || result.outcome !== 'synced') return { error: `${start} The first batch did not run: ${result?.reason ?? 'not connected'}` }
+  return { notice: `${start} ${result.backfilledDays} ${result.backfilledDays === 1 ? 'day' : 'days'} pushed so far; each sync carries on.` }
 }

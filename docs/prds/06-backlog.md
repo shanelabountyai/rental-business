@@ -520,7 +520,7 @@ Added 2026-10-20 from `08-messaging-and-white-label.md` and `09-quickbooks-sync.
 | 260a | ✅ R-282a | **(D-398) Nightly sync, payments gross.** Mapping store filled by an onboarding script (D-397), with an unmapped key blocking the sync; a sync-link table keyed by `ledgerEntryId` (D-312); cash and accrual classification (D-393); one entry per (entity, posting day, property), idempotent by DocNumber; deposits to a liability account; reversals post as reversing lines. | PRD 09 Q3–Q5, Q7 | L | R-280 | 5 |
 | 260b | ✅ R-282b | **(D-398) Stripe processing fee.** Read from the payment's balance transaction on the connected account when the success webhook lands, stored append-only per payment (never a `LedgerEntry`), and posted as a Merchant Fees line in the payment's entry. | PRD 09 Q8 | M | R-282a | 5 |
 | 261 | ✅ R-283 | **Reconciliation page, "sync now" and "replay date"** (Owner/Admin only, audited). | PRD 09 Q9, Q10 | M | R-282 | 5 |
-| 262 | R-284 | **Historical backfill** from a chosen start date in daily batches inside QuickBooks' 500 req/min per realm. | PRD 09 Q11 | M | R-282 | 6 |
+| 262 | ✅ R-284 | **Historical backfill** from a chosen start date in daily batches inside QuickBooks' 500 req/min per realm. | PRD 09 Q11 | M | R-282 | 6 |
 
 **Not given rows, on purpose:** CSV import (built, R-168; check its second half before onboarding); message retention (`Message` is append-only and kept indefinitely); e-sign vendor (already R-093 — PRD 08 recommends SignWell, recorded there as a recommendation, not a decision); the owner-statements check (PRD 08 §8 gap list — do it as the first read of the next session, before any row here is built).
 
