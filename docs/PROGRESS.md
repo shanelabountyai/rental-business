@@ -15542,4 +15542,4 @@ After the projection commits, the webhook stores the fee for every `payment_succ
 
 **What it left behind.** Only the first 10 refunds on one fee are read (Stripe's embedded page, marked `ponytail:`). Nothing reads `PlatformFee` or `PlatformFeeRefund` yet: no screen shows the owner their net platform fee. The simulator emits neither event, so both tables stay empty without a Stripe key. Each deployed database must run `db:migrate` (`20261117100000_platform_fee_refund`).
 
-**Gate.** `lint`, `typecheck`, `check:ship-deps` and `db:drift` are clean. The full unit suite (`--maxWorkers=4`) passed 3,955 with 4 skipped, 3,959 in total. No e2e spec was touched, because no UI changed. CI owns the sweep.
+**Gate.** `lint`, `typecheck`, `check:ship-deps` and `db:drift` are clean. The full unit suite (`--maxWorkers=4`) passed 3,955 with 4 skipped, 3,959 in total. No e2e spec was touched, because no UI changed. CI owns the sweep. CI run 42272317061 is green: 1,424 e2e passed, 4 skipped.

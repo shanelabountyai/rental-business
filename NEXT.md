@@ -1,6 +1,6 @@
 **2026-11-05 (latest): R-296 done** (`95c8d428`, D-402). Each org's platform fee (`Organization.platformFeeBps`) is set on `/platform/orgs/[slug]` (`org.feeSet`, step-up, reason, owners emailed). The Stripe driver puts it on new subscriptions, one-off invoices and portal PaymentIntents (on the principal). Never on org #0, which is refused. A change reaches live subscriptions through `syncLeasePayer` (`fee_updated`), and the nightly run retries. CI is green (run 42166416127).
 
-**2026-11-06: R-307 done** (`8846e09d`, D-403). `application_fee.refunded` now writes append-only `PlatformFeeRefund` rows, one per Stripe fee refund. Each deployed DB must run `db:migrate` (`20261117100000_platform_fee_refund`).
+**2026-11-06: R-307 done** (`8846e09d`, D-403). CI is green (run 42272317061). `application_fee.refunded` now writes append-only `PlatformFeeRefund` rows, one per Stripe fee refund. Each deployed DB must run `db:migrate` (`20261117100000_platform_fee_refund`).
 
 **No ungated backlog row is left.** R-093 needs real vendor contracts (D-7). R-267, R-268, R-272, R-273 and R-278 are gated on OQ-15, OQ-20, the live Twilio adapter and OQ-14. A bare `go` therefore has nothing to build. Ask Shane which to pick: answer an OQ to unlock a row, close the project out (CLAUDE.md "Definition of done": DEMO.md, exec brief, LinkedIn posts, cost review),.
 
