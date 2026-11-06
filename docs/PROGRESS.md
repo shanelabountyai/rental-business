@@ -15533,3 +15533,13 @@ After the projection commits, the webhook stores the fee for every `payment_succ
 **Bug found (in this item, before commit).** The two invariant manifests (`platform.manifest.ts`, `actions.manifest.ts`) had no entry for the new action. PLAT-02 and the action-manifest test caught it.
 
 **Gate.** `lint` (existing warnings only), `typecheck`, `check:ship-deps`, `db:drift`, `db:ci` clean. Full unit suite (`--maxWorkers=4`): 3,952 passed, 4 skipped, 2 failed. Both failures were the missing manifest entries, now fixed, and the re-run passed 26 of 26. `move-out-copy.test.ts` failed in `afterAll` on `Lease_renewedFromLeaseId_fkey` under load and passed alone, so it is an existing cleanup race. e2e `platform-org-configure` (production build, both projects): 6 passed of 6 listed.
+
+## R-307 — Platform fee refunds (`8846e09d`)
+
+**What it built.** `application_fee.refunded` is handled. The platform webhook now routes every `application_fee.*` event by the fee's connected account, as it already routed `.created`. `interpretStripeEvent` reads the fee's embedded `refunds.data` into `PlatformFeeRefundFact`s (outcome `platform_fee_refunded`). `recordPlatformFeeRefunds` writes one `PlatformFeeRefund` row per refund with `createMany({ skipDuplicates })`. The new table is append-only by trigger, org-scoped (`org_scope` trigger and an RLS policy), and has a unique key on `(orgId, stripeFeeRefundId)`.
+
+**What it decided.** D-403. A refund is a new row and `PlatformFee` is never edited, so the net fee is the fee minus its refunds. Rows are keyed on the refund id, not the fee's cumulative `amount_refunded`, so replays and later partial refunds add only what is new. Fee refunds never reach `LedgerEntry`.
+
+**What it left behind.** Only the first 10 refunds on one fee are read (Stripe's embedded page, marked `ponytail:`). Nothing reads `PlatformFee` or `PlatformFeeRefund` yet: no screen shows the owner their net platform fee. The simulator emits neither event, so both tables stay empty without a Stripe key. Each deployed database must run `db:migrate` (`20261117100000_platform_fee_refund`).
+
+**Gate.** `lint`, `typecheck`, `check:ship-deps` and `db:drift` are clean. The full unit suite (`--maxWorkers=4`) passed 3,955 with 4 skipped, 3,959 in total. No e2e spec was touched, because no UI changed. CI owns the sweep.
