@@ -1,6 +1,6 @@
 **2026-11-05 (latest): R-296 done** (`95c8d428`, D-402). Each org's platform fee (`Organization.platformFeeBps`) is set on `/platform/orgs/[slug]` (`org.feeSet`, step-up, reason, owners emailed). The Stripe driver puts it on new subscriptions, one-off invoices and portal PaymentIntents (on the principal). Never on org #0, which is refused. A change reaches live subscriptions through `syncLeasePayer` (`fee_updated`), and the nightly run retries. CI is green (run 42166416127).
 
-**No ungated backlog row is left.** R-093 needs real vendor contracts (D-7). R-267, R-268, R-272, R-273 and R-278 are gated on OQ-15, OQ-20, the live Twilio adapter and OQ-14. A bare `go` therefore has nothing to build. Ask Shane which to pick: answer an OQ to unlock a row, close the project out (CLAUDE.md "Definition of done": DEMO.md, exec brief, LinkedIn posts, cost review), or rebuild the bloated `rental_test`.
+**No ungated backlog row is left.** R-093 needs real vendor contracts (D-7). R-267, R-268, R-272, R-273 and R-278 are gated on OQ-15, OQ-20, the live Twilio adapter and OQ-14. A bare `go` therefore has nothing to build. Ask Shane which to pick: answer an OQ to unlock a row, close the project out (CLAUDE.md "Definition of done": DEMO.md, exec brief, LinkedIn posts, cost review), or handle `application_fee.refunded` (small, ungated).
 
 **Left by R-296:** the simulator never emits `application_fee.created`, so `PlatformFee` is empty without a Stripe key, the demo included. `application_fee.refunded` is unhandled. Each deployed DB must run `db:migrate` (`20261116100000_platform_fee`). `move-out-copy.test.ts` has a cleanup race on `Lease_renewedFromLeaseId_fkey` under full-suite load. It passes alone.
 
@@ -16,7 +16,7 @@
 
 **Real-Intuit carry-over:** Intuit needs one registered redirect URI, but the callback is built on each org's host. The real driver needs a callback on the platform host that hands back to the org host.
 
-**Local test DB is bloated:** `rental_test` is 3.3 GB with 1.79M `Notification` rows. Under load, notification-heavy files time out in the full run and pass alone. Rebuilding `rental_test` would likely fix it. Ask Shane before dropping it.
+**`rental_test` rebuilt 2026-11-06** with `npm run db:reset:test`: 3.3 GB and 1.84M `Notification` rows went to 18 MB. The full unit suite then passed: 3954 passed and 4 skipped (3958 total) in 26s with `--maxWorkers=4`, so the notification-file timeouts are gone. Run the reset again if it grows back.
 
 **Machine note:** run the unit suite as `npm test -- --maxWorkers=4`. A killed vitest leaves `node (vitest N)` workers alive; kill them by cwd. Pass e2e specs as bare names. A new org-scoped table needs an `org_scope` trigger and an RLS policy. A unit test that crosses orgs wraps the call in `asRequest`. A new server action needs its `actions.manifest.ts` entry, and `unreached` if the fixture cannot reach its own-org path. `cron.spec.ts:59` fails locally and passes in CI. **Check `gh run list --limit 3` after each push.** R-283's red run went unnoticed.
 
