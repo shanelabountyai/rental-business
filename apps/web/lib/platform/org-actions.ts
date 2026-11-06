@@ -1,6 +1,7 @@
 'use server'
 
 import { recordAudit } from '@rental/core/audit'
+import { formatPlatformFee, platformFeeRefusal } from '@rental/core/billing'
 import { mintToken } from '@rental/core/auth'
 import { RESERVED_ORG_SLUGS, orgSlugRefusal, slugConfirmRefusal } from '@rental/core/rbac'
 import { friendlyTimestamp } from '@rental/core/scheduling'
@@ -9,10 +10,18 @@ import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { usableColor } from '@/lib/brand.ts'
+import { DEFAULT_ORG_ID } from '@/lib/auth/org.ts'
 import { authUrl } from '@/lib/auth/delivery.ts'
 import { deliverOverChannel } from '@/lib/notifications/deliver.ts'
 import { requirePlatform } from '@/lib/platform/guard.ts'
-import { type LifecycleAudit, freezeOrg, restoreOrg, scheduleOffboarding } from '@/lib/org-lifecycle/lifecycle.ts'
+import {
+  type LifecycleAudit,
+  freezeOrg,
+  notifyOwners,
+  restoreOrg,
+  scheduleOffboarding,
+  syncOrgBilling,
+} from '@/lib/org-lifecycle/lifecycle.ts'
 import { refreshOrgHealth } from '@/lib/cron/org-health.ts'
 import { STEP_LABELS, SETUP_STEPS, readyToGoLive, setupChecklist, setupFacts } from '@/lib/setup/checklist.ts'
 import { minutesUntil, orgInviteEmail } from '@/lib/platform/mail.ts'
@@ -356,6 +365,68 @@ export async function switchOrgNotifications(
     notice: enabled
       ? 'Notifications are on. Anything held in the queue goes out on the next drain.'
       : 'Notifications are switched off. Nothing is sent for this organisation until they are switched back on.',
+  }
+}
+
+/**
+ * "Set fee" (PRD 11 §4.6, R-296, D-322): the org's Connect application fee in
+ * basis points. A fresh code and a reason. The update is conditional on the
+ * fee the form was read with, so two admins pressing at once audit one
+ * change. After it: owners are told, and every live subscription is synced,
+ * which pushes the fee onto its next invoice (a push that fails is retried by
+ * the nightly billing run, which compares the same thing).
+ */
+export async function setOrgFee(_previous: OrgInviteFormState, formData: FormData): Promise<OrgInviteFormState> {
+  const slug = str(formData, 'slug')
+  const actor = await requirePlatform({
+    permission: 'org.feeSet',
+    stepUp: true,
+    next: `/platform/orgs/${encodeURIComponent(slug)}`,
+  })
+  const org = await prisma.organization.findUnique({ where: { slug }, select: { id: true, platformFeeBps: true } })
+  if (!org) return { error: 'That organisation no longer exists.' }
+
+  const raw = str(formData, 'feeBps')
+  const refusal = platformFeeRefusal(raw)
+  if (refusal) return { error: refusal, fieldErrors: { feeBps: refusal } }
+  const bps = Number(raw)
+  if (org.id === DEFAULT_ORG_ID && bps > 0) {
+    return { error: "This organisation bills on the platform's own Stripe account, which cannot take an application fee." }
+  }
+  if (bps === org.platformFeeBps) return { notice: `The fee is already ${formatPlatformFee(bps)}.` }
+  const reason = str(formData, 'reason')
+  if (!reason) return { error: 'A reason is required.', fieldErrors: { reason: 'Say why.' } }
+
+  const changed = await prisma.$transaction(async (tx) => {
+    const { count } = await tx.organization.updateMany({
+      where: { id: org.id, platformFeeBps: org.platformFeeBps },
+      data: { platformFeeBps: bps },
+    })
+    if (count === 0) return false
+    await recordAudit(tx, {
+      actor: { type: 'PLATFORM', ref: actor.id, ipAddress: await clientIp() },
+      action: 'org.fee_set',
+      entityType: 'Organization',
+      entityId: org.id,
+      orgId: org.id,
+      before: { platformFeeBps: org.platformFeeBps },
+      after: { platformFeeBps: bps, reason },
+    })
+    return true
+  })
+  if (!changed) return { error: 'The fee was changed by someone else just now. Reload the page and try again.' }
+
+  await notifyOwners(org.id, {
+    change: 'fee_set',
+    by: 'platform',
+    reason,
+    fee: formatPlatformFee(bps),
+    previousFee: formatPlatformFee(org.platformFeeBps),
+  })
+  await syncOrgBilling(org.id)
+  revalidatePath(`/platform/orgs/${slug}`)
+  return {
+    notice: `The fee is now ${formatPlatformFee(bps)}. It applies from each subscription's next invoice, and the owners have been told.`,
   }
 }
 

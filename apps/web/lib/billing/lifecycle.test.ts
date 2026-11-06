@@ -84,6 +84,20 @@ describe('syncLeasePayer', () => {
     expect(after.lastSyncError).toBeNull()
   })
 
+  it('pushes the org fee when the subscription was told another one (R-296)', async () => {
+    // Drift from the payer's side rather than the org's: org #0 is shared by
+    // every file, and its fee is 0. The simulator answers from `stripeFeeBps`.
+    const lease = await seedLease()
+    await provisionLeaseBilling(lease.id)
+    const payer = await prisma.leasePayer.findFirstOrThrow({ where: { leaseId: lease.id } })
+    expect(payer.stripeFeeBps).toBe(0)
+    await prisma.leasePayer.update({ where: { id: payer.id }, data: { stripeFeeBps: 250 } })
+
+    expect((await syncLeasePayer(payer.id)).outcome).toBe('fee_updated')
+    expect((await prisma.leasePayer.findUniqueOrThrow({ where: { id: payer.id } })).stripeFeeBps).toBe(0)
+    expect((await syncLeasePayer(payer.id)).outcome).toBe('in_sync')
+  })
+
   it('CANCELS when the tenancy has ended', async () => {
     const lease = await seedLease()
     await provisionLeaseBilling(lease.id)

@@ -204,6 +204,8 @@ All platform screens: `PLATFORM_HOST` only; the `(platform)` layout calls `requi
 
 Refusals name the missing permission (same `/no-access` pattern as `guard.ts:104`) and step-up redirects back to the same action.
 
+*(2026-11-05, D-402: built in R-296. The fee also rides on a portal PaymentIntent, on the principal. A non-zero fee is refused for org #0, which bills on the platform's own account. A change reaches live subscriptions through `syncLeasePayer`.)*
+
 ### 4.7 Support access — `/platform/orgs/[slug]/support`, `/platform/grants` (D-320, D-353, R-295)
 
 **Request (normal path).** `grant.request`: reason (required, ≥ 20 characters, free text, shown to the org verbatim), duration (1 h / 4 h / 24 h, default 4 h). Creates a `REQUESTED` grant; every active owner of the org gets a `support_access` notification and a Task (D-9's one queue) "Support is asking to view your organisation". **Nothing opens until an owner approves** (§4.14).

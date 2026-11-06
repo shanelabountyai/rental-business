@@ -22,6 +22,7 @@ const ACTION_LABELS: Record<string, string> = {
   in_sync: 'In step',
   provisioned: 'Opened',
   price_updated: 'Repriced',
+  fee_updated: 'Fee updated',
   paused: 'Paused',
   resumed: 'Resumed',
   cancelled: 'Cancelled',

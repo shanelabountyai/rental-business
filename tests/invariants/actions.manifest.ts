@@ -111,6 +111,8 @@ export const manifest: Record<string, Entry> = {
   'lib/platform/org-actions.ts#switchOrgNotifications': { 'form.slug': 'value', 'form.intent': '=off', 'form.reason': '=invariant' },
   // R-291a: go-live names the org by slug, typed back to confirm.
   'lib/platform/org-actions.ts#markOrgLive': { 'form.slug': 'value', 'form.confirmLive': 'value' },
+  // R-296: the fixture's own fee (0), so the press stops at "already" and writes nothing.
+  'lib/platform/org-actions.ts#setOrgFee': { 'form.slug': 'value', 'form.feeBps': '=0', 'form.reason': '=invariant' },
   // R-292b: SMS provisioning names the org by slug; `poll` reaches the lookup
   // and, with no row, does nothing.
   'lib/platform/integration-actions.ts#provisionTwilio': { 'form.slug': 'value', 'form.intent': '=poll' },

@@ -117,6 +117,8 @@ export const AUDIT_ACTIONS = [
   'org.slug_changed',
   /// R-306 (D-347): the org's notification kill switch flipped; `after.reason` says why.
   'org.notifications_switched',
+  /// R-296 (D-322): the platform fee set; `before`/`after.platformFeeBps`, `after.reason`.
+  'org.fee_set',
   /// R-291a (PRD 10 §5): an owner's checklist statement (`after.mark`, `after.on`),
   /// and the platform marking the org live (PROVISIONING → ACTIVE).
   'org.setup_marked',

@@ -84,6 +84,7 @@ function describe(outcome: string): string {
     in_sync: 'Already in step',
     provisioned: 'Subscription opened',
     price_updated: 'Repriced at Stripe',
+    fee_updated: 'Platform fee updated at Stripe',
     paused: 'Collection paused',
     resumed: 'Collection resumed',
     cancelled: 'Subscription cancelled',

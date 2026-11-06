@@ -33,6 +33,7 @@ export const platformManifest: Record<string, PlatformEntry> = {
   // R-300a: `org.offboard` for the schedule intent; the guard names the permission by intent.
   'lib/platform/org-actions.ts#changeOrgLifecycle': { guard: 'step-up', permission: 'org.freeze' },
   'lib/platform/org-actions.ts#markOrgLive': { guard: 'step-up', permission: 'org.configure' },
+  'lib/platform/org-actions.ts#setOrgFee': { guard: 'step-up', permission: 'org.feeSet' },
   'lib/platform/integration-actions.ts#provisionTwilio': { guard: 'session', permission: 'integration.provision' },
   'lib/platform/integration-actions.ts#provisionResend': { guard: 'session', permission: 'integration.provision' },
   'lib/platform/integration-actions.ts#provisionDomain': { guard: 'session', permission: 'integration.provision' },

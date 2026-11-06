@@ -28,6 +28,8 @@ export type SyncOutcome =
   | 'paused'
   | 'resumed'
   | 'cancelled'
+  /// R-296: only the platform fee differed, and was pushed.
+  | 'fee_updated'
   | 'failed'
   /// Nothing to ask about: no subscription and none needed.
   | 'not_applicable'
@@ -58,7 +60,7 @@ export async function syncLeasePayer(leasePayerId: string): Promise<SyncResult> 
       propertyId: true,
       stripeSubscriptionId: true,
       collectionPaused: true,
-      organization: { select: { status: true } },
+      organization: { select: { status: true, platformFeeBps: true } },
       lease: {
         select: {
           status: true,
@@ -96,7 +98,16 @@ export async function syncLeasePayer(leasePayerId: string): Promise<SyncResult> 
       stripe,
     )
 
-    if (!requiresStripeCall(decision)) {
+    // R-296 (D-322): the org's fee, from the subscription's next invoice. Beside
+    // the lifecycle decision rather than in it: a fee is no lease fact.
+    const feeBps = payer.organization.platformFeeBps
+    const feeDrift = stripe !== null && stripe.status !== 'canceled' && stripe.applicationFeeBps !== feeBps
+    if (feeDrift) {
+      await provider.setApplicationFee({ stripeSubscriptionId: payer.stripeSubscriptionId!, bps: feeBps })
+      await prisma.leasePayer.update({ where: { id: payer.id }, data: { stripeFeeBps: feeBps } })
+    }
+
+    if (!requiresStripeCall(decision) && !feeDrift) {
       await record(payer.id, 'in_sync', null)
       return {
         leasePayerId: payer.id,
@@ -156,7 +167,7 @@ export async function syncLeasePayer(leasePayerId: string): Promise<SyncResult> 
         outcome = 'cancelled'
         break
       default:
-        outcome = 'in_sync'
+        outcome = feeDrift ? 'fee_updated' : 'in_sync'
     }
 
     await record(payer.id, outcome, null)
@@ -171,6 +182,7 @@ export async function syncLeasePayer(leasePayerId: string): Promise<SyncResult> 
         outcome,
         reason: decision.reason,
         effectiveAt: decision.effectiveAt?.toISOString() ?? null,
+        ...(feeDrift && { applicationFeeBps: feeBps }),
       },
     }).catch((error) => {
       console.error(`[billing] could not audit sync for ${payer.id}`, error)

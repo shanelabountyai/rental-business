@@ -2586,7 +2586,8 @@ export const supportRequestedTemplate: NotificationTemplate<SupportAccessContext
 /// rendered by the caller in the org's zone.
 export interface OrgStatusContext {
   orgName: string
-  change: 'frozen' | 'restored' | 'offboard_scheduled' | 'offboarded'
+  /// `fee_set` (R-296): the platform fee changed; `fee` says to what.
+  change: 'frozen' | 'restored' | 'offboard_scheduled' | 'offboarded' | 'fee_set'
   /// Who pressed it: platform support, or one of the org's own owners.
   by: 'platform' | 'owner'
   /// Platform presses only: the admin's words, verbatim.
@@ -2598,6 +2599,9 @@ export interface OrgStatusContext {
   url: string
   /// `offboarded` only: the last day the final-export link works.
   availableUntil?: string
+  /// `fee_set` only: "2.5%", and the one it replaced.
+  fee?: string
+  previousFee?: string
 }
 
 const ORG_STATUS_SUBJECTS: Record<OrgStatusContext['change'], (orgName: string) => string> = {
@@ -2605,6 +2609,7 @@ const ORG_STATUS_SUBJECTS: Record<OrgStatusContext['change'], (orgName: string) 
   restored: (n) => `${n} has been restored`,
   offboard_scheduled: (n) => `${n} is scheduled for offboarding`,
   offboarded: (n) => `${n} has been offboarded: your final export`,
+  fee_set: (n) => `The platform fee for ${n} has changed`,
 }
 
 /**
@@ -2626,6 +2631,12 @@ export const orgStatusChangedTemplate: NotificationTemplate<OrgStatusContext> = 
             `Your final export of everything it held is here until ${c.availableUntil}: ${c.url}`,
             '',
             'Opening it asks for the current code from your authenticator app, so the link alone opens nothing. It is yours only: do not forward it.',
+          ]
+        : c.change === 'fee_set'
+        ? [
+            `${who} changed the platform fee for ${c.orgName} from ${c.previousFee} to ${c.fee} of the rent and charges collected through this service.`,
+            '',
+            'It applies from each tenant\'s next invoice. Invoices already issued keep the fee they were issued with.',
           ]
         : c.change === 'restored'
         ? [`${who} restored ${c.orgName}. Everything works again, and billing resumes.`]

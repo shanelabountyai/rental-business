@@ -115,6 +115,62 @@ describe('what the driver actually sends', () => {
     expect(sent).toEqual(['acct_org_a', 'acct_org_a', undefined])
   })
 
+  it("takes the org's platform fee on a connected account, and none on the platform's own (R-296)", async () => {
+    const calls = captureFetch()
+    const connected = new StripeBillingProvider('sk_test_abc123', async () => 'acct_org_a', async () => 250)
+    const subscription = {
+      stripeCustomerId: 'cus_1',
+      amountCents: 150_000,
+      currency: 'usd',
+      billingCycleAnchor: new Date('2026-04-01T14:00:00Z'),
+      leaseId: 'lease_1',
+      leasePayerId: 'payer_1',
+      collectionMethod: 'charge_automatically' as const,
+    }
+    expect((await connected.createSubscription(subscription)).applicationFeeBps).toBe(250)
+    await connected.invoiceOneOffCharge({
+      stripeCustomerId: 'cus_1',
+      amountCents: 40_000,
+      currency: 'usd',
+      description: 'Uncovered deductions',
+      chargeId: 'charge_1',
+      idempotencyKey: 'k',
+    })
+    await connected.createPaymentIntent({
+      stripeCustomerId: 'cus_1',
+      amountCents: 154_512,
+      principalCents: 150_000,
+      currency: 'usd',
+      rail: 'CARD',
+      leasePayerId: 'payer_1',
+      leaseId: 'lease_1',
+      idempotencyKey: 'pay',
+    })
+    const body = (path: string) => String(calls.find((c) => c.url.endsWith(path))!.init.body)
+    expect(body('/subscriptions')).toContain('application_fee_percent=2.5')
+    expect(body('/invoices')).toContain('application_fee_amount=1000')
+    // On the principal, not the card fee passed through.
+    expect(body('/payment_intents')).toContain('application_fee_amount=3750')
+
+    calls.length = 0
+    const platform = new StripeBillingProvider('sk_test_abc123', async () => null, async () => 250)
+    expect((await platform.createSubscription(subscription)).applicationFeeBps).toBe(0)
+    expect(body('/subscriptions')).not.toContain('application_fee')
+  })
+
+  it('reads the fee back in basis points and pushes a new one onto the subscription', async () => {
+    const calls = captureFetch()
+    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), init: init ?? {} })
+      return Response.json({ id: 'sub_1', status: 'active', application_fee_percent: 1.25, items: { data: [] } })
+    }) as typeof fetch
+    const connected = new StripeBillingProvider('sk_test_abc123', async () => 'acct_org_a')
+    expect((await connected.getSubscription({ stripeSubscriptionId: 'sub_1' }))?.applicationFeeBps).toBe(125)
+    await connected.setApplicationFee({ stripeSubscriptionId: 'sub_1', bps: 0 })
+    expect(calls[1]!.url).toMatch(/\/subscriptions\/sub_1$/)
+    expect(String(calls[1]!.init.body)).toBe('application_fee_percent=0')
+  })
+
   it('NEVER lets Stripe prorate a price change (D-12)', async () => {
     const calls = captureFetch()
     await provider().updateSubscriptionPrice({

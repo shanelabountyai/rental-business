@@ -3,6 +3,7 @@ import 'server-only'
 import type { BillingProvider } from './adapter.ts'
 import { SimulatedBillingProvider } from './simulated-adapter.ts'
 import { StripeBillingProvider } from './stripe-adapter.ts'
+import { prisma } from '@rental/db'
 import { DEFAULT_ORG_ID } from '@/lib/auth/org.ts'
 import { orgIntegration } from '@/lib/integrations/store.ts'
 import { assertCanCollect } from '@/lib/integrations/stripe-onboarding.ts'
@@ -34,7 +35,10 @@ import { assertCanCollect } from '@/lib/integrations/stripe-onboarding.ts'
  */
 export function getBillingProvider(orgId: string): BillingProvider {
   const key = process.env.STRIPE_SECRET_KEY?.trim()
-  return gated(orgId, key ? new StripeBillingProvider(key, () => stripeAccountFor(orgId)) : new SimulatedBillingProvider(orgId))
+  return gated(
+    orgId,
+    key ? new StripeBillingProvider(key, () => stripeAccountFor(orgId), () => platformFeeBps(orgId)) : new SimulatedBillingProvider(orgId),
+  )
 }
 
 /**
@@ -94,6 +98,12 @@ async function stripeAccountFor(orgId: string): Promise<string | null> {
   if (accountId) return accountId
   if (orgId === DEFAULT_ORG_ID) return null
   throw new NoConnectedAccountError(orgId)
+}
+
+/// The org's platform fee in basis points (R-296, D-322); 0 for none.
+async function platformFeeBps(orgId: string): Promise<number> {
+  const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { platformFeeBps: true } })
+  return org?.platformFeeBps ?? 0
 }
 
 /// The org's connected account id, or null. Also what the browser passes to

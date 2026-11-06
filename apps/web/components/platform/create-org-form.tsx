@@ -261,6 +261,63 @@ export function OrgNotificationsPanel({
   )
 }
 
+/// "Set fee" (R-296, PRD 11 §4.6, D-322): the org's Connect application fee.
+/// Offered with `org.feeSet` held or behind a fresh code (step-up).
+export function OrgFeePanel({
+  action,
+  slug,
+  feeBps,
+  canSetFee,
+}: {
+  action: OrgAction
+  slug: string
+  feeBps: number
+  canSetFee: boolean
+}) {
+  const [state, formAction] = useActionState<OrgInviteFormState, FormData>(action, {})
+  const errors = state.fieldErrors ?? {}
+  if (!canSetFee) return null
+  return (
+    <section aria-labelledby="fee-heading" className="flex flex-col gap-3 rounded-md border p-4 text-sm">
+      <h2 id="fee-heading" className="text-lg font-semibold">
+        Platform fee
+      </h2>
+      <p>
+        {feeBps === 0 ? 'No fee is taken.' : `${feeBps} basis points (${feeBps / 100}%)`} of the rent and charges this
+        organisation collects. A change applies from each subscription&apos;s next invoice; invoices already issued keep
+        their fee. The owners are told. It asks for a fresh code.
+      </p>
+      <FormAlerts state={state} />
+      <form action={formAction} className="flex flex-col gap-4">
+        <input type="hidden" name="slug" value={slug} />
+        <TextField
+          label="Fee in basis points"
+          name="feeBps"
+          type="number"
+          inputMode="numeric"
+          min={0}
+          max={1000}
+          step={1}
+          required
+          defaultValue={feeBps}
+          error={errors.feeBps}
+          hint="0 to 1000. 100 basis points is 1%."
+          idPrefix="fee"
+        />
+        <TextField
+          label="Reason for changing the fee"
+          name="reason"
+          required
+          error={errors.reason}
+          hint="Recorded in the organisation's audit log and sent to the owners."
+          idPrefix="fee"
+        />
+        <SubmitButton label="Set fee" />
+      </form>
+    </section>
+  )
+}
+
 /// "Go live" (R-291a, PRD 10 §5 step 10). Offered only while the org is
 /// provisioning; the action re-reads every step from fresh facts, so a stale
 /// checklist above cannot let an org through.

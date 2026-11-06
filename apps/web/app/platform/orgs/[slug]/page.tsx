@@ -1,12 +1,12 @@
 import { friendlyTimestamp } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { notFound } from 'next/navigation'
-import { OrgConfigurePanel, OrgGoLivePanel, OrgInvitesPanel, OrgLifecyclePanel, OrgNotificationsPanel, OrgSlugPanel } from '@/components/platform/create-org-form.tsx'
+import { OrgConfigurePanel, OrgFeePanel, OrgGoLivePanel, OrgInvitesPanel, OrgLifecyclePanel, OrgNotificationsPanel, OrgSlugPanel } from '@/components/platform/create-org-form.tsx'
 import { purgeDate } from '@rental/core/rbac'
 import { ChecklistSteps } from '@/components/setup/checklist.tsx'
 import { isChecklist } from '@/lib/setup/checklist.ts'
 import { platformDecision, requirePlatform } from '@/lib/platform/guard.ts'
-import { changeOrgLifecycle, changeOrgSlug, configureOrganization, manageOrgInvite, markOrgLive, switchOrgNotifications } from '@/lib/platform/org-actions.ts'
+import { changeOrgLifecycle, changeOrgSlug, configureOrganization, manageOrgInvite, markOrgLive, setOrgFee, switchOrgNotifications } from '@/lib/platform/org-actions.ts'
 import { INTEGRATION_SELECT, orgOwners, providerName } from '@/lib/platform/orgs.ts'
 import { OrgHealthPanel } from '@/components/platform/org-health.tsx'
 import { SmsProvisioningPanel, type SmsProvisioningView } from '@/components/platform/sms-provisioning.tsx'
@@ -26,8 +26,7 @@ const STATUS_LABEL = { PROVISIONING: 'being set up', ACTIVE: 'live', FROZEN: 'fr
 
 // PRD 11 §4.4 (R-303): what the platform may know about one organisation,
 // and a stated line that nothing inside it shows without a grant (D-320).
-// Not here yet, each with the row that builds it: status history (R-300b), the
-// fee (R-296). The checklist (R-291a) is OrgHealth's booleans, never a count
+// Status history is R-300b's; the fee, R-296's. The checklist (R-291a) is OrgHealth's booleans, never a count
 // the console ran itself. Pending invites
 // with "Resend" and "Revoke" are R-304a's. "Re-run" is on /platform/jobs (R-303b, PRD 11 §4.10).
 const STATUS_HISTORY_ACTIONS_LABEL: Record<string, string> = {
@@ -58,6 +57,7 @@ export default async function PlatformOrgPage({
       colorPrimary: true,
       colorAccent: true,
       notificationsEnabled: true,
+      platformFeeBps: true,
       status: true,
       frozenAt: true,
       offboardAt: true,
@@ -85,11 +85,15 @@ export default async function PlatformOrgPage({
   const canConfigure = configure.allowed
   const canProvision = (await platformDecision(admin, 'integration.provision')).allowed
   // Step-up permissions: offered when held, and the press asks for the code.
-  const offerable = async (p: 'org.freeze' | 'org.offboard') => {
+  const offerable = async (p: 'org.freeze' | 'org.offboard' | 'org.feeSet') => {
     const d = await platformDecision(admin, p)
     return d.allowed || d.reason === 'stepup_required'
   }
-  const [canFreeze, canOffboard] = [await offerable('org.freeze'), await offerable('org.offboard')]
+  const [canFreeze, canOffboard, canSetFee] = [
+    await offerable('org.freeze'),
+    await offerable('org.offboard'),
+    await offerable('org.feeSet'),
+  ]
   const purgeOn = org.offboardAt ?? (org.frozenAt && purgeDate(org.frozenAt))
   const sms = smsView(await twilioRow(org.id), now)
   const email = emailView(await resendRow(org.id), now)
@@ -221,6 +225,8 @@ export default async function PlatformOrgPage({
         enabled={org.notificationsEnabled}
         canConfigure={canConfigure}
       />
+
+      <OrgFeePanel action={setOrgFee} slug={org.slug} feeBps={org.platformFeeBps} canSetFee={canSetFee} />
 
       <OrgInvitesPanel
         action={manageOrgInvite}

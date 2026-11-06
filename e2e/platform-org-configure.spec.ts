@@ -91,3 +91,24 @@ test('a platform owner switches an org’s notifications off and on, with a reas
     { notificationsEnabled: true, reason: 'Loop fixed' },
   ])
 })
+
+test('a platform owner sets an org’s platform fee, with a reason (R-296)', async ({ page }, testInfo) => {
+  await ensureKeeperOwner()
+  const admin = await createAdmin(true, admins, ['platform_owner'])
+  const tag = `${testInfo.project.name.slice(0, 1)}${randomUUID().slice(0, 8)}`
+  const slug = `e2e-fee-${tag}`
+  const org = await prisma.organization.create({ data: { name: `Fee ${tag}`, slug } })
+  orgs.push(org.id)
+
+  await signIn(page, admin)
+  await page.goto(`${CONSOLE}/platform/orgs/${slug}`)
+  await expect(page.getByText('No fee is taken.')).toBeVisible()
+
+  await page.getByLabel('Fee in basis points').fill('250')
+  await page.getByLabel('Reason for changing the fee').fill('Agreed in the order form')
+  await page.getByRole('button', { name: 'Set fee' }).click()
+  await expect(page.getByText('The fee is now 2.5%.')).toBeVisible()
+  expect((await prisma.organization.findUniqueOrThrow({ where: { id: org.id } })).platformFeeBps).toBe(250)
+  const audits = await prisma.auditLog.findMany({ where: { orgId: org.id, action: 'org.fee_set' }, select: { before: true, after: true } })
+  expect(audits).toEqual([{ before: { platformFeeBps: 0 }, after: { platformFeeBps: 250, reason: 'Agreed in the order form' } }])
+})

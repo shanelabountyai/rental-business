@@ -70,7 +70,10 @@ export class SimulatedBillingProvider implements BillingProvider {
       `[billing:simulated] subscription ${stripeSubscriptionId} at ${input.amountCents}c ` +
         `anchored ${input.billingCycleAnchor.toISOString()} for payer ${input.leasePayerId}`,
     )
-    return { stripeSubscriptionId, stripePriceId }
+    // The fee the real driver would put on it (R-296). Later changes are
+    // answered from `stripeFeeBps`, what this was TOLD (D-27).
+    const org = await prisma.organization.findUnique({ where: { id: this.#orgId }, select: { platformFeeBps: true } })
+    return { stripeSubscriptionId, stripePriceId, applicationFeeBps: org?.platformFeeBps ?? 0 }
   }
 
   async createSetupIntent(stripeCustomerId: string): Promise<ProvisionedSetupIntent> {
@@ -157,6 +160,7 @@ export class SimulatedBillingProvider implements BillingProvider {
       where: { stripeSubscriptionId: input.stripeSubscriptionId },
       select: {
         stripeAmountCents: true,
+        stripeFeeBps: true,
         lastSyncAction: true,
         lease: { select: { status: true } },
       },
@@ -188,8 +192,12 @@ export class SimulatedBillingProvider implements BillingProvider {
       status: over && payer.stripeAmountCents === null ? 'canceled' : paused ? 'paused' : 'active',
       amountCents: payer.stripeAmountCents,
       cancelAt: null,
+      applicationFeeBps: payer.stripeFeeBps ?? 0,
     }
   }
+
+  /// Nothing to send: the caller records what it told us in `stripeFeeBps`.
+  async setApplicationFee(): Promise<void> {}
 
   // ---- Tenant payments (R-037, D-29) ----
 

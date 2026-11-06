@@ -85,8 +85,12 @@ async function afterTransition(
   if (event.change !== 'offboard_scheduled') await syncOrgBilling(orgId)
 }
 
-/// Every active owner, on the org's own host and in its zone (§4.6).
-async function notifyOwners(orgId: string, event: Pick<OrgStatusContext, 'change' | 'by' | 'reason'> & { purgeOn?: Date }) {
+/// Every active owner, on the org's own host and in its zone (§4.6). Also
+/// the fee change's notice (R-296).
+export async function notifyOwners(
+  orgId: string,
+  event: Pick<OrgStatusContext, 'change' | 'by' | 'reason' | 'fee' | 'previousFee'> & { purgeOn?: Date },
+) {
   const now = new Date()
   const [org, owners, zone, url] = await Promise.all([
     prisma.organization.findUniqueOrThrow({ where: { id: orgId }, select: { name: true } }),

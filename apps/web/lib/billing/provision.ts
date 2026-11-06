@@ -201,6 +201,7 @@ export async function provisionLeaseBilling(
         // What we told Stripe. See the column's own comment for why this is
         // a record of the instruction rather than a copy of Stripe's truth.
         stripeAmountCents: lease.rentCents,
+        stripeFeeBps: subscription.applicationFeeBps,
       },
     })
 

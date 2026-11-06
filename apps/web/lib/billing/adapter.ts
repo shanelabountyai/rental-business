@@ -58,6 +58,8 @@ export interface ProvisionedCustomer {
 export interface ProvisionedSubscription {
   stripeSubscriptionId: string
   stripePriceId: string
+  /// R-296: the application fee the subscription was created with, in bps.
+  applicationFeeBps: number
 }
 
 export interface ProvisionedSetupIntent {
@@ -183,7 +185,17 @@ export interface BillingProvider {
   /// asking Stripe what it believes would be guessing.
   getSubscription(
     input: SubscriptionRef,
-  ): Promise<{ status: string; amountCents: number | null; cancelAt: Date | null } | null>
+  ): Promise<{
+    status: string
+    amountCents: number | null
+    cancelAt: Date | null
+    /// R-296: the subscription's application fee, in bps; 0 for none.
+    applicationFeeBps: number
+  } | null>
+
+  /// R-296 (D-322): the org's fee onto a live subscription, from its next
+  /// invoice. `syncLeasePayer` calls it when the fee differs.
+  setApplicationFee(input: SubscriptionRef & { bps: number }): Promise<void>
 
   // ---- Tenant payments (R-037, D-29) ----
 

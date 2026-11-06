@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { randomUUID } from 'node:crypto'
-import { SETUP_TEST_PURPOSE } from '@rental/core/billing'
+import { SETUP_TEST_PURPOSE, platformFeeCents, platformFeePercent } from '@rental/core/billing'
 import type { CollectionMethod, OpenInvoice, PaymentRail } from '@rental/core/payments'
 import type {
   BillingProvider,
@@ -106,12 +106,19 @@ export class StripeBillingProvider implements BillingProvider {
   readonly name = 'stripe-test'
   readonly #secretKey: string
   readonly #resolveAccount: () => Promise<string | null>
+  readonly #resolveFeeBps: () => Promise<number>
   #account: Promise<string | null> | null = null
 
   /// `account` names the connected account every request is made ON (direct
   /// charges, D-316); null means the platform account itself. Resolved on the
   /// first request, not here, so constructing a provider costs nothing.
-  constructor(secretKey: string, account: () => Promise<string | null> = async () => null) {
+  /// `feeBps` is the org's platform fee (R-296, D-322), read when a charge is
+  /// made rather than threaded through every caller.
+  constructor(
+    secretKey: string,
+    account: () => Promise<string | null> = async () => null,
+    feeBps: () => Promise<number> = async () => 0,
+  ) {
     if (secretKey.startsWith('sk_live_') || secretKey.startsWith('rk_live_')) {
       throw new LiveModeRefusedError()
     }
@@ -122,6 +129,14 @@ export class StripeBillingProvider implements BillingProvider {
     }
     this.#secretKey = secretKey
     this.#resolveAccount = account
+    this.#resolveFeeBps = feeBps
+  }
+
+  /// The fee to put on a new charge. Zero on the platform's own account:
+  /// Stripe takes an application fee only on a connected one.
+  async #feeBps(): Promise<number> {
+    this.#account ??= this.#resolveAccount()
+    return (await this.#account) ? this.#resolveFeeBps() : 0
   }
 
   async #auth(): Promise<Record<string, string>> {
@@ -227,6 +242,7 @@ export class StripeBillingProvider implements BillingProvider {
 
   async createSubscription(input: SubscriptionInput): Promise<ProvisionedSubscription> {
     const price = await this.#createPrice(input.amountCents, input.currency, input.leaseId)
+    const feeBps = await this.#feeBps()
 
     const subscription = await this.#post(
       '/subscriptions',
@@ -247,6 +263,9 @@ export class StripeBillingProvider implements BillingProvider {
         ...(input.collectionMethod === 'send_invoice' ? { days_until_due: DAYS_UNTIL_DUE } : {}),
         'metadata[leaseId]': input.leaseId,
         'metadata[leasePayerId]': input.leasePayerId,
+        // R-296: on every invoice the subscription raises, rent and pushed
+        // items alike. Projected from `application_fee.created` (R-277b).
+        application_fee_percent: feeBps ? platformFeePercent(feeBps) : undefined,
       },
       `subscription:${input.leasePayerId}`,
     )
@@ -254,6 +273,7 @@ export class StripeBillingProvider implements BillingProvider {
     return {
       stripeSubscriptionId: subscription.id as string,
       stripePriceId: price,
+      applicationFeeBps: feeBps,
     }
   }
 
@@ -378,12 +398,21 @@ export class StripeBillingProvider implements BillingProvider {
     const items = (subscription.items as { data?: { price?: { unit_amount?: number } }[] })
       ?.data
     const cancelAt = subscription.cancel_at as number | null | undefined
+    const feePercent = subscription.application_fee_percent as number | null | undefined
 
     return {
       status: subscription.status as string,
       amountCents: items?.[0]?.price?.unit_amount ?? null,
       cancelAt: cancelAt ? new Date(cancelAt * 1000) : null,
+      applicationFeeBps: Math.round((feePercent ?? 0) * 100),
     }
+  }
+
+  async setApplicationFee(input: SubscriptionRef & { bps: number }): Promise<void> {
+    // Applies from the next invoice; one already finalized keeps its fee.
+    await this.#post(`/subscriptions/${input.stripeSubscriptionId}`, {
+      application_fee_percent: platformFeePercent(input.bps),
+    })
   }
 
   // ---- Tenant payments (R-037, D-29) ----
@@ -570,6 +599,7 @@ export class StripeBillingProvider implements BillingProvider {
     // `exclude`, so a stray pending item - a fee somebody pushed that is
     // waiting for a rent bill that will never come - cannot ride onto this
     // invoice and change the amount the caller decided.
+    const fee = platformFeeCents(input.amountCents, await this.#feeBps())
     const invoice = await this.#post(
       '/invoices',
       {
@@ -579,6 +609,8 @@ export class StripeBillingProvider implements BillingProvider {
         pending_invoice_items_behavior: 'exclude',
         description: input.description,
         'metadata[chargeId]': input.chargeId,
+        // R-296: the one amount on it is the caller's, so the fee is fixed.
+        application_fee_amount: fee || undefined,
       },
       `${input.idempotencyKey}:invoice`,
     )
@@ -793,6 +825,9 @@ export class StripeBillingProvider implements BillingProvider {
     leaseId: string
     idempotencyKey: string
   }): Promise<{ stripePaymentIntentId: string; clientSecret: string }> {
+    // R-296: rent paid here settles invoices out of band, so it carries the
+    // fee they would have. On the principal: the card fee is a pass-through.
+    const fee = platformFeeCents(input.principalCents, await this.#feeBps())
     const intent = await this.#post(
       '/payment_intents',
       {
@@ -800,6 +835,7 @@ export class StripeBillingProvider implements BillingProvider {
         // The TOTAL, card fee included, computed by core (D-12). Stripe is
         // never asked to work out what a tenant owes.
         amount: input.amountCents,
+        application_fee_amount: fee || undefined,
         currency: input.currency,
         'payment_method_types[0]': STRIPE_PAYMENT_METHOD[input.rail],
         'metadata[leaseId]': input.leaseId,
