@@ -154,6 +154,10 @@ export const HANDLED_EVENTS = [
   // A PLATFORM event (the fee object lives on the platform account), so it
   // reaches the platform endpoint with the connected account on the object.
   'application_fee.created',
+  // The platform's fee handed back (Stripe refunds it when the org refunds
+  // the charge with `refund_application_fee`, or the platform does it by
+  // hand). Same endpoint and routing as the fee itself.
+  'application_fee.refunded',
 ] as const
 export type HandledEvent = (typeof HANDLED_EVENTS)[number]
 
@@ -262,6 +266,9 @@ export type InterpretResult =
   /// The platform's cut of a charge (D-322). The owner's cost, never the
   /// tenant's, so it is not a ProjectionIntent and never reaches LedgerEntry.
   | { outcome: 'platform_fee'; fee: PlatformFeeFact }
+  /// Some or all of a platform fee handed back. Every refund on the fee so
+  /// far, not just the newest: each is recorded once by its own id.
+  | { outcome: 'platform_fee_refunded'; refunds: PlatformFeeRefundFact[] }
   /// The owner's $1 setup test invoice was paid (R-291b, D-384). The owner has
   /// no lease, so it is not a ProjectionIntent either.
   | { outcome: 'setup_test_paid'; stripeInvoiceId: string; amountCents: number; occurredAt: Date }
@@ -283,6 +290,14 @@ export interface PlatformFeeFact {
   stripeAccountId: string
   /// The charge on the connected account, for walking back to Stripe.
   stripeChargeId: string | null
+  amountCents: number
+  occurredAt: Date
+}
+
+export interface PlatformFeeRefundFact {
+  stripeFeeRefundId: string
+  stripeApplicationFeeId: string
+  stripeAccountId: string
   amountCents: number
   occurredAt: Date
 }
@@ -366,6 +381,31 @@ export function interpretStripeEvent(event: StripeEventEnvelope): InterpretResul
         occurredAt,
       },
     }
+  }
+  if (event.type === 'application_fee.refunded') {
+    const account = str(object, 'account')
+    const list = object.refunds as { data?: unknown } | undefined
+    // ponytail: the embedded list holds Stripe's first 10 refunds; an 11th
+    // partial refund of one fee is not recorded. Page the list if that ever happens.
+    const refunds = (Array.isArray(list?.data) ? (list.data as Record<string, unknown>[]) : []).flatMap((refund) => {
+      const id = str(refund, 'id')
+      const amount = int(refund, 'amount')
+      const created = int(refund, 'created')
+      if (!id || amount == null || amount <= 0 || created == null) return []
+      return [
+        {
+          stripeFeeRefundId: id,
+          stripeApplicationFeeId: stripeObjectId,
+          stripeAccountId: account ?? '',
+          amountCents: amount,
+          occurredAt: new Date(created * 1000),
+        },
+      ]
+    })
+    if (!account || refunds.length === 0) {
+      return { outcome: 'ignore', reason: 'application fee refund named no account or refund' }
+    }
+    return { outcome: 'platform_fee_refunded', refunds }
   }
 
   // Before the customer check, because a Dispute never carries one.

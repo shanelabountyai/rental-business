@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { randomBytes } from 'node:crypto'
-import type { ConnectStatus, PlatformFeeFact } from '@rental/core/billing'
+import type { ConnectStatus, PlatformFeeFact, PlatformFeeRefundFact } from '@rental/core/billing'
 import { businessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { DEFAULT_ORG_ID } from '@/lib/auth/org.ts'
@@ -229,6 +229,16 @@ export async function recordPlatformFee(orgId: string, fee: PlatformFeeFact, str
     if (!isUniqueViolation(error)) throw error
     return `platform fee ${fee.stripeApplicationFeeId} already recorded`
   }
+}
+
+/// Each refund once by its own id: the event lists every refund on the fee so
+/// far, so a replay or a later partial refund adds only the new ones.
+export async function recordPlatformFeeRefunds(orgId: string, refunds: PlatformFeeRefundFact[], stripeEventId: string): Promise<string> {
+  const { count } = await prisma.platformFeeRefund.createMany({
+    data: refunds.map((refund) => ({ orgId, ...refund, stripeEventId })),
+    skipDuplicates: true,
+  })
+  return `platform fee ${refunds[0]!.stripeApplicationFeeId}: ${count} refund(s) recorded`
 }
 
 /**

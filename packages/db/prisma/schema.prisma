@@ -728,6 +728,7 @@ model Organization {
   stripeProcessingFees           StripeProcessingFee[]
   jurisdictions                  OrgJurisdiction[]
   platformFees                   PlatformFee[]
+  platformFeeRefunds             PlatformFeeRefund[]
   setupTestPayments              SetupTestPayment[]
   health                         OrgHealth?
   supportGrants                  SupportAccessGrant[]
@@ -1079,6 +1080,25 @@ model PlatformFee {
   createdAt              DateTime     @default(now())
 
   @@unique([orgId, stripeApplicationFeeId])
+}
+
+/// A platform fee handed back, from `application_fee.refunded`: one row per
+/// Stripe fee refund, so a partial refund and a later one are both kept and a
+/// replay adds nothing. The PlatformFee row stays; net fee = fee - refunds.
+/// Append-only by trigger.
+model PlatformFeeRefund {
+  id                     String       @id @default(cuid())
+  orgId                  String
+  organization           Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  stripeFeeRefundId      String
+  stripeApplicationFeeId String
+  stripeAccountId        String
+  amountCents            Int
+  occurredAt             DateTime
+  stripeEventId          String
+  createdAt              DateTime     @default(now())
+
+  @@unique([orgId, stripeFeeRefundId])
 }
 
 /// R-303 (PRD 11 §5.5, D-354): what the platform console may know about an

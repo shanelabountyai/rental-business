@@ -11,8 +11,9 @@ import { orgIdForStripeAccount } from '@/lib/integrations/store.ts'
 // org's money into org #0's ledger.
 //
 // EXCEPT THE PLATFORM FEE (R-277b). An application fee is the platform's own
-// object, so `application_fee.created` arrives HERE with no `event.account`;
-// the connected account it came out of is on the fee, and names the org.
+// object, so `application_fee.created` and `.refunded` arrive HERE with no
+// `event.account`; the connected account it came out of is on the fee, and
+// names the org.
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -20,7 +21,7 @@ export const dynamic = 'force-dynamic'
 export async function POST(request: Request) {
   return handleStripeWebhook(request, process.env.STRIPE_WEBHOOK_SECRET, async (event) => {
     if (event.account) return { ignore: `connected account ${event.account} on the platform endpoint` }
-    if (event.type !== 'application_fee.created') return { orgId: DEFAULT_ORG_ID }
+    if (!event.type.startsWith('application_fee.')) return { orgId: DEFAULT_ORG_ID }
     const account = event.data?.object?.account
     const orgId = typeof account === 'string' ? await orgIdForStripeAccount(account) : null
     return orgId ? { orgId } : { ignore: `no org holds the fee's account ${String(account)}` }

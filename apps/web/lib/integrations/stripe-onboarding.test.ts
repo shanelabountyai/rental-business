@@ -143,6 +143,37 @@ describe('Stripe onboarding, simulated (R-277b)', () => {
     await expect(prisma.platformFee.deleteMany({ where: { orgId: orgA } })).rejects.toThrow(/append-only/)
   })
 
+  it('records each platform fee refund once, from the PLATFORM endpoint, however often Stripe resends the list', async () => {
+    const send = async (id: string, refunds: { id: string; amount: number }[]) => {
+      const body = JSON.stringify({
+        id,
+        type: 'application_fee.refunded',
+        created: Math.floor(Date.now() / 1000),
+        data: {
+          object: {
+            id: `fee_${stamp}`,
+            account: accountId,
+            refunds: { data: refunds.map((refund) => ({ ...refund, created: Math.floor(Date.now() / 1000) })) },
+          },
+        },
+      })
+      const header = stripeSignatureHeader({ rawBody: body, secret: SECRET, timestamp: Math.floor(Date.now() / 1000) })
+      const response = await platform(
+        new Request('https://x.example.test/api/webhooks/stripe', { method: 'POST', headers: { 'stripe-signature': header }, body }),
+      )
+      return response.json()
+    }
+    expect(await send(`evt_${stamp}_fr1`, [{ id: `fr_${stamp}_1`, amount: 100 }])).toMatchObject({ outcome: 'projected' })
+    // The second partial refund's event lists the first one again.
+    expect(await send(`evt_${stamp}_fr2`, [{ id: `fr_${stamp}_2`, amount: 40 }, { id: `fr_${stamp}_1`, amount: 100 }])).toMatchObject({
+      outcome: 'projected',
+    })
+    const rows = await prisma.platformFeeRefund.findMany({ where: { orgId: orgA }, select: { amountCents: true }, orderBy: { amountCents: 'asc' } })
+    expect(rows).toEqual([{ amountCents: 40 }, { amountCents: 100 }])
+    expect(await prisma.ledgerEntry.count({ where: { orgId: orgA } })).toBe(0)
+    await expect(prisma.platformFeeRefund.deleteMany({ where: { orgId: orgA } })).rejects.toThrow(/append-only/)
+  })
+
   it("records the owner's paid $1 setup test once, off the tenant ledger, and step 9 reads it (R-291b)", async () => {
     const provider = getBillingProvider(orgA)
     const input = { staffUserId: 'staff_x', name: 'Owner', email: 'o@example.test', amountCents: 100, currency: 'usd', idempotencyKey: `setup-test:${orgA}:x` }

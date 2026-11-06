@@ -25,7 +25,7 @@ import { applyPortalPayment, UNPUSHED_CLAIM_WINDOW_MS } from '@/lib/payments/out
 import { assessNsfFee } from '@/lib/ledger/nsf-fees.ts'
 import { leaseBalanceCents } from '@/lib/ledger/queries.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
-import { applyAccountStatus, applyDeauthorized, recordPlatformFee } from '@/lib/integrations/stripe-onboarding.ts'
+import { applyAccountStatus, applyDeauthorized, recordPlatformFee, recordPlatformFeeRefunds } from '@/lib/integrations/stripe-onboarding.ts'
 import { recordSetupTestPayment } from '@/lib/setup/test-payment.ts'
 
 // The webhook → projection pipeline (D-11, R-034).
@@ -182,6 +182,11 @@ async function projectClaimed(
   }
   if (interpretation.outcome === 'platform_fee') {
     const detail = await recordPlatformFee(orgId, interpretation.fee, event.id)
+    await recordOutcome(orgId, event.id, 'projected', detail)
+    return { outcome: 'projected', detail }
+  }
+  if (interpretation.outcome === 'platform_fee_refunded') {
+    const detail = await recordPlatformFeeRefunds(orgId, interpretation.refunds, event.id)
     await recordOutcome(orgId, event.id, 'projected', detail)
     return { outcome: 'projected', detail }
   }

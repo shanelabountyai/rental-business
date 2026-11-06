@@ -371,6 +371,21 @@ describe('interpretStripeEvent', () => {
       },
     })
     expect(interpretStripeEvent(event('application_fee.created', { id: 'fee_1', amount: 250 })).outcome).toBe('ignore')
+    const refunded = (object: Record<string, unknown>) => interpretStripeEvent(event('application_fee.refunded', { id: 'fee_1', ...object }))
+    expect(
+      refunded({
+        account: 'acct_1',
+        refunds: { data: [{ id: 'fr_2', amount: 50, created: 1_800_000_100 }, { id: 'fr_1', amount: 100, created: 1_800_000_000 }, { id: 'fr_bad' }] },
+      }),
+    ).toEqual({
+      outcome: 'platform_fee_refunded',
+      refunds: [
+        { stripeFeeRefundId: 'fr_2', stripeApplicationFeeId: 'fee_1', stripeAccountId: 'acct_1', amountCents: 50, occurredAt: new Date(1_800_000_100_000) },
+        { stripeFeeRefundId: 'fr_1', stripeApplicationFeeId: 'fee_1', stripeAccountId: 'acct_1', amountCents: 100, occurredAt: new Date(1_800_000_000_000) },
+      ],
+    })
+    expect(refunded({ refunds: { data: [{ id: 'fr_1', amount: 100, created: 1 }] } }).outcome).toBe('ignore')
+    expect(refunded({ account: 'acct_1', refunds: { data: [] } }).outcome).toBe('ignore')
   })
 
   it('reads the owner\'s paid setup test invoice apart from rent (R-291b)', () => {
