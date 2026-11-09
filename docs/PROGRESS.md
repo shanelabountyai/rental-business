@@ -15544,7 +15544,7 @@ After the projection commits, the webhook stores the fee for every `payment_succ
 
 **Gate.** `lint`, `typecheck`, `check:ship-deps` and `db:drift` are clean. The full unit suite (`--maxWorkers=4`) passed 3,955 with 4 skipped, 3,959 in total. No e2e spec was touched, because no UI changed. CI owns the sweep. CI run 42272317061 is green: 1,424 e2e passed, 4 skipped.
 
-## R-267 — Template-only staff messages to tenants (`PENDING`)
+## R-267 — Template-only staff messages to tenants (`6e6ca0dc`)
 
 **What it built.** A new permission, `message.send_freeform`. `owner` holds every key and `manager` is seeded with this one; `maintenance_tech` is not. Without it, the tenant reply on `/messages/[id]` and the work order's "Message the tenant" form show an "Approved template" picker instead of a text box. Both actions now take the body from `staffMessageBody` (`lib/comms/templates.ts`). That function returns the typed text only to a sender who holds `message.send_freeform` over the property. For anyone else it renders the chosen active template with `renderForRecipient`, against the tenant's newest tenancy at that property, and refuses if a merge field has no value.
 
