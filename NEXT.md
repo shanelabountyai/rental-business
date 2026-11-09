@@ -2,7 +2,7 @@
 
 **2026-11-06: R-307 done** (`8846e09d`, D-403). CI is green (run 42272317061). `application_fee.refunded` now writes append-only `PlatformFeeRefund` rows, one per Stripe fee refund. Each deployed DB must run `db:migrate` (`20261117100000_platform_fee_refund`).
 
-**2026-11-09: R-267 done** (`6e6ca0dc`, D-404, OQ-15 answered: split by role). `message.send_freeform` goes to owner and manager; techs send tenants templates only. Each deployed DB must re-run `db:seed`.
+**2026-11-09: R-267 done** (`6e6ca0dc`, D-404, OQ-15 answered: split by role). `message.send_freeform` goes to owner and manager; techs send tenants templates only. Each deployed DB must re-run `db:seed`. CI is green (run 42669923319).
 
 **No ungated backlog row is left.** R-093 needs real vendor contracts (D-7). R-268, R-272, R-273 and R-278 are gated on OQ-20, the live Twilio adapter and OQ-14. A bare `go` therefore has nothing to build. Ask Shane which to pick: answer an OQ to unlock a row, close the project out (CLAUDE.md "Definition of done": DEMO.md, exec brief, LinkedIn posts, cost review).
 

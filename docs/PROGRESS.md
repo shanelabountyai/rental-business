@@ -15552,4 +15552,4 @@ After the projection commits, the webhook stores the fee for every `payment_succ
 
 **What it left behind.** A property-level thread with no tenant and no vendor offers a template-only sender the picker, but every send from it is refused, since there is no tenancy to fill in. Nothing tests the work-order picker in a browser; the action is covered through `replyInThread`'s shared helper. Each deployed database must re-run `db:seed`, or managers there lose free text.
 
-**Gate.** `lint`, `typecheck` and `check:ship-deps` are clean. The full unit suite (`--maxWorkers=4`) passed 3,958 with 4 skipped, 3,962 in total, including the new `template-only.test.ts`. e2e `messages`, `comms-threading` and `workorders` (both projects) passed 46 of 46 against a production build.
+**Gate.** `lint`, `typecheck` and `check:ship-deps` are clean. The full unit suite (`--maxWorkers=4`) passed 3,958 with 4 skipped, 3,962 in total, including the new `template-only.test.ts`. e2e `messages`, `comms-threading` and `workorders` (both projects) passed 46 of 46 against a production build. CI run 42669923319 is green.
