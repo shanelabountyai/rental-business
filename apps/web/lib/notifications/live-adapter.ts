@@ -66,7 +66,7 @@ function env(name: string): string | undefined {
 // SIDs no real Twilio knows, so it is no sender: logged off production,
 // `unsupported_channel` on it.
 type ResendConfig = { apiKey: string; from: string }
-type TwilioConfig = { accountSid: string; authToken: string; serviceSid: string }
+export type TwilioConfig = { accountSid: string; authToken: string; serviceSid: string }
 
 function configString(config: Record<string, unknown>, key: string): string | undefined {
   const value = config[key]
@@ -115,7 +115,7 @@ function ownDomainSender(row: OrgIntegrationValue): ResendConfig | null {
   return apiKey && from ? { apiKey, from } : null
 }
 
-async function twilioConfig(orgId: string | null): Promise<TwilioConfig | null> {
+export async function twilioConfig(orgId: string | null): Promise<TwilioConfig | null> {
   if (orgId === null) return null
   const row = await orgIntegration(orgId, 'TWILIO')
   if (row) {

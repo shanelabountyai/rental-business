@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { nextReviewStatus, smsCampaignRefusal, twilioRowStatus } from './sms-campaign.ts'
+import {
+  a2pCampaignReview,
+  isTollFree,
+  nextReviewStatus,
+  smsCampaignRefusal,
+  tollFreeReview,
+  twilioRowStatus,
+} from './sms-campaign.ts'
 
 describe('the 10DLC send gate (R-292b)', () => {
   const owners = ['(512) 555-0100', null]
@@ -47,5 +54,26 @@ describe('review progression', () => {
       status: 'ACTIVE',
       statusReason: null,
     })
+  })
+})
+
+describe('which registration a number answers to (R-273)', () => {
+  it('tells a toll-free number from a local one', () => {
+    expect(isTollFree('+18775140000')).toBe(true)
+    expect(isTollFree('+18335550100')).toBe(true)
+    expect(isTollFree('+19188550000')).toBe(false)
+    // 878 is not toll-free, however close it looks.
+    expect(isTollFree('+18785550100')).toBe(false)
+  })
+
+  it("maps Twilio's two vocabularies onto ours, and an unknown status to null", () => {
+    expect(tollFreeReview('TWILIO_APPROVED')).toBe('APPROVED')
+    expect(tollFreeReview('TWILIO_REJECTED')).toBe('FAILED')
+    expect(tollFreeReview('PENDING_REVIEW')).toBe('PENDING')
+    expect(tollFreeReview('SOMETHING_NEW')).toBeNull()
+    expect(a2pCampaignReview('VERIFIED')).toBe('APPROVED')
+    expect(a2pCampaignReview('IN_PROGRESS')).toBe('IN_REVIEW')
+    expect(a2pCampaignReview('SUSPENDED')).toBe('FAILED')
+    expect(a2pCampaignReview(undefined)).toBeNull()
   })
 })

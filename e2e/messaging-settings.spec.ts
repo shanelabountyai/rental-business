@@ -80,6 +80,9 @@ test('an owner sets the business name and a property’s quiet hours', async ({ 
   await page.goto('/messages')
   await page.getByRole('link', { name: 'Messaging settings' }).click()
   await expect(page.getByRole('heading', { name: 'Messaging settings' })).toBeVisible()
+  // R-273: the suite's env blanks Twilio (.env.test), so org #0 has no sender.
+  await expect(page.getByRole('heading', { name: 'Texting number' })).toBeVisible()
+  await expect(page.getByText('No texting number is set up')).toBeVisible()
 
   const name = `Oak Rentals ${stamp}`
   await page.getByLabel('Business name').fill(name)
@@ -132,6 +135,7 @@ test('a manager scoped to one LLC sets only their own quiet hours', async ({ pag
   await signIn(page, manager.email)
   await page.goto('/messages/settings')
   await expect(page.getByRole('heading', { name: 'Quiet hours' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Texting number' })).toHaveCount(0)
   await expect(page.getByLabel(`Quiet from, ${property.name}`, { exact: true })).toBeVisible()
   // Portfolio-wide settings are not theirs to change.
   await expect(page.getByLabel('Business name')).toHaveCount(0)

@@ -6,7 +6,9 @@
 
 **2026-11-09: R-268 done** (`fa5d4f55`, D-405, OQ-20 answered: wording slots only). Owners set a greeting and closing on four automated emails at `/messages/settings`. Each deployed DB must run `db:migrate` (`20261118100000_template_wording`). CI is green (run 42679790464).
 
-**No ungated backlog row is left.** R-093 needs real vendor contracts (D-7). R-272, R-273 and R-278 are gated on the live Twilio adapter and OQ-14. A bare `go` therefore has nothing to build. Ask Shane which to pick: answer an OQ to unlock a row, close the project out (CLAUDE.md "Definition of done": DEMO.md, exec brief, LinkedIn posts, cost review).
+**2026-11-09: R-272 done** (`e0560815`, D-406: Twilio's Messaging Service queue paces sends; the review list estimates) **and R-273 done** (D-407: the texting number's toll-free or 10DLC status on `/messages/settings`). Org #0's live Twilio is configured in `.env.local`: toll-free 877 number, verification approved, and a live send was delivered. `.env.test` and `.env.demo` blank the keys on purpose; never remove that.
+
+**No ungated backlog row is left.** R-093 needs real vendor contracts (D-7). R-278 is gated on OQ-14 (counsel). A bare `go` therefore has nothing to build. Ask Shane which to pick: answer OQ-14, or close the project out (CLAUDE.md "Definition of done": DEMO.md, exec brief, LinkedIn posts, cost review).
 
 **Left by R-296:** the simulator never emits `application_fee.created`, so `PlatformFee` is empty without a Stripe key, the demo included. Each deployed DB must run `db:migrate` (`20261116100000_platform_fee`). `move-out-copy.test.ts` has a cleanup race on `Lease_renewedFromLeaseId_fkey` under full-suite load. It passes alone.
 

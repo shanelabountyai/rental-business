@@ -35,7 +35,7 @@ The draft's premise ("no operator-composed messaging, no audience selection, no 
 | C6 | Built | Simulated adapter, decision is always human (D-7, R-060) | — |
 | §7 consent | Built | `TenantConsent` (R-051b, D-49) | — |
 | §7 footer | Partial | "Reply STOP" in opt-out replies only | R-266 |
-| §7 rate limit, 10DLC | Rate limit built (R-272, D-406: Twilio's Messaging Service queue paces, the UI estimates); 10DLC status gated on live Twilio (D-15) | — | R-272 ✅, R-273 |
+| §7 rate limit, 10DLC | Rate limit built (R-272, D-406: Twilio's Messaging Service queue paces, the UI estimates); registration status on `/messages/settings`, toll-free or 10DLC (R-273, D-407) | — | R-272 ✅, R-273 ✅ |
 | §7 retention | Built by construction | `Message` is append-only, kept indefinitely | — |
 | §8 multi-org root | New — specified in PRD 10, OQ-18 answered by D-315 | Only `LegalEntity` (D-123) | R-274, Milestone 19 |
 | §8 per-org credentials, branding | New | Env-driven single sender | R-275, R-276 |

@@ -15573,3 +15573,13 @@ After the projection commits, the webhook stores the fee for every `payment_succ
 **What it left behind.** The estimate counts tenants with texts off or no phone. `.env.local` gained empty `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and `TWILIO_MESSAGING_SERVICE_SID` lines for Shane to fill. The real 10DLC status reader (the live `TwilioProvisioner`) is still R-273's. No e2e fixture reaches 60 recipients, so the estimate is covered by the core unit test only.
 
 **Gate.** `lint` and `typecheck` are clean. The full unit suite (`--maxWorkers=4`) passed 3,961 with 4 skipped, 3,965 in total. e2e `announcements` (both projects) passed 30 of 30 against a production build. CI run 42687776879 is green.
+
+## R-273 — Texting number registration status (`SHA_PENDING`)
+
+**What it built.** A "Texting number" panel at the top of `/messages/settings`, for a portfolio-wide owner only. `textingStatus` (`apps/web/lib/integrations/twilio-status.ts`) reads Twilio on the credentials `twilioConfig` sends on, which is now exported from `live-adapter.ts`. It reads the Messaging Service's first number, then toll-free verification for an 8xx number or the A2P campaign (`Usa2p`) for a local one. A failure shows Twilio's reason verbatim. Pure mappers are in `packages/core/comms/sms-campaign.ts`: `isTollFree`, `tollFreeReview`, `a2pCampaignReview`. A row the simulated provisioner made shows its stored statuses. Twilio down shows a sentence, not a 500.
+
+**What it decided.** D-407: show whichever registration the number answers to, not 10DLC only, because org #0's real number is toll-free (877) and approved through toll-free verification. **The first live send** through `LiveChannelAdapter` (`SM61141b…`, delivered to Shane's phone) found a real defect, fixed in `cdde98e5`: a localhost `AUTH_URL` produced a `StatusCallback` Twilio refuses with 21609, failing the whole send. A local callback is now left out.
+
+**What it left behind.** There is no reason text for a failed 10DLC campaign: Usa2p's error shape has never come back from a real account (marked `ponytail:`). The panel calls Twilio on every page load (three requests at most, 10s timeout each). Machine-local and gitignored: `.env.local` now holds org #0's live Twilio keys, so `npm run dev` texts real phones. `.env.test` and `.env.demo` blank all three keys, and they load first, so the suite and the demo seed never inherit them. Verified with `dotenv`.
+
+**Gate.** `lint` and `typecheck` are clean. The full unit suite (`--maxWorkers=4`) passed 3,969 with 4 skipped, 3,973 in total. e2e `messaging-settings` (both projects) passed 4 of 4 against a production build. The reader was run once against the real account and returned toll-free, APPROVED.

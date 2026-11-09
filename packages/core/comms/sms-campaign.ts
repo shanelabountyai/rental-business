@@ -65,3 +65,46 @@ export function smsCampaignRefusal(input: {
   return 'campaign_not_approved'
 }
 
+
+// R-273 (D-407): which registration a number answers to, read from Twilio.
+// A toll-free number is approved by toll-free verification and has no 10DLC
+// brand or campaign at all; a local number goes through A2P 10DLC.
+
+const TOLL_FREE_AREA_CODES = new Set(['800', '833', '844', '855', '866', '877', '888'])
+
+export function isTollFree(e164: string): boolean {
+  return e164.startsWith('+1') && TOLL_FREE_AREA_CODES.has(e164.slice(2, 5))
+}
+
+/// Twilio's toll-free verification status, in our vocabulary. Unknown is null.
+export function tollFreeReview(status: string | null | undefined): ReviewStatus | null {
+  switch (status) {
+    case 'PENDING_REVIEW':
+      return 'PENDING'
+    case 'IN_REVIEW':
+      return 'IN_REVIEW'
+    case 'TWILIO_APPROVED':
+      return 'APPROVED'
+    case 'TWILIO_REJECTED':
+      return 'FAILED'
+    default:
+      return null
+  }
+}
+
+/// Twilio's A2P campaign (`Usa2p.campaign_status`), in our vocabulary.
+export function a2pCampaignReview(status: string | null | undefined): ReviewStatus | null {
+  switch (status) {
+    case 'PENDING':
+      return 'PENDING'
+    case 'IN_PROGRESS':
+      return 'IN_REVIEW'
+    case 'VERIFIED':
+      return 'APPROVED'
+    case 'FAILED':
+    case 'SUSPENDED':
+      return 'FAILED'
+    default:
+      return null
+  }
+}
