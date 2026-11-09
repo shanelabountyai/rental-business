@@ -15554,7 +15554,7 @@ After the projection commits, the webhook stores the fee for every `payment_succ
 
 **Gate.** `lint`, `typecheck` and `check:ship-deps` are clean. The full unit suite (`--maxWorkers=4`) passed 3,958 with 4 skipped, 3,962 in total, including the new `template-only.test.ts`. e2e `messages`, `comms-threading` and `workorders` (both projects) passed 46 of 46 against a production build. CI run 42669923319 is green.
 
-## R-268 — Owner-editable wording on automated emails (`SHA`)
+## R-268 — Owner-editable wording on automated emails (`fa5d4f55`)
 
 **What it built.** A `wording` field on `NotificationTemplate`: a greeting slot and a closing slot with defaults. Four templates have it: rent reminder (`payment.due_soon`), maintenance request received (`ticket.acknowledged`), month-to-month rollover (`lease.mtm_rollover`) and application approved (`application.approved`). An org saves its text on `/messages/settings`, in a new "Automated message wording" section that only portfolio-wide `template.write` holders see. The text is stored in `MessagingSettings.templateWording` (migration `20261118100000_template_wording`). `notify()` reads it with the org it already loads and passes it to `renderTemplate`. Each save writes a `messaging_settings.updated` audit row with the template key, before and after.
 
