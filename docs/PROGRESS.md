@@ -15562,4 +15562,4 @@ After the projection commits, the webhook stores the fee for every `payment_succ
 
 **What it left behind.** There is no preview. Slots carry no merge fields, so the default text in each hint plus the fixed message is what goes out, but nobody sees the whole email before saving. D-10's tenant lexicon cannot be checked on owner text. The e2e spec drives only the refusal path: a real save would reword org #0's rent reminders under every other spec. The save path is covered by `template-wording.test.ts` in its own org. Each deployed database must run `db:migrate`.
 
-**Gate.** `lint`, `typecheck`, `db:drift` and `npm run build` are clean. The full unit suite (`--maxWorkers=4`) passed 3,960 with 4 skipped, 3,964 in total. e2e `messaging-settings` (both projects) passed 4 of 4 against a production build.
+**Gate.** `lint`, `typecheck`, `db:drift` and `npm run build` are clean. The full unit suite (`--maxWorkers=4`) passed 3,960 with 4 skipped, 3,964 in total. e2e `messaging-settings` (both projects) passed 4 of 4 against a production build. CI run 42679790464 is green.
