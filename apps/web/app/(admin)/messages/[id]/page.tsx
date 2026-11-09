@@ -10,6 +10,7 @@ import { actorCan, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import { logCallInThread, replyInThread } from '@/lib/comms/actions.ts'
 import { exportThreadTranscript } from '@/lib/comms/transcript.ts'
 import { getThread } from '@/lib/comms/queries.ts'
+import { listTemplates } from '@/lib/comms/templates.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
 export const metadata = { title: 'Conversation' }
@@ -75,6 +76,13 @@ export default async function ThreadPage({
   if (!thread) notFound()
 
   const canSend = await actorCan('message.send', propertyResource(thread.property))
+  // R-267: a vendor thread is never template-only (see the permission's
+  // comment); a tenant thread is unless the sender may write freely here.
+  const templateOnly =
+    canSend &&
+    !thread.vendor &&
+    !(await actorCan('message.send_freeform', propertyResource(thread.property)))
+  const templates = templateOnly ? await listTemplates(actor.orgId) : undefined
 
   const party = thread.tenant ?? thread.vendor
   const name = thread.tenant
@@ -167,6 +175,7 @@ export default async function ThreadPage({
           <ReplyForm
             action={replyInThread.bind(null, thread.id)}
             channels={channels}
+            templates={templates}
           />
           <details>
             <summary className="min-h-11 cursor-pointer text-sm font-medium">

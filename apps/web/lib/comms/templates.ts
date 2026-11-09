@@ -3,6 +3,7 @@ import 'server-only'
 import { languageFor, renderTemplate } from '@rental/core/comms'
 import type { TemplateKind } from '@rental/core/comms'
 import { prisma } from '@rental/db'
+import { actorCan, propertyResource } from '@/lib/auth/guard.ts'
 import { templateValues } from './template-values.ts'
 import type { TemplateAudience } from './template-values.ts'
 
@@ -128,4 +129,65 @@ export async function listTemplateVersions(templateId: string) {
       savedBy: { select: { name: true } },
     },
   })
+}
+
+/**
+ * The body of a staff message to a tenant (OQ-15, R-267, D-404).
+ *
+ * A holder of `message.send_freeform` over the property writes their own
+ * words. Anybody else picks a managed template, rendered here for this tenant
+ * through `renderForRecipient` - the same path an announcement takes - so the
+ * typed `body` is ignored rather than trusted: a crafted post cannot smuggle
+ * free text past the picker. Returns a sentence to show instead of a body
+ * when the message cannot go.
+ */
+export async function staffMessageBody(
+  formData: FormData,
+  property: { id: string; legalEntityId: string; orgId: string },
+  tenantId: string | null,
+): Promise<{ body: string } | { error: string }> {
+  if (await actorCan('message.send_freeform', propertyResource(property))) {
+    const body = formData.get('body')
+    return { body: typeof body === 'string' ? body.trim() : '' }
+  }
+
+  const templateId = formData.get('templateId')
+  if (typeof templateId !== 'string' || !templateId) {
+    return { error: 'Choose a template to send.' }
+  }
+  const template = await getTemplate(templateId, property.orgId)
+  if (!template?.active) return { error: 'That template is no longer available.' }
+
+  // The tenant's newest tenancy AT THIS PROPERTY: the merge fields (rent,
+  // balance, address) belong to the lease, not to the person.
+  const leaseTenant = tenantId
+    ? await prisma.leaseTenant.findFirst({
+        where: { tenantId, orgId: property.orgId, lease: { propertyId: property.id } },
+        orderBy: { lease: { startsOn: 'desc' } },
+        select: {
+          leaseId: true,
+          tenant: {
+            select: { firstName: true, lastName: true, email: true, phone: true, preferredLocale: true },
+          },
+        },
+      })
+    : null
+  if (!leaseTenant) {
+    return { error: 'Templates fill in from a tenancy, and this conversation has none to fill them from.' }
+  }
+
+  const { tenant } = leaseTenant
+  const rendered = await renderForRecipient(template, {
+    leaseId: leaseTenant.leaseId,
+    tenantId,
+    tenantName: `${tenant.firstName} ${tenant.lastName}`,
+    preferredLocale: tenant.preferredLocale,
+    email: tenant.email,
+    phone: tenant.phone,
+  })
+  if (!rendered) return { error: 'That template could not be filled in for this tenant.' }
+  if (rendered.missing.length > 0) {
+    return { error: `That template needs ${rendered.missing.join(', ')}, which this tenancy has no value for.` }
+  }
+  return { body: rendered.body }
 }

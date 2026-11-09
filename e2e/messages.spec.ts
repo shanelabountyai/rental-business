@@ -308,6 +308,17 @@ test.describe('a thread', () => {
     await expect(page.getByLabel('Reply')).toHaveCount(0)
     await expect(page.getByText('Log a phone call')).toHaveCount(0)
   })
+
+  test('gives a role without message.send_freeform a template picker, not a text box (R-267)', async ({ page }) => {
+    const { property } = await seedProperty()
+    const { thread } = await seedTenantWithThread(property.id)
+    const staff = await createStaff('maintenance_tech')
+    await signIn(page, staff.email)
+
+    await page.goto(`/messages/${thread.id}`)
+    await expect(page.getByLabel('Approved template')).toBeVisible()
+    await expect(page.getByLabel('Reply', { exact: true })).toHaveCount(0)
+  })
 })
 
 test.describe('unsorted messages', () => {

@@ -11,6 +11,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { propertyResource, requirePermission, requireScope, requireStaff } from '@/lib/auth/guard.ts'
 import { logCall, routeUnroutedMessage, sendThreadMessage } from './messages.ts'
+import { staffMessageBody } from './templates.ts'
 import { triagesUnrouted } from './queries.ts'
 import { propertyForTenant, resolveThread } from './threads.ts'
 
@@ -73,7 +74,13 @@ export async function replyInThread(
   const { thread, actor } = await threadForWrite(threadId)
 
   const channel = str(formData, 'channel')
-  const body = str(formData, 'body')
+  // R-267: only a vendor thread is exempt from the template-only rule, see
+  // `message.send_freeform`'s own comment.
+  const composed = thread.vendorId
+    ? { body: str(formData, 'body') }
+    : await staffMessageBody(formData, thread.property, thread.tenantId)
+  if ('error' in composed) return { error: composed.error }
+  const { body } = composed
 
   const violations = validateOutboundMessage({ threadId, channel, body })
   if (violations.length > 0) return violationsToState(violations)

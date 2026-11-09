@@ -27,6 +27,7 @@ export function ReplyForm({
   action,
   channels,
   recipient,
+  templates,
 }: {
   action: (state: FormState, formData: FormData) => Promise<FormState>
   /// Only the channels this participant can actually be reached on - a
@@ -42,6 +43,11 @@ export function ReplyForm({
   /// name. Omitted on a message thread, where there is one participant and
   /// nothing to confuse it with.
   recipient?: string
+  /// Set when the sender lacks `message.send_freeform` here (OQ-15, R-267):
+  /// the textarea becomes a picker of managed templates, filled in for this
+  /// tenant on send. The action re-checks; this only stops someone typing a
+  /// message they would not be allowed to send.
+  templates?: readonly { id: string; name: string }[]
 }) {
   const [state, formAction] = useActionState<FormState, FormData>(action, {})
   const errors = state.fieldErrors ?? {}
@@ -53,21 +59,33 @@ export function ReplyForm({
   return (
     <form action={formAction} className="flex flex-col gap-3">
       <FormAlerts state={state} />
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="field-reply-body" className="text-sm font-medium">
-          {recipient ? `Reply to ${recipient}` : 'Reply'}
-        </label>
-        <textarea
-          id="field-reply-body"
-          name="body"
-          rows={3}
+      {templates ? (
+        <SelectField
+          label={recipient ? `Approved template for ${recipient}` : 'Approved template'}
+          name="templateId"
+          idPrefix="reply"
           required
-          aria-invalid={Boolean(errors.body) || undefined}
-          aria-describedby={errors.body ? 'field-reply-body-error' : undefined}
-          className={INPUT_CLASSES}
+          error={errors.templateId}
+          placeholder="Choose…"
+          options={templates.map((t) => ({ value: t.id, label: t.name }))}
         />
-        <FieldError id="field-reply-body-error" message={errors.body} />
-      </div>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="field-reply-body" className="text-sm font-medium">
+            {recipient ? `Reply to ${recipient}` : 'Reply'}
+          </label>
+          <textarea
+            id="field-reply-body"
+            name="body"
+            rows={3}
+            required
+            aria-invalid={Boolean(errors.body) || undefined}
+            aria-describedby={errors.body ? 'field-reply-body-error' : undefined}
+            className={INPUT_CLASSES}
+          />
+          <FieldError id="field-reply-body-error" message={errors.body} />
+        </div>
+      )}
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-40">
           <SelectField

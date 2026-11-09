@@ -35,6 +35,13 @@ export const PERMISSIONS = [
   'notice.send',
   'message.read',
   'message.send',
+  /// Writing a message to a tenant in your own words (OQ-15, R-267, D-404).
+  /// Without it, `message.send` still sends, but only a managed template
+  /// rendered for that tenant: what a tenant reads from the team is then
+  /// wording somebody with `template.write` reviewed. Vendor portal replies
+  /// are not gated - a template renders against a tenancy, and a vendor has
+  /// none, so gating them would leave a tech no way to talk to their vendor.
+  'message.send_freeform',
   'task.read',
   'task.write',
   'staff.read',
@@ -321,6 +328,7 @@ export const ROLE_DEFINITIONS: Record<
       'notice.send',
       'message.read',
       'message.send',
+      'message.send_freeform',
       /// Authors templates, does NOT approve legal translations: signing off
       /// legal wording is not day-to-day portfolio work.
       'template.write',

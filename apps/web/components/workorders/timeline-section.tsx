@@ -39,6 +39,7 @@ export function TimelineSection({
   entries,
   canWrite,
   tenantChannels,
+  tenantTemplates,
   hasVendor,
   unattached,
   addNote,
@@ -52,6 +53,8 @@ export function TimelineSection({
   /// Empty when there is no tenant on this job - hides the reply form
   /// rather than showing one with nothing to send to.
   tenantChannels: readonly string[]
+  /// Set when the viewer is template-only for tenants (R-267).
+  tenantTemplates?: readonly { id: string; name: string }[]
   hasVendor: boolean
   unattached: readonly UnattachedMessage[]
   addNote: Action
@@ -110,7 +113,7 @@ export function TimelineSection({
           {tenantChannels.length > 0 && (
             <div className="flex flex-col gap-1.5">
               <h3 className="text-sm font-medium">Message the tenant</h3>
-              <ReplyForm action={replyToTenant} channels={tenantChannels} recipient="the tenant" />
+              <ReplyForm action={replyToTenant} channels={tenantChannels} recipient="the tenant" templates={tenantTemplates} />
             </div>
           )}
           {hasVendor && (

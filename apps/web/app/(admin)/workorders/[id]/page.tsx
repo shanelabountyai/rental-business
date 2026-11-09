@@ -40,6 +40,7 @@ import { TimelineSection } from '@/components/workorders/timeline-section.tsx'
 import { actorCan, actorDecision, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import { chargebackContext } from '@/lib/workorders/chargeback.ts'
 import { postChargeback } from '@/lib/workorders/chargeback-actions.ts'
+import { listTemplates } from '@/lib/comms/templates.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import {
   addWorkOrderNote,
@@ -123,6 +124,11 @@ export default async function WorkOrderDetailPage({
   // `workorder.write` closes jobs; `ledger.adjust` moves money, and every
   // other money-moving surface in this product sits behind it.
   const canBillTenant = await actorCan('ledger.adjust', propertyResource(workOrder.property))
+  // R-267: without `message.send_freeform` the tenant reply is a template picker.
+  const tenantTemplates =
+    canWrite && !(await actorCan('message.send_freeform', propertyResource(workOrder.property)))
+      ? await listTemplates(actor.orgId)
+      : undefined
   // Only asked for once the flag is actually set, so a normal job pays
   // nothing for a query it will never render.
   const chargeback =
@@ -590,6 +596,7 @@ export default async function WorkOrderDetailPage({
         entries={timelineEntries}
         canWrite={canWrite}
         tenantChannels={tenantChannels}
+        tenantTemplates={tenantTemplates}
         hasVendor={workOrder.vendorId != null}
         unattached={unattached}
         addNote={addWorkOrderNote.bind(null, workOrder.id)}

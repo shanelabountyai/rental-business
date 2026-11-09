@@ -15543,3 +15543,13 @@ After the projection commits, the webhook stores the fee for every `payment_succ
 **What it left behind.** Only the first 10 refunds on one fee are read (Stripe's embedded page, marked `ponytail:`). Nothing reads `PlatformFee` or `PlatformFeeRefund` yet: no screen shows the owner their net platform fee. The simulator emits neither event, so both tables stay empty without a Stripe key. Each deployed database must run `db:migrate` (`20261117100000_platform_fee_refund`).
 
 **Gate.** `lint`, `typecheck`, `check:ship-deps` and `db:drift` are clean. The full unit suite (`--maxWorkers=4`) passed 3,955 with 4 skipped, 3,959 in total. No e2e spec was touched, because no UI changed. CI owns the sweep. CI run 42272317061 is green: 1,424 e2e passed, 4 skipped.
+
+## R-267 — Template-only staff messages to tenants (`PENDING`)
+
+**What it built.** A new permission, `message.send_freeform`. `owner` holds every key and `manager` is seeded with this one; `maintenance_tech` is not. Without it, the tenant reply on `/messages/[id]` and the work order's "Message the tenant" form show an "Approved template" picker instead of a text box. Both actions now take the body from `staffMessageBody` (`lib/comms/templates.ts`). That function returns the typed text only to a sender who holds `message.send_freeform` over the property. For anyone else it renders the chosen active template with `renderForRecipient`, against the tenant's newest tenancy at that property, and refuses if a merge field has no value.
+
+**What it decided.** D-404 (OQ-15 answered: split by role). For a template-only sender the typed `body` is ignored, so a crafted post cannot send free text. Vendor threads and vendor portal replies stay free text, because a template renders against a tenancy and a vendor has none. Logged calls stay free text too: they are a record, not a send. Tenants' own portal messages are untouched. No migration was needed, because `db:seed` rewrites role permissions from code.
+
+**What it left behind.** A property-level thread with no tenant and no vendor offers a template-only sender the picker, but every send from it is refused, since there is no tenancy to fill in. Nothing tests the work-order picker in a browser; the action is covered through `replyInThread`'s shared helper. Each deployed database must re-run `db:seed`, or managers there lose free text.
+
+**Gate.** `lint`, `typecheck` and `check:ship-deps` are clean. The full unit suite (`--maxWorkers=4`) passed 3,958 with 4 skipped, 3,962 in total, including the new `template-only.test.ts`. e2e `messages`, `comms-threading` and `workorders` (both projects) passed 46 of 46 against a production build.

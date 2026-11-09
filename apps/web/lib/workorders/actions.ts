@@ -24,6 +24,7 @@ import { emitEvent } from '@/lib/jobs/outbox.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 import { completeTaskWork } from '@/lib/tasks/complete.ts'
 import { createTask } from '@/lib/tasks/create.ts'
+import { staffMessageBody } from '@/lib/comms/templates.ts'
 import { issueVendorLink, revokeVendorLinks } from '@/lib/vendors/link.ts'
 import { vendorDispatchNotice } from './dispatch-notice.ts'
 import { policyFor } from './queries.ts'
@@ -904,7 +905,11 @@ export async function replyToTenantFromWorkOrder(
   }
 
   const channel = str(formData, 'channel')
-  const body = str(formData, 'body')
+  // R-267: the tenant reads either the sender's own words, if they hold
+  // `message.send_freeform` here, or a managed template.
+  const composed = await staffMessageBody(formData, workOrder.property, workOrder.ticket.tenantId)
+  if ('error' in composed) return { error: composed.error }
+  const { body } = composed
   const violations = validateOutboundMessage({ threadId: 'n/a', channel, body })
     .filter((v) => v.field !== 'threadId')
   if (violations.length > 0) return violationsToState(violations)

@@ -28,7 +28,7 @@ The draft's premise ("no operator-composed messaging, no audience selection, no 
 | B2 | Built | Catalogue complete; `owner.*` is the narrowest-scoped owner grant (D-331); `company.phone` still has nothing behind it | R-265 ✅ |
 | B3 | Conflicts with D-44 | 13 automated templates deliberately not overridable | R-268, gated on OQ-20 |
 | B5 | New | Quiet hours are a constant; no settings page | R-266 |
-| B6 | Partial | `template.write` / `template.approve` exist | R-267, gated on OQ-15 |
+| B6 | Built | `message.send_freeform` splits free text from template sends (D-404) | R-267 |
 | C1, C3, C7 | Built (R-269) | Review Task, reason list (placeholder, OQ-16; recorded, not in the notice, D-333), request more info, template version on the decision | R-269 ✅ |
 | C2 | Partial | Screening report, document upload | R-271 |
 | C4, C5 | Built (R-270) | Decision and more-info texts (code templates, not owner-editable until OQ-20/R-268); household approval opens a lease draft (D-334) | R-270 ✅ |
@@ -345,6 +345,6 @@ Implementation: replace the simulated e-sign adapter with a SignWell adapter beh
 
 - [ ] OQ-11: Does his group run on QuickBooks today? (Drives the separate QuickBooks sync PRD's priority.)
 - [ ] OQ-12: Which properties are in Oklahoma vs other states? (Jurisdiction config.)
-- [ ] OQ-13: Does he want staff to send free-form texts, or only from approved templates?
+- [x] OQ-13: Does he want staff to send free-form texts, or only from approved templates? → split by role (real OQ-15, D-404)
 - [ ] OQ-14: Decline-reason list — review with counsel before go-live.
 - [ ] OQ-15: Willingness to pay per unit per month, and whether onboarding fee is acceptable.
