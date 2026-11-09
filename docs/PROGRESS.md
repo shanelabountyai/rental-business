@@ -15572,4 +15572,4 @@ After the projection commits, the webhook stores the fee for every `payment_succ
 
 **What it left behind.** The estimate counts tenants with texts off or no phone. `.env.local` gained empty `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and `TWILIO_MESSAGING_SERVICE_SID` lines for Shane to fill. The real 10DLC status reader (the live `TwilioProvisioner`) is still R-273's. No e2e fixture reaches 60 recipients, so the estimate is covered by the core unit test only.
 
-**Gate.** `lint` and `typecheck` are clean. The full unit suite (`--maxWorkers=4`) passed 3,961 with 4 skipped, 3,965 in total. e2e `announcements` (both projects) passed 30 of 30 against a production build.
+**Gate.** `lint` and `typecheck` are clean. The full unit suite (`--maxWorkers=4`) passed 3,961 with 4 skipped, 3,965 in total. e2e `announcements` (both projects) passed 30 of 30 against a production build. CI run 42687776879 is green.
