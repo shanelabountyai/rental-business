@@ -20,6 +20,8 @@ import {
   resolveChannels,
   templateFor,
   withinQuietHours,
+  wordedTemplates,
+  wordingProblem,
 } from './index.ts'
 
 const CHICAGO = 'America/Chicago'
@@ -262,6 +264,57 @@ describe('quiet hours', () => {
 })
 
 describe('templates', () => {
+  it('an org rewords only the greeting and closing, never the facts or the SMS (R-268, D-405)', () => {
+    const context = {
+      tenantName: 'Ada',
+      addressLine1: '310 Magnolia Dr',
+      amount: '$1,850.00',
+      dueOn: '2026-12-01',
+      isDueToday: false,
+      url: 'https://pay.example.test/x',
+    }
+    const plain = renderTemplate('payment.due_soon', context, 'EMAIL')
+    expect(plain.body.startsWith('Hello Ada,')).toBe(true)
+
+    const saved = { greeting: 'Dear', closing: 'Questions? Call 555-0100.' }
+    const reworded = renderTemplate('payment.due_soon', context, 'EMAIL', saved)
+    expect(reworded.body.startsWith('Dear Ada,')).toBe(true)
+    expect(reworded.body.endsWith('\n\nQuestions? Call 555-0100.')).toBe(true)
+    expect(reworded.body).toContain('$1,850.00')
+    expect(reworded.body).toContain('https://pay.example.test/x')
+    expect(reworded.subject).toBe(plain.subject)
+    expect(renderTemplate('payment.due_soon', context, 'SMS', saved)).toEqual(
+      renderTemplate('payment.due_soon', context, 'SMS'),
+    )
+
+    // A saved value that would no longer pass is the default, not the text.
+    const bad = renderTemplate('payment.due_soon', context, 'EMAIL', { greeting: 'Hi {{tenant.name}}' })
+    expect(bad.body.startsWith('Hello Ada,')).toBe(true)
+
+    // A template with no slots ignores wording entirely.
+    const make = { propertyName: 'Magnolia Drive House', unitName: 'ADU' }
+    expect(renderTemplate('unit.make_ready', make, 'EMAIL', saved)).toEqual(
+      renderTemplate('unit.make_ready', make, 'EMAIL'),
+    )
+
+    // A default closing is replaced, not added to.
+    const mtm = { tenantName: 'Ada', addressLine1: '310 Magnolia Dr', unitName: '', rentCents: 185000 }
+    const mtmBody = renderTemplate('lease.mtm_rollover', mtm, 'EMAIL', { closing: 'Call us.' }).body
+    expect(mtmBody.endsWith('\n\nCall us.')).toBe(true)
+    expect(mtmBody).not.toContain('fixed-term')
+
+    expect(wordedTemplates().map((t) => t.key).sort()).toEqual([
+      'application.approved',
+      'lease.mtm_rollover',
+      'payment.due_soon',
+      'ticket.acknowledged',
+    ])
+    expect(wordingProblem('greeting', 'Good\nmorning')).toMatch(/one line/)
+    expect(wordingProblem('closing', 'x'.repeat(401))).toMatch(/400/)
+    expect(wordingProblem('closing', 'See {{lease.ends_on}}')).toMatch(/exactly as typed/)
+    expect(wordingProblem('closing', '')).toBeNull()
+  })
+
   it('renders the one template R-016 ships, per channel', () => {
     const context = { propertyName: 'Magnolia Drive House', unitName: 'ADU' }
     const email = renderTemplate('unit.make_ready', context, 'EMAIL')

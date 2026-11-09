@@ -1,11 +1,19 @@
-import { DEFAULT_QUIET_HOURS } from '@rental/core/notifications'
+import { DEFAULT_QUIET_HOURS, wordedTemplates } from '@rental/core/notifications'
 import { prisma } from '@rental/db'
 import Link from 'next/link'
 import { PageHeader } from '@/components/page-header.tsx'
-import { MessagingSettingsForm, QuietHoursForm } from '@/components/comms/messaging-settings-forms.tsx'
+import {
+  MessagingSettingsForm,
+  QuietHoursForm,
+  TemplateWordingForm,
+} from '@/components/comms/messaging-settings-forms.tsx'
 import { actorCan, requireScope } from '@/lib/auth/guard.ts'
 import { propertyWhere } from '@/lib/auth/scope.ts'
-import { saveMessagingSettings, saveQuietHours } from '@/lib/comms/messaging-settings-actions.ts'
+import {
+  saveMessagingSettings,
+  saveQuietHours,
+  saveTemplateWording,
+} from '@/lib/comms/messaging-settings-actions.ts'
 
 export const metadata = { title: 'Messaging settings' }
 
@@ -83,6 +91,35 @@ export default async function MessagingSettingsPage() {
             replyTaskAssigneeStaffId={settings?.replyTaskAssigneeStaffId ?? null}
             staff={staff}
           />
+        </section>
+      )}
+
+      {portfolio && (
+        <section aria-labelledby="wording-heading" className="flex flex-col gap-3">
+          <h2 id="wording-heading" className="font-medium">
+            Automated message wording
+          </h2>
+          <p className="text-muted-foreground text-sm">
+            These emails go out on their own. You can change how they greet a tenant and how they
+            end; the amounts, dates, addresses and links stay as the system writes them. Texts are
+            not changed.
+          </p>
+          <ul className="flex flex-col gap-3">
+            {wordedTemplates().map((template) => (
+              <li key={template.key} className="flex min-w-0 flex-col gap-2 rounded-lg border p-4 break-words">
+                <h3 className="text-sm font-medium">{template.label}</h3>
+                <TemplateWordingForm
+                  action={saveTemplateWording}
+                  template={template}
+                  saved={
+                    ((settings?.templateWording ?? {}) as Record<string, { greeting?: string; closing?: string }>)[
+                      template.key
+                    ] ?? {}
+                  }
+                />
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 

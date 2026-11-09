@@ -116,6 +116,13 @@ test('an owner sets the business name and a property’s quiet hours', async ({ 
     )
     .toEqual({ quietHoursStart: 20, quietHoursEnd: 9 })
 
+  // R-268: only the refusal is driven here. A saved wording would be org_0's
+  // and reword every other spec's rent reminder; the unit test saves one in
+  // its own org.
+  await page.getByLabel('Rent reminder closing').fill('Due {{lease.ends_on}}')
+  await page.getByRole('button', { name: 'Save rent reminder wording' }).click()
+  await expect(page.getByText('Merge fields are not filled in here.')).toBeVisible()
+
   const results = await axeScan(page)
   expect(results.violations).toEqual([])
 })

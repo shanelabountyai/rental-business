@@ -155,6 +155,7 @@ export const manifest: Record<string, Entry> = {
   // lib/comms/messaging-settings-actions.ts
   'lib/comms/messaging-settings-actions.ts#saveMessagingSettings': { 'form.replyTaskAssigneeStaffId': 'staffUser' },
   'lib/comms/messaging-settings-actions.ts#saveQuietHours': { 'form.propertyId': 'property' },
+  'lib/comms/messaging-settings-actions.ts#saveTemplateWording': { 'form.templateKey': '=payment.due_soon' },
   // lib/comms/template-actions.ts
   'lib/comms/template-actions.ts#saveTemplate': { templateId: 'messageTemplate', 'form.kind': '=ROUTINE', 'form.name': '=Harness template', 'form.body': '=Hello from the harness' },
   'lib/comms/template-actions.ts#restoreTemplateVersion': { templateId: 'messageTemplate', 'form.versionId': 'messageTemplateVersion' },

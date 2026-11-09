@@ -26,7 +26,7 @@ The draft's premise ("no operator-composed messaging, no audience selection, no 
 | A9 | New | — | R-262 |
 | B1 | Partial | Create, edit, retire; last editor only | R-264 |
 | B2 | Built | Catalogue complete; `owner.*` is the narrowest-scoped owner grant (D-331); `company.phone` still has nothing behind it | R-265 ✅ |
-| B3 | Conflicts with D-44 | 13 automated templates deliberately not overridable | R-268, gated on OQ-20 |
+| B3 | Settled by D-405 | Greeting and closing slots only; the automated templates' facts stay in code (D-44) | R-268 ✅ |
 | B5 | New | Quiet hours are a constant; no settings page | R-266 |
 | B6 | Built | `message.send_freeform` splits free text from template sends (D-404) | R-267 |
 | C1, C3, C7 | Built (R-269) | Review Task, reason list (placeholder, OQ-16; recorded, not in the notice, D-333), request more info, template version on the decision | R-269 ✅ |

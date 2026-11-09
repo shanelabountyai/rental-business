@@ -192,9 +192,17 @@ export async function notify(
       : input.eventId
         ? { outboxEvents: { some: { id: input.eventId } } }
         : { id: input.orgId ?? 'org_0' },
-    select: { id: true, notificationsEnabled: true },
+    select: {
+      id: true,
+      notificationsEnabled: true,
+      // R-268: the org's wording for templates that have slots.
+      messagingSettingses: { select: { templateWording: true } },
+    },
   })
   const orgEnabled = org?.notificationsEnabled === true
+  const savedWording = (
+    org?.messagingSettingses?.[0]?.templateWording as Record<string, unknown> | undefined
+  )?.[input.templateKey]
 
   // Preferences are only meaningful for a channel we could actually reach
   // them on, so resolution runs over the addressable subset - but the LOOP
@@ -322,7 +330,7 @@ export async function notify(
     const address = addressFor(channel, input.recipient, portalReachable)
     const decision = decisions.get(channel)
 
-    const rendered = renderTemplate(input.templateKey, input.context, channel)
+    const rendered = renderTemplate(input.templateKey, input.context, channel, savedWording)
 
     let status: 'QUEUED' | 'SUPPRESSED' | 'DEFERRED' = 'QUEUED'
     let reason: SuppressionReason | undefined

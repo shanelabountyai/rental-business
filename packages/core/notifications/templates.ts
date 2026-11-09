@@ -41,7 +41,60 @@ export interface NotificationTemplate<Context> {
   /// Which channels this template can render. A template with no SMS variant
   /// simply is not sent by SMS, however the recipient's preferences read.
   channels: readonly NotificationChannel[]
-  render: (context: Context, channel: NotificationChannel) => RenderedMessage
+  /// R-268 (OQ-20, D-405): the template's owner-editable wording slots, with
+  /// their defaults. Absent means the template has none.
+  wording?: { label: string; defaults: Wording }
+  render: (context: Context, channel: NotificationChannel, wording: Wording) => RenderedMessage
+}
+
+/**
+ * R-268 (OQ-20, D-405). The only parts of an automated message an owner may
+ * reword: the greeting before the name and a closing paragraph. Both are
+ * plain text that goes out exactly as typed - no merge fields - so every fact
+ * in the message (amount, date, address, link) is still filled by the typed
+ * function above and D-44's compile-time guarantee holds. EMAIL and PORTAL
+ * only: an SMS is a segment budget, and its wording stays fixed.
+ */
+export interface Wording {
+  greeting: string
+  closing: string
+}
+
+export const WORDING_LIMITS = { greeting: 40, closing: 400 } as const
+
+/// Refusal text, or null when `text` may be saved. Empty means "use the default".
+export function wordingProblem(slot: keyof Wording, text: string): string | null {
+  if (text.length > WORDING_LIMITS[slot]) {
+    return `Keep the ${slot} to ${WORDING_LIMITS[slot]} characters.`
+  }
+  if (slot === 'greeting' && /[\r\n]/.test(text)) return 'The greeting must be one line.'
+  // A merge field would go out literally, braces and all.
+  if (/\{\{|\}\}/.test(text)) {
+    return 'Merge fields are not filled in here. This text goes out exactly as typed.'
+  }
+  return null
+}
+
+/// The template's defaults with any valid saved override on top. Anything that
+/// no longer validates falls back to the default rather than going out.
+export function resolveWording(defaults: Wording, saved: unknown): Wording {
+  const wording = { ...defaults }
+  if (saved && typeof saved === 'object') {
+    for (const slot of ['greeting', 'closing'] as const) {
+      const text = (saved as Record<string, unknown>)[slot]
+      if (typeof text === 'string' && text.trim() && !wordingProblem(slot, text.trim())) {
+        wording[slot] = text.trim()
+      }
+    }
+  }
+  return wording
+}
+
+const NO_WORDING: Wording = { greeting: '', closing: '' }
+
+/// A closing paragraph, when there is one.
+function closingLines(wording: Wording): string[] {
+  return wording.closing ? ['', wording.closing] : []
 }
 
 /// Context for `unit.make_ready`. The only template R-016 itself ships - see
@@ -643,7 +696,8 @@ export const ticketAcknowledgedTemplate: NotificationTemplate<TicketAcknowledged
     key: 'ticket.acknowledged',
     category: 'maintenance_ack',
     channels: ['SMS', 'EMAIL', 'PORTAL'],
-    render: (context, channel) => {
+    wording: { label: 'Maintenance request received', defaults: { greeting: 'Hi', closing: '' } },
+    render: (context, channel, wording) => {
       const next = context.isEmergency
         ? 'We have paged the on-call team about it now.'
         : 'Someone reviews it and you will hear from us before anyone visits.'
@@ -661,7 +715,7 @@ export const ticketAcknowledgedTemplate: NotificationTemplate<TicketAcknowledged
       return {
         subject: `We have your request — ${context.reference}`,
         body: [
-          `Hi ${context.tenantName},`,
+          `${wording.greeting} ${context.tenantName},`,
           '',
           `We have your maintenance request for ${context.addressLine1}:`,
           '',
@@ -670,6 +724,7 @@ export const ticketAcknowledgedTemplate: NotificationTemplate<TicketAcknowledged
           next,
           '',
           `Your reference is ${context.reference} — quote it if you call or write to us about this request.`,
+          ...closingLines(wording),
         ].join('\n'),
       }
     },
@@ -1428,7 +1483,7 @@ export const announcementTemplate: NotificationTemplate<ManagedTemplateContext> 
   render: (context, channel) =>
     channel === 'SMS' && context.smsFooter
       ? { body: `${context.body}\n${context.smsFooter}` }
-      : managedTemplate.render(context, channel),
+      : managedTemplate.render(context, channel, NO_WORDING),
 }
 
 /// Context for `payment.due_soon` and `payment.due` (PAY-02, R-045). One
@@ -1471,7 +1526,8 @@ export const rentDueTemplate: NotificationTemplate<DueContext> = {
   key: 'payment.due_soon',
   category: 'rent_reminder',
   channels: ['SMS', 'EMAIL', 'PORTAL'],
-  render: (context, channel) => {
+  wording: { label: 'Rent reminder', defaults: { greeting: 'Hello', closing: '' } },
+  render: (context, channel, wording) => {
     const lead = context.isDueToday
       ? `Rent of ${context.amount} for ${context.addressLine1} is due today.`
       : `Rent of ${context.amount} for ${context.addressLine1} is due ${friendlyBusinessDate(context.dueOn)}.`
@@ -1488,13 +1544,14 @@ export const rentDueTemplate: NotificationTemplate<DueContext> = {
         ? `Rent is due today — ${context.amount}`
         : `Rent is due ${friendlyBusinessDate(context.dueOn)} — ${context.amount}`,
       body: [
-        `Hello ${context.tenantName},`,
+        `${wording.greeting} ${context.tenantName},`,
         '',
         lead,
         '',
         ...(context.url
           ? ['You can pay straight from here — no sign-in needed:', '', context.url]
           : ['You can pay from your portal any time before then.']),
+        ...closingLines(wording),
       ].join('\n'),
     }
   },
@@ -2016,13 +2073,15 @@ export interface ApplicationDecisionContext {
  * once the last one is decided and nobody is declined, the same moment the
  * lease draft opens. Never per applicant: telling one person "approved" while
  * a co-applicant is still undecided would be a promise the household may not
- * get. Code templates, not owner-editable: D-44, and R-268 waits on OQ-20.
+ * get. The greeting and closing are owner-editable (R-268, D-405); the decline
+ * and conditional texts below are not, because they point at the FCRA notice.
  */
 export const applicationApprovedTemplate: NotificationTemplate<ApplicationDecisionContext> = {
   key: 'application.approved',
   category: 'prospect_application',
   channels: ['SMS', 'EMAIL'],
-  render: (context, channel) => {
+  wording: { label: 'Application approved', defaults: { greeting: 'Hi', closing: '' } },
+  render: (context, channel, wording) => {
     if (channel === 'SMS') {
       return {
         body: `Good news - your application for ${context.addressLine1} is approved. We will send the lease to sign shortly.`,
@@ -2031,9 +2090,10 @@ export const applicationApprovedTemplate: NotificationTemplate<ApplicationDecisi
     return {
       subject: `Application approved - ${context.addressLine1}`,
       body: [
-        `Hi ${context.firstName},`,
+        `${wording.greeting} ${context.firstName},`,
         '',
         `Your application for ${context.addressLine1} is approved. We are preparing the lease now and will send it to you to review and sign.`,
+        ...closingLines(wording),
       ].join('\n'),
     }
   },
@@ -2285,7 +2345,14 @@ export const mtmRolloverTemplate: NotificationTemplate<MtmRolloverContext> = {
   key: 'lease.mtm_rollover',
   category: 'lease_renewal',
   channels: ['SMS', 'EMAIL'],
-  render: (context, channel) => {
+  wording: {
+    label: 'Lease rolled to month-to-month',
+    defaults: {
+      greeting: 'Hi',
+      closing: 'Contact us if you would like to discuss a new fixed-term lease.',
+    },
+  },
+  render: (context, channel, wording) => {
     const rent = formatCents(context.rentCents)
     if (channel === 'SMS') {
       return {
@@ -2295,11 +2362,10 @@ export const mtmRolloverTemplate: NotificationTemplate<MtmRolloverContext> = {
     return {
       subject: `Your lease at ${context.addressLine1} is now month-to-month`,
       body: [
-        `Hi ${context.tenantName},`,
+        `${wording.greeting} ${context.tenantName},`,
         '',
         `Your lease term at ${context.addressLine1}${context.unitName ? ` (${context.unitName})` : ''} has ended with no new term agreed, so it has rolled over to month-to-month at ${rent}/month, effective now.`,
-        '',
-        'Contact us if you would like to discuss a new fixed-term lease.',
+        ...closingLines(wording),
       ].join('\n'),
     }
   },
@@ -2785,10 +2851,22 @@ export function renderTemplate(
   templateKey: string,
   context: unknown,
   channel: NotificationChannel,
+  /// The org's saved wording for this template (R-268), unvalidated.
+  savedWording?: unknown,
 ): RenderedMessage {
   const template = TEMPLATES[templateKey]
   if (!template) throw new UnknownTemplateError(templateKey)
-  return template.render(context as never, channel)
+  const wording = template.wording
+    ? resolveWording(template.wording.defaults, savedWording)
+    : NO_WORDING
+  return template.render(context as never, channel, wording)
+}
+
+/// Every template with wording slots, for the settings page.
+export function wordedTemplates(): { key: string; label: string; defaults: Wording }[] {
+  return Object.values(TEMPLATES).flatMap((t) =>
+    t.wording ? [{ key: t.key, label: t.wording.label, defaults: t.wording.defaults }] : [],
+  )
 }
 
 export function templateFor(

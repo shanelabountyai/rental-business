@@ -8119,6 +8119,10 @@ model MessagingSettings {
   /// Who a tenant's reply Task (R-263) is assigned to. Null means anyone. Used
   /// only while this person is active and holds `task.write` over the property.
   replyTaskAssigneeStaffId String?
+  /// R-268 (D-405): the owner's greeting and closing per automated template,
+  /// `{ [templateKey]: { greeting?, closing? } }`. Validated on save and again
+  /// on render (`resolveWording`); a missing key is the template's default.
+  templateWording          Json         @default("{}")
   updatedAt                DateTime     @updatedAt
 
   replyTaskAssignee StaffUser? @relation("MessagingReplyAssignee", fields: [replyTaskAssigneeStaffId], references: [id])

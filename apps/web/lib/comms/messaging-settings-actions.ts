@@ -1,6 +1,7 @@
 'use server'
 
-import { prisma } from '@rental/db'
+import { templateFor, wordingProblem } from '@rental/core/notifications'
+import { type Prisma, prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import type { FormState } from '@/components/auth-form.tsx'
 import { audit } from '@/lib/audit/index.ts'
@@ -125,4 +126,54 @@ export async function saveQuietHours(_previous: FormState, formData: FormData): 
 
   revalidatePath('/messages/settings')
   return { notice: 'Quiet hours saved.' }
+}
+
+/**
+ * R-268 (OQ-20, D-405): the greeting and closing of one automated template.
+ * Portfolio-wide like the business name. Blank puts the default back.
+ */
+export async function saveTemplateWording(
+  _previous: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const actor = await requirePermission('template.write')
+
+  const templateKey = String(formData.get('templateKey') ?? '')
+  const template = templateFor(templateKey)
+  if (!template?.wording) return { error: 'That message has no wording you can change.' }
+
+  const greeting = String(formData.get('greeting') ?? '').trim()
+  const closing = String(formData.get('closing') ?? '').trim()
+  const problem = wordingProblem('greeting', greeting) ?? wordingProblem('closing', closing)
+  if (problem) return { error: problem }
+
+  const before = await prisma.messagingSettings.findUnique({
+    where: { orgId: actor.orgId },
+    select: { templateWording: true },
+  })
+  const all = { ...((before?.templateWording ?? {}) as Record<string, unknown>) }
+  const after = { ...(greeting && { greeting }), ...(closing && { closing }) }
+  if (Object.keys(after).length) all[templateKey] = after
+  else delete all[templateKey]
+
+  await prisma.$transaction(async (tx) => {
+    const saved = await tx.messagingSettings.upsert({
+      where: { orgId: actor.orgId },
+      create: { id: actor.orgId, orgId: actor.orgId, templateWording: all as Prisma.InputJsonObject },
+      update: { templateWording: all as Prisma.InputJsonObject },
+    })
+    await audit(
+      {
+        action: 'messaging_settings.updated',
+        entityType: 'MessagingSettings',
+        entityId: saved.id,
+        before: { templateKey, ...((before?.templateWording as Record<string, unknown> | undefined)?.[templateKey] ?? {}) },
+        after: { templateKey, ...after },
+      },
+      tx,
+    )
+  })
+
+  revalidatePath('/messages/settings')
+  return { notice: `${template.wording.label} wording saved.` }
 }

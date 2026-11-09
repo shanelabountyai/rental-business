@@ -2,7 +2,7 @@
 
 import { useActionState } from 'react'
 import { type FormState, FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
-import { SelectField, TextField } from '@/components/form/field.tsx'
+import { SelectField, TextareaField, TextField } from '@/components/form/field.tsx'
 
 // R-266 (PRD 08 B5). Two kinds of form: the portfolio-wide one, and one per
 // property for its quiet hours. Each property's controls and button carry the
@@ -82,6 +82,47 @@ export function QuietHoursForm({
           </>
         }
       />
+    </form>
+  )
+}
+
+/// R-268: one automated message's greeting and closing. Labels carry the
+/// message's name so the page's several copies never share an accessible name.
+export function TemplateWordingForm({
+  action,
+  template,
+  saved,
+}: {
+  action: Action
+  template: { key: string; label: string; defaults: { greeting: string; closing: string } }
+  saved: { greeting?: string; closing?: string }
+}) {
+  const [state, formAction] = useActionState<FormState, FormData>(action, {})
+  const idPrefix = template.key.replace(/\W/g, '-')
+  return (
+    <form action={formAction} className="flex flex-col gap-3">
+      <FormAlerts state={state} />
+      <input type="hidden" name="templateKey" value={template.key} />
+      <TextField
+        label={`${template.label} greeting`}
+        name="greeting"
+        idPrefix={idPrefix}
+        defaultValue={saved.greeting ?? ''}
+        hint={`Comes before the name. Blank uses “${template.defaults.greeting}”.`}
+      />
+      <TextareaField
+        label={`${template.label} closing`}
+        name="closing"
+        idPrefix={idPrefix}
+        rows={2}
+        defaultValue={saved.closing ?? ''}
+        hint={
+          template.defaults.closing
+            ? `The last paragraph. Blank uses “${template.defaults.closing}”.`
+            : 'An extra last paragraph, such as your office phone number. Blank adds nothing.'
+        }
+      />
+      <SubmitButton label={`Save ${template.label.toLowerCase()} wording`} />
     </form>
   )
 }
