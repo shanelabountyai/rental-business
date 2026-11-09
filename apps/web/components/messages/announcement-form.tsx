@@ -1,6 +1,7 @@
 'use client'
 
 import { BanIcon } from 'lucide-react'
+import { announcementSmsEstimate } from '@rental/core/notifications'
 import { useActionState, useState } from 'react'
 import { LiveRegion, pendingButtonProps } from '@/components/auth-form.tsx'
 import { FieldError, TextField } from '@/components/form/field.tsx'
@@ -50,6 +51,8 @@ export function AnnouncementForm({
   const [ticked, setTicked] = useState(recipients.length)
   const [sendAt, setSendAt] = useState('')
   const textsOff = recipients.filter((r) => r.textsOff).length
+  // Upper bound: every ticked tenant, texts off or not (R-272, D-406).
+  const estimate = announcementSmsEstimate(ticked)
 
   return (
     <form
@@ -99,6 +102,7 @@ export function AnnouncementForm({
               {textsOff} opted out of texts and will get email only.
             </span>
           )}
+          {estimate && <span className="text-muted-foreground text-sm">{estimate}</span>}
         </div>
       </fieldset>
 

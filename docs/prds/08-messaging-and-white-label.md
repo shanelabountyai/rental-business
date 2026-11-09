@@ -35,7 +35,7 @@ The draft's premise ("no operator-composed messaging, no audience selection, no 
 | C6 | Built | Simulated adapter, decision is always human (D-7, R-060) | — |
 | §7 consent | Built | `TenantConsent` (R-051b, D-49) | — |
 | §7 footer | Partial | "Reply STOP" in opt-out replies only | R-266 |
-| §7 rate limit, 10DLC | New, gated on live Twilio (D-15) | — | R-272, R-273 |
+| §7 rate limit, 10DLC | Rate limit built (R-272, D-406: Twilio's Messaging Service queue paces, the UI estimates); 10DLC status gated on live Twilio (D-15) | — | R-272 ✅, R-273 |
 | §7 retention | Built by construction | `Message` is append-only, kept indefinitely | — |
 | §8 multi-org root | New — specified in PRD 10, OQ-18 answered by D-315 | Only `LegalEntity` (D-123) | R-274, Milestone 19 |
 | §8 per-org credentials, branding | New | Env-driven single sender | R-275, R-276 |
@@ -201,7 +201,7 @@ Texting renters is regulated (TCPA in the US, plus carrier 10DLC registration); 
 | Opt-out | STOP, UNSUBSCRIBE, CANCEL, END, QUIT set `optOutAt`; auto-reply confirms; START re-enables. Opted-out renters are excluded from audiences and shown as a count on the confirmation sheet |
 | Quiet hours | Default 8 pm–8 am in the property's local time zone; a scheduled send inside the window is held to the next open minute; owner can override per send with a logged reason |
 | 10DLC | Sender number must be a registered A2P 10DLC number under the organization's brand; unregistered numbers cannot send broadcasts (settings page shows registration status from Twilio) |
-| Rate limits | Sends fan out through a queue at <= 1 msg/sec per number (Twilio long-code limit); UI shows estimated completion for large audiences |
+| Rate limits | Sends fan out through a queue at <= 1 msg/sec per number (Twilio long-code limit); UI shows estimated completion for large audiences. **Built by R-272 (D-406):** the queue is the Twilio Messaging Service's own, and the review list shows the estimate |
 | Identification | Every broadcast ends with the configurable footer (business name + "Reply STOP to opt out") |
 | Fair housing | Applicant decision reasons come from a fixed list reviewed by counsel (OQ); free-text notes are internal only and never sent to the applicant |
 | Retention | Message bodies and delivery logs retained 7 years with the lease record; phone numbers are the only PII stored, no card/bank/SSN (existing invariant) |

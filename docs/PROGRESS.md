@@ -15563,3 +15563,13 @@ After the projection commits, the webhook stores the fee for every `payment_succ
 **What it left behind.** There is no preview. Slots carry no merge fields, so the default text in each hint plus the fixed message is what goes out, but nobody sees the whole email before saving. D-10's tenant lexicon cannot be checked on owner text. The e2e spec drives only the refusal path: a real save would reword org #0's rent reminders under every other spec. The save path is covered by `template-wording.test.ts` in its own org. Each deployed database must run `db:migrate`.
 
 **Gate.** `lint`, `typecheck`, `db:drift` and `npm run build` are clean. The full unit suite (`--maxWorkers=4`) passed 3,960 with 4 skipped, 3,964 in total. e2e `messaging-settings` (both projects) passed 4 of 4 against a production build. CI run 42679790464 is green.
+
+## R-272 — Announcement send pacing and finish estimate (`SHA_PENDING`)
+
+**What it built.** `announcementSmsEstimate(texts, perSecond = 1)` in `packages/core/notifications/templates.ts`: null under a minute, else "Texts reach everyone within about N minutes." The announcement review list shows it under the live recipient count, so it follows the ticks.
+
+**What it decided.** D-406. Twilio's Messaging Service, which the live adapter (R-104) already sends through, is the per-number rate limiter: it queues anything over the sender's throughput. We do not pace sends ourselves. The estimate uses the 1 msg/sec long-code floor and every ticked tenant, so it is an upper bound. Carrier keyword replies are untouched.
+
+**What it left behind.** The estimate counts tenants with texts off or no phone. `.env.local` gained empty `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and `TWILIO_MESSAGING_SERVICE_SID` lines for Shane to fill. The real 10DLC status reader (the live `TwilioProvisioner`) is still R-273's. No e2e fixture reaches 60 recipients, so the estimate is covered by the core unit test only.
+
+**Gate.** `lint` and `typecheck` are clean. The full unit suite (`--maxWorkers=4`) passed 3,961 with 4 skipped, 3,965 in total. e2e `announcements` (both projects) passed 30 of 30 against a production build.

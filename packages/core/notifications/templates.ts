@@ -1438,6 +1438,22 @@ export function announcementSmsFooter(businessName: string): string {
 }
 
 /**
+ * How long a text announcement takes to reach everyone (R-272, D-406), or
+ * null when it is under a minute and not worth saying.
+ *
+ * We do not pace sends ourselves: the Twilio Messaging Service the live
+ * adapter sends through queues anything over the sender's throughput and
+ * releases it at that rate. This only tells the sender what that queue will
+ * do, at the long-code floor of 1 message per second - a 10DLC campaign is
+ * never slower, so the estimate is an upper bound.
+ */
+export function announcementSmsEstimate(texts: number, perSecond = 1): string | null {
+  const minutes = Math.ceil(texts / perSecond / 60)
+  if (texts / perSecond < 60) return null
+  return `Texts reach everyone within about ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}.`
+}
+
+/**
  * The carrier for a MANAGED template (R-044).
  *
  * ==========================================================================

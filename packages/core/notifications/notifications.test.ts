@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   CATEGORY_AUDIENCE,
   DEFAULT_QUIET_HOURS,
+  announcementSmsEstimate,
   announcementSmsFooter,
   DIGEST_ELIGIBLE_CATEGORIES,
   LOCKED_CATEGORIES,
@@ -449,6 +450,16 @@ describe('mayAutoRetry', () => {
     expect(mayAutoRetry('maintenance_emergency')).toBe(true)
     expect(mayAutoRetry('lease_signature')).toBe(true)
     expect(mayAutoRetry('rent_reminder')).toBe(true)
+  })
+})
+
+describe('announcement send estimate (R-272)', () => {
+  it('says nothing under a minute, then rounds up at 1 text per second', () => {
+    expect(announcementSmsEstimate(0)).toBeNull()
+    expect(announcementSmsEstimate(59)).toBeNull()
+    expect(announcementSmsEstimate(60)).toBe('Texts reach everyone within about 1 minute.')
+    expect(announcementSmsEstimate(61)).toBe('Texts reach everyone within about 2 minutes.')
+    expect(announcementSmsEstimate(240, 4)).toBe('Texts reach everyone within about 1 minute.')
   })
 })
 
