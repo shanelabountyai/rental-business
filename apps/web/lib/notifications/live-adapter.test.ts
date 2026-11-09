@@ -126,6 +126,14 @@ describe('the Twilio driver', () => {
     )
   })
 
+  it('leaves out a localhost callback, which Twilio refuses with the whole send (21609)', async () => {
+    vi.stubEnv('AUTH_URL', 'http://localhost:3100')
+    const fetchMock = stubFetch(response(201, { sid: 'SM123' }))
+    await adapter.send({ channel: 'SMS', to: '+15125550123', body: 'b', orgId: 'org_0' })
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(new URLSearchParams(String(init.body)).has('StatusCallback')).toBe(false)
+  })
+
   it("raises Twilio's numeric code as the failure code", async () => {
     // 21610 is the STOP'd recipient - the code packages/core/comms already
     // reads on the status callback, so the two paths record it identically.

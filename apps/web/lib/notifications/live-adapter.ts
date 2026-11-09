@@ -221,9 +221,14 @@ async function sendEmail(
 
 async function statusCallbackUrl(orgId: string | null): Promise<string | null> {
   if (!env('AUTH_URL')) return null
-  return orgId === null
-    ? new URL('/api/sms/status', env('AUTH_URL')).toString()
-    : authUrl(orgId, '/api/sms/status')
+  const url =
+    orgId === null
+      ? new URL('/api/sms/status', env('AUTH_URL')).toString()
+      : await authUrl(orgId, '/api/sms/status')
+  // A laptop's AUTH_URL is localhost, which Twilio cannot reach and refuses
+  // outright (21609): the whole send fails, not just the callback. Found on
+  // the first live send from a laptop (R-273).
+  return /^(localhost|127\.|\[::1\])/.test(new URL(url).hostname) ? null : url
 }
 
 async function sendSms(
