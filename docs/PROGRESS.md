@@ -15574,7 +15574,7 @@ After the projection commits, the webhook stores the fee for every `payment_succ
 
 **Gate.** `lint` and `typecheck` are clean. The full unit suite (`--maxWorkers=4`) passed 3,961 with 4 skipped, 3,965 in total. e2e `announcements` (both projects) passed 30 of 30 against a production build. CI run 42687776879 is green.
 
-## R-273 — Texting number registration status (`SHA_PENDING`)
+## R-273 — Texting number registration status (`514d1570`)
 
 **What it built.** A "Texting number" panel at the top of `/messages/settings`, for a portfolio-wide owner only. `textingStatus` (`apps/web/lib/integrations/twilio-status.ts`) reads Twilio on the credentials `twilioConfig` sends on, which is now exported from `live-adapter.ts`. It reads the Messaging Service's first number, then toll-free verification for an 8xx number or the A2P campaign (`Usa2p`) for a local one. A failure shows Twilio's reason verbatim. Pure mappers are in `packages/core/comms/sms-campaign.ts`: `isTollFree`, `tollFreeReview`, `a2pCampaignReview`. A row the simulated provisioner made shows its stored statuses. Twilio down shows a sentence, not a 500.
 
