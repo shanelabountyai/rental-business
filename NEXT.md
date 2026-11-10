@@ -17,7 +17,7 @@
 
 **2026-11-10: production deployed (D-410).** `70df60f0` is live at rent.labintelligence.co. All 170 migrations are applied (51 that day, rehearsed first on a throwaway Neon branch) and the base seed was re-run, so the carry-over below no longer applies to production. Act 8 (platform console) runs locally only. **Nothing is queued: the project is parked.**
 
-`rental_demo_bak_20261110` is the pre-closure demo DB, kept as a backup; `dropdb` it once satisfied.
+`rental_demo_bak_20261110` was dropped on 2026-11-10.
 
 **Left by R-296:** the simulator never emits `application_fee.created`, so `PlatformFee` is empty without a Stripe key, the demo included. Each deployed DB must run `db:migrate` (`20261116100000_platform_fee`). `move-out-copy.test.ts` has a cleanup race on `Lease_renewedFromLeaseId_fkey` under full-suite load. It passes alone.
 
