@@ -383,9 +383,11 @@ refuses a second platform owner.
   not cancel subscriptions (R-300a).
 - **`/platform/orgs/new`** creates an org and invites its owner (R-304a). The
   new org lives at `http://<slug>.orgs.localhost:3100`. **Data isolation is
-  enforced by the database, not by remembering to filter**: every org-owned
-  table carries row-level security, and a cross-org harness (R-286) proves
-  every server action refuses another org's row.
+  proved, not assumed**: every query is scoped to the actor's org, and a
+  cross-org harness (R-286) proves every server action refuses another org's
+  row. Row-level security is the second wall — every org-owned table has a
+  policy, and it is enforced in the test suite but **off in production**
+  (R-287b, D-392). Say so here, not only in the concessions.
 - **`/platform/jurisdiction`** — the state rules are **published by the
   platform**, and an org can only make them stricter, never looser (R-305,
   R-298b).
