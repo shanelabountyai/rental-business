@@ -122,12 +122,10 @@ packing them into one variable hands `neonctl` a single argument.
 Migrations in the repo that `production` has not had. Apply them with the
 commands above **before** the next deploy, and delete the line once applied.
 
-- `20261013120000_deposit_credit_refunded` (D-305, 2026-10-13) adds
-  `Deposit.creditRefundedCents`. Every deposit read selects it, so a deploy
-  ahead of the migration fails wherever a deposit is read or written.
-  Applied to the local test database only.
-- `20261013130000_deposit_credit_applied` (D-307, 2026-10-13) adds
-  `Deposit.creditAppliedCents`. Same consequence, same status.
+None. All 170 were applied on 2026-11-10 (D-410), 51 of them that day. They
+were rehearsed first on a throwaway Neon branch of `production`
+(`neonctl branches create --parent production`), which costs nothing and is
+how the next large batch should go too.
 
 `prisma migrate reset` is destructive and now refuses to run under an AI agent
 without explicit recorded consent. That guardrail is correct; do not paper over

@@ -13,7 +13,9 @@
 1. ✅ `docs/DEMO.md` — done 2026-11-10. `DEMO-SCRIPT.md` renamed, Acts 7 (messaging) and 8 (platform console) added, every command run against a freshly rebuilt `rental_demo`. New `db:create-platform-admin:demo` script; `.env.demo` gained `PLATFORM_HOST` and `ORG_BASE_DOMAIN`.
 2. ✅ The exec brief — done 2026-11-10. It already existed (2026-10-26) and was refreshed in place, not rebuilt: https://claude.ai/artifact/GSG4tVzFVzbgD4m5eacsrB. Measured that day: 3,969 unit tests (302 files), 1,430 e2e (118 specs, both projects), 1,171 commits, 408 decisions, 101 days. Also in `docs/RELEASE_NOTES.md`. **NEXT: item 3.**
 3. ✅ LinkedIn posts — done 2026-11-10. Ledger posts #166 (Impact, effective-dated rules) and #167 (MarTech, date formatted in the renderer), queued after #164. Ledger: https://claude.ai/artifact/Ai5xKScgT2sWtqXRQ1ZA8i. 13 rental posts existed already. 
-4. ✅ Cost review — done 2026-11-10, D-409. Everything costs pennies. The hourly notifications cron was removed (takes effect on the next deliberate deploy); the Twilio number is kept. **Closure is complete.** Production was last deployed 2026-10-08 and is a month of migrations behind; deploy it deliberately if the live demo should match `docs/DEMO.md`.
+4. ✅ Cost review — done 2026-11-10, D-409. Everything costs pennies. The hourly notifications cron was removed (takes effect on the next deliberate deploy); the Twilio number is kept. **Closure is complete.**
+
+**2026-11-10: production deployed (D-410).** `70df60f0` is live at rent.labintelligence.co. All 170 migrations are applied (51 that day, rehearsed first on a throwaway Neon branch) and the base seed was re-run, so the carry-over below no longer applies to production. Act 8 (platform console) runs locally only. **Nothing is queued: the project is parked.**
 
 `rental_demo_bak_20261110` is the pre-closure demo DB, kept as a backup; `dropdb` it once satisfied.
 
@@ -35,6 +37,6 @@
 
 **Machine note:** run the unit suite as `npm test -- --maxWorkers=4`. A killed vitest leaves `node (vitest N)` workers alive; kill them by cwd. Pass e2e specs as bare names. A new org-scoped table needs an `org_scope` trigger and an RLS policy. A unit test that crosses orgs wraps the call in `asRequest`. A new server action needs its `actions.manifest.ts` entry, and `unreached` if the fixture cannot reach its own-org path. `cron.spec.ts:59` fails locally and passes in CI. **Check `gh run list --limit 3` after each push.** R-283's red run went unnoticed.
 
-**Carry-overs:** each deployed database must re-run `db:seed` and `db:migrate` (R-291a, R-291b, R-300a, R-300b, R-298a, R-298b, R-287a, R-284, R-297, R-296, R-307, R-267 seed only, R-268). The real StripeConnector, TwilioProvisioner, ResendProvisioner and VercelDomains still have to be built. OQ-27 is open. The Neon dev branch reports every migration as unapplied.
+**Carry-overs:** each deployed database (production is done, D-410) must re-run `db:seed` and `db:migrate` (R-291a, R-291b, R-300a, R-300b, R-298a, R-298b, R-287a, R-284, R-297, R-296, R-307, R-267 seed only, R-268). The real StripeConnector, TwilioProvisioner, ResendProvisioner and VercelDomains still have to be built. OQ-27 is open. The Neon dev branch reports every migration as unapplied.
 
 **Shane owes:** counsel on the reason list (OQ-16). Before org #1 goes live: the neutral domain (D-324) plus wildcard DNS, a certificate and `RESEND_SHARED_FROM`. Before any connected org bills: a Connect endpoint and its secret.
