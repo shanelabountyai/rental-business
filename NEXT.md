@@ -12,8 +12,8 @@
 
 1. ✅ `docs/DEMO.md` — done 2026-11-10. `DEMO-SCRIPT.md` renamed, Acts 7 (messaging) and 8 (platform console) added, every command run against a freshly rebuilt `rental_demo`. New `db:create-platform-admin:demo` script; `.env.demo` gained `PLATFORM_HOST` and `ORG_BASE_DOMAIN`.
 2. ✅ The exec brief — done 2026-11-10. It already existed (2026-10-26) and was refreshed in place, not rebuilt: https://claude.ai/artifact/GSG4tVzFVzbgD4m5eacsrB. Measured that day: 3,969 unit tests (302 files), 1,430 e2e (118 specs, both projects), 1,171 commits, 408 decisions, 101 days. Also in `docs/RELEASE_NOTES.md`. **NEXT: item 3.**
-3. ✅ LinkedIn posts — done 2026-11-10. Ledger posts #166 (Impact, effective-dated rules) and #167 (MarTech, date formatted in the renderer), queued after #164. Ledger: https://claude.ai/artifact/Ai5xKScgT2sWtqXRQ1ZA8i. 13 rental posts existed already. **NEXT: item 4.**
-4. Cost review: Vercel project, Neon, crons in `apps/web/vercel.json`, CI, Stripe/Twilio/Resend keys. Keep / slow / off, with restore notes, as a D-number.
+3. ✅ LinkedIn posts — done 2026-11-10. Ledger posts #166 (Impact, effective-dated rules) and #167 (MarTech, date formatted in the renderer), queued after #164. Ledger: https://claude.ai/artifact/Ai5xKScgT2sWtqXRQ1ZA8i. 13 rental posts existed already. 
+4. ✅ Cost review — done 2026-11-10, D-409. Everything costs pennies. The hourly notifications cron was removed (takes effect on the next deliberate deploy); the Twilio number is kept. **Closure is complete.** Production was last deployed 2026-10-08 and is a month of migrations behind; deploy it deliberately if the live demo should match `docs/DEMO.md`.
 
 `rental_demo_bak_20261110` is the pre-closure demo DB, kept as a backup; `dropdb` it once satisfied.
 

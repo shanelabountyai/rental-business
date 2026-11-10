@@ -7,4 +7,4 @@
 | Demo script | `docs/DEMO.md` |
 | Exec brief, `Rental Business in Brief` (refreshed 2026-11-10 for multi-org, platform console, messaging, QuickBooks; numbers measured that day) | https://claude.ai/artifact/GSG4tVzFVzbgD4m5eacsrB |
 | LinkedIn posts | Lab Intelligence Ledger, https://claude.ai/artifact/Ai5xKScgT2sWtqXRQ1ZA8i (rental posts #166 and #167 added 2026-11-10; 13 earlier) |
-| Cost review | not yet done |
+| Cost review | D-409 in `docs/prds/07-decisions.md` (2026-11-10): ~$0.13 Vercel over 41 days, 0.7 CU-h Neon in November, Twilio number kept |
