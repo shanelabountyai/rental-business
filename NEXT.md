@@ -8,7 +8,14 @@
 
 **2026-11-09: R-272 done** (`e0560815`, D-406: Twilio's Messaging Service queue paces sends; the review list estimates) **and R-273 done** (D-407: the texting number's toll-free or 10DLC status on `/messages/settings`). Org #0's live Twilio is configured in `.env.local`: toll-free 877 number, verification approved, and a live send was delivered. `.env.test` and `.env.demo` blank the keys on purpose; never remove that.
 
-**No ungated backlog row is left.** R-093 needs real vendor contracts (D-7). R-278 is gated on OQ-14 (counsel). A bare `go` therefore has nothing to build. Ask Shane which to pick: answer OQ-14, or close the project out (CLAUDE.md "Definition of done": DEMO.md, exec brief, LinkedIn posts, cost review).
+**CLOSING OUT (D-408, 2026-11-10).** Shane chose closure over answering OQ-14. Four deliverables, one per session:
+
+1. ✅ `docs/DEMO.md` — done 2026-11-10. `DEMO-SCRIPT.md` renamed, Acts 7 (messaging) and 8 (platform console) added, every command run against a freshly rebuilt `rental_demo`. New `db:create-platform-admin:demo` script; `.env.demo` gained `PLATFORM_HOST` and `ORG_BASE_DOMAIN`.
+2. **NEXT: the exec brief** — `Rental Business in Brief`, via the `exec-brief` skill, matching the sibling briefs. Sources: `WRITEUP.md`, `docs/DEMO.md` (the concede section is the scope-honesty list). Record its URL here and in `docs/RELEASE_NOTES.md` (does not exist yet; create it).
+3. LinkedIn posts into the Ledger (memory: `ledger-posts-in-artifact-db`), mined from WRITEUP's defects and hardest bug.
+4. Cost review: Vercel project, Neon, crons in `apps/web/vercel.json`, CI, Stripe/Twilio/Resend keys. Keep / slow / off, with restore notes, as a D-number.
+
+`rental_demo_bak_20261110` is the pre-closure demo DB, kept as a backup; `dropdb` it once satisfied.
 
 **Left by R-296:** the simulator never emits `application_fee.created`, so `PlatformFee` is empty without a Stripe key, the demo included. Each deployed DB must run `db:migrate` (`20261116100000_platform_fee`). `move-out-copy.test.ts` has a cleanup race on `Lease_renewedFromLeaseId_fkey` under full-suite load. It passes alone.
 

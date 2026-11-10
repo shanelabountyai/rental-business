@@ -36,7 +36,7 @@ import { refuseUnlessDemoDatabase } from './demo-database-guard.mts'
 import { hashPassword, mintToken } from '../../core/auth/index.ts'
 import { prisma } from '../index.ts'
 
-/// Documented in docs/DEMO-SCRIPT.md and nowhere else that matters. 16
+/// Documented in docs/DEMO.md and nowhere else that matters. 16
 /// characters, over the 12-character floor in packages/core/auth/password.ts
 /// and not on its blocklist.
 const DEMO_PASSWORD = 'demo-rental-2026'
@@ -95,7 +95,7 @@ async function upsertStaff(persona: Persona, passwordHash: string) {
             create: { passwordHash },
             // Clearing MFA too - a demo account that demands a code from an
             // authenticator nobody in the room holds is a locked door.
-            // DEMO-SCRIPT.md says how to enrol one deliberately.
+            // DEMO.md says how to enrol one deliberately.
             update: {
               passwordHash,
               mfaSecret: null,

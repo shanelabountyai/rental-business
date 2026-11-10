@@ -3,7 +3,7 @@
 How to get into every surface of this product with a seeded demo database.
 Written 2026-08-25 after R-105's demo walk; corrected 2026-08-29 (R-137).
 
-**Start at [DEMO-SCRIPT.md](DEMO-SCRIPT.md) §0 if you just want to sign in.**
+**Start at [DEMO.md](DEMO.md) §0 if you just want to sign in.**
 `npm run db:seed:demo-access` makes five staff accounts with one documented
 password and prints a magic link per tenant and vendor. This file is the
 reference for *how* accounts and roles work, and for the paths that script does

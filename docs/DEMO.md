@@ -1,7 +1,9 @@
 # Demo script
 
 A driveable walkthrough of the product, one act per persona, against the local
-`rental_demo` database. Written 2026-08-27 (R-122).
+`rental_demo` database. Written 2026-08-27 (R-122) as `DEMO-SCRIPT.md`;
+renamed and refreshed at project closure on 2026-11-10, when Acts 7 and 8
+(messaging, and the multi-organisation platform console) were added.
 
 `DEMO-LOGINS.md` is the reference for how accounts and roles work and why.
 **This file is the running order** — what to open, in what order, and what to
@@ -9,18 +11,40 @@ point at when you get there.
 
 ---
 
-## 0. Bring it up (about two minutes)
+## 0. Bring it up
+
+**Already set up** (about thirty seconds):
 
 ```bash
+npm run db:migrate:demo          # not optional: a stale rental_demo has bitten twice
 npm run db:seed:demo-access      # staff passwords + fresh tenant/vendor links
 npm run dev:demo                 # http://localhost:3100
 ```
 
-If the database is empty or you want a clean slate first, run the setup
-commands in `DEMO-LOGINS.md` §1, then the two above. They are all `:demo`-suffixed
-npm scripts as of R-137 — the un-suffixed ones (`db:seed`, `db:seed:demo` before
-the fix) pointed at the Neon dev branch, and both demo seeds now refuse any
-database but a local `rental_demo` rather than trusting the env file.
+**From nothing** (about three minutes; run once, in this order):
+
+```bash
+createdb rental_demo
+npm run db:migrate:demo
+npm run db:seed:base:demo
+npm run db:create-owner:demo -- --email owner@demo.test --name "Dana Reyes"
+npm run db:seed:lease-templates:demo -- --staff owner@demo.test
+npm run db:seed:demo
+npm run db:seed:demo-access
+npm run db:create-platform-admin:demo -- --email platform@demo.test --name "Sam Ortiz" --target localhost/rental_demo
+npm run dev:demo
+```
+
+The order is forced; `DEMO-LOGINS.md` §1 says why. Every script is
+`:demo`-suffixed (R-137): the un-suffixed ones carry only `-e .env.local`,
+which is the Neon dev branch, and the demo seeds and the platform-admin script
+each refuse any database but the one they were pointed at deliberately.
+
+**`.env.demo` must carry `PLATFORM_HOST=platform.localhost` and
+`ORG_BASE_DOMAIN=orgs.localhost`** for Act 8 — the same values Playwright
+sets. Without them the platform-admin script prints *"PLATFORM_HOST is unset,
+so this deployment has no console"* and Act 8 has nowhere to go. Added
+2026-11-10; a `.env.demo` from before that date lacks them.
 
 `db:seed:demo-access` prints everything you need and is **safe to re-run** —
 it resets the passwords and mints fresh links, which is what you want five
@@ -173,9 +197,10 @@ late, paid partially, or moved out has a lease number and a held number that
 differ, and only one of them is defensible in a dispute.
 
 **`/leases` → Wanda Combs → Deposit disposition.** Magnolia Drive House, main
-house, lease ending **28 Sept 2026**, **$1,950.00 held**. There is no
-recorded move-out date yet: R-248 stopped the seed writing a future one on an
-active lease.
+house, **$1,950.00 held**, notice given, and the lease ends **five days after
+the day you seeded** — every seeded date is relative to the seed run, so
+re-seed rather than trust a date printed here. There is no recorded move-out
+date yet: R-248 stopped the seed writing a future one on an active lease.
 
 - **Deductions are evidence, not line items.** Each one can be backed by the
   **work order** whose actual cost it is, and by a **move-out photo** from the
@@ -293,15 +318,92 @@ convention. A database set up fresh from `DEMO-LOGINS.md` has only one.
 
 ---
 
+## Act 7 — one message to the right tenants (`owner@demo.test`)
+
+**`/messages/announcements`.** The send-to list is the point: not "all
+tenants" or nothing, but **segments the owner already thinks in** — balance
+due (2 tenants), open maintenance request (5), move-out within 30 days (2),
+month-to-month (1), plus any entity, property, unit or tag. Each segment
+shows its head-count *before* you write a word.
+
+- **Preview before send** (R-260): the composer renders the message as one
+  real recipient will get it, merge fields filled — portal link, owner name,
+  owner phone (R-265).
+- **Review the recipient list**, untick anyone, save it as an audience
+  (R-259). Schedule it for later (R-261). After it goes, **History** shows
+  delivery per recipient, and *resend to failed only* re-sends to the ones
+  that bounced and nobody else (R-262).
+- **A tenant's reply becomes a Task** (R-263, D-329), on the one staff queue
+  (D-9), not a second inbox.
+
+**`/messages/settings`.** Per-property quiet hours, the SMS footer, and who
+gets tenant replies (R-266). The **texting number** panel reads *"No texting
+number is set up, so texts to tenants are not sent"* — correct for the demo,
+which blanks the Twilio keys on purpose so nothing reaches a real phone. On a
+live org it shows whether the number is toll-free or 10DLC and where its
+carrier registration stands (R-273). Below it, the owner can change the
+**greeting and closing** of four automated emails, and only those — the
+amounts, dates and legal sentences stay fixed (R-268, D-405).
+
+Say the rule: **a maintenance tech cannot send free text to a tenant**, only a
+template (R-267, D-404). That rule is about liability: a tech
+promising a date in their own words is a promise the business has to keep.
+
+---
+
+## Act 8 — many landlords, one platform (`platform@demo.test`)
+
+The product is built **multi-organisation**: each landlord business is an
+org, with its own host, brand, Stripe account, texting number and email
+domain, and a platform console above them all (PRD 10, PRD 11). Org #0 is
+the demo portfolio; no second org is live.
+
+**Get in.** Open the setup link the platform-admin script printed (it lasts
+30 minutes and works once) at `http://platform.localhost:3100/...`, set a
+password — use `demo-rental-2026` to keep the convention — then sign in at
+`http://platform.localhost:3100/platform/login`. **The console has no way to
+skip two-factor**, so it goes straight to enrolment: generate the code with
+the `otpauth` one-liner in `DEMO-LOGINS.md` → *Walking `/login/mfa` without a
+phone*. Lost the link? `npm run db:create-platform-admin:demo -- --reset-mfa
+--email platform@demo.test --target localhost/rental_demo` clears the second
+factor; a lost *password* means rebuilding `rental_demo`, because the script
+refuses a second platform owner.
+
+- **`/platform/orgs/default`** — and the first thing to point at is what is
+  **not** there: *"Viewing inside this organisation needs a support grant. Its
+  properties, tenants, leases, money, messages, documents, staff and audit log
+  are not shown here."* The platform operator cannot read a landlord's tenants
+  by default. Access is a time-boxed, **read-only support grant** (R-295a/b,
+  D-358). Concede the edge before you are asked: there is a break-glass path
+  for incidents, also read-only, 60 minutes and loud, and no organisation can
+  opt out of it (D-361).
+- **Freeze**, **notifications off**, **platform fee** — each needs a fresh
+  two-factor code and a written reason, and each writes to the org's own
+  audit log and emails its owners. Freezing pauses rent collection; it does
+  not cancel subscriptions (R-300a).
+- **`/platform/orgs/new`** creates an org and invites its owner (R-304a). The
+  new org lives at `http://<slug>.orgs.localhost:3100`. **Data isolation is
+  enforced by the database, not by remembering to filter**: every org-owned
+  table carries row-level security, and a cross-org harness (R-286) proves
+  every server action refuses another org's row.
+- **`/platform/jurisdiction`** — the state rules are **published by the
+  platform**, and an org can only make them stricter, never looser (R-305,
+  R-298b).
+
+---
+
 ## If something looks wrong
 
-- **Landed on `:3001`?** Something else holds `:3100`. `lsof -ti :3100`.
-- **A tenant link says expired?** Re-run `npm run db:seed:demo-access`.
-- **A sign-in hangs after "Sign in"?** Staff login is rate-limited to ten
-  attempts per IP per five minutes (R-003). Wait it out.
-- **The demo database drifts** — `--reset` retires rather than deletes,
-  because append-only tables reference those rows, so retired properties and
-  entities accumulate. Harmless; they are filtered out of every screen.
+| Symptom | Cause | Fix |
+|---|---|---|
+| Landed on `:3001` | Something else holds `:3100` | `lsof -ti :3100` |
+| A tenant link says expired | Links are single-use and short-lived | `npm run db:seed:demo-access` |
+| A sign-in hangs after "Sign in" | Staff login allows ten attempts per IP per five minutes (R-003) | Wait it out |
+| `db:seed:demo` prints ~15 `processing fee read failed … No such invoice: 'in_demo…'` | The seed replays made-up invoice ids, and R-282b's fee read asks the real Stripe test account about them | Harmless: the seed exits 0. Demo payments simply carry no processing fee |
+| `/settings/setup`, `/staff` or `/money/deposits` lands on `/account?mfa=required` | They need a privileged permission, and the demo accounts start with two-factor off | Enrol first (`DEMO-LOGINS.md` → *Walking `/login/mfa` without a phone*) |
+| `platform.localhost` refuses, or the console says it does not exist | `PLATFORM_HOST` missing from `.env.demo` | See §0, then restart `dev:demo` |
+| `/money/quickbooks/simulated` is a 404 | It is the simulated Intuit consent screen; it needs the `state` the Connect button mints | Start from **Connect QuickBooks** on `/money/quickbooks` |
+| Retired properties pile up in the database | `--reset` retires rather than deletes, because append-only tables reference those rows | Harmless; every screen filters them out |
 
 ---
 
@@ -333,24 +435,45 @@ out of you does not.
   database but a local `rental_demo`.
 - **The production deployment is behind one shared password** — the app's
   own demo gate, not Vercel's login (checked 2026-09-23) — and it holds no
-  real tenants. The
-  R-223 to R-233 migrations are not on the Neon dev branch either.
-- **Acts 1-6 were written at R-138.** Later work (deposits, MTM notices,
-  guarantor account, abandonment and claims) is real and browser-walked but
-  not scripted here. **If deposits gets its own act, flag before opening it
-  live:** `/money/deposits` guards itself on `ledger.adjust`, which is on
-  `PRIVILEGED_PERMISSIONS` — recording a bank deposit is a ledger
-  adjustment — so it hits the same unmarked MFA door Act 5 already warns
-  about for `/staff`. Enrol the owner first (`DEMO-LOGINS.md` → *Walking
-  `/login/mfa` without a phone*), or the room watches a 307 to `/account`.
+  real tenants. The Neon dev branch reports every migration as unapplied;
+  deployed databases owe the `db:migrate` and `db:seed` runs `NEXT.md`
+  lists.
+- **Multi-org is built and only one org is live.** The provisioning paths for
+  a second landlord (Stripe Connect onboarding, a Twilio number, a Resend
+  domain, a custom domain on Vercel) run against **simulators**; the real
+  StripeConnector, TwilioProvisioner, ResendProvisioner and VercelDomains are
+  not built. The neutral domain and wildcard DNS (D-324) do not exist yet.
+- **Row-level security is enforced in tests and off in production** (R-287b,
+  D-392). Production isolation rests on the application's own org scoping,
+  which the cross-org harness proves; RLS is the second wall, and it is not
+  yet on in production.
+- **QuickBooks is a simulated company file** (R-279). The real Intuit driver
+  is not built, and with the simulator the QuickBooks side lives in process
+  memory, so a deployed reconciliation page can show variance that is not
+  real. Deposit disposition never reaches the ledger, and dispute fees are
+  not read (R-282a/b).
+- **Two counsel gates are open**: which states the second portfolio needs
+  (OQ-14, which blocks the Oklahoma rules) and the screening decline-reason
+  list (OQ-16), which ships as placeholders and is kept out of the
+  adverse-action notice until reviewed.
+- **Texting is real and switched off here.** Org #0 has a verified toll-free
+  number and has delivered a live text, but `.env.demo` and `.env.test` blank
+  the Twilio keys on purpose. The demo sends nothing to a phone.
+- **Not every screen has an act.** Deposits, month-to-month notices, the
+  guarantor account, abandonment, claims, renewals, screening criteria and
+  the tax packet are real and walked but not scripted here. `/money/deposits`
+  needs two-factor (see the troubleshooting table), as `/staff` does.
 
-**Verified 2026-09-23, re-verified 2026-10-05:** every setup command in §0
-ran clean against `rental_demo` (today's run also caught `rental_demo` four
-migrations behind — `db:migrate:demo` is not optional before a demo even
-when the database already exists), and every route named in the acts
-returned 200 as `owner@demo.test` with no `undefined`, `NaN` or
-`Invalid Date` on the page. Also spot-checked 2026-10-05, outside the
-scripted acts: `/money/rent-roll`, `/money/expenses`,
-`/money/former-tenants`, `/money/vendor-invoices`, `/notices`,
-`/abandonment`, `/claims`, `/workorders`, `/tasks`, `/reports` and `/staff`
-all 200 for `owner@demo.test` against a fresh `--reset` seed.
+**Verified 2026-11-10 at closure**, against a `rental_demo` dropped and rebuilt
+from nothing with every command in §0 (all exit 0). Signed in as
+`owner@demo.test`, **86 admin routes returned 200** — every static page plus
+the first record under each list — with no `undefined`, `NaN` or
+`Invalid Date` on any of them. The one 404 is `/money/quickbooks/simulated`,
+correctly. All five tenant links, the guarantor link and the vendor link
+signed in, and each tenant's four portal pages returned 200. The platform
+console was walked end to end: password set from the setup link, two-factor
+enrolled, and ten console pages returned 200. The navs for all five staff
+personas match Acts 4 and 5, and the figures in Acts 1, 2, 3.5 and 7 were
+read off the rebuilt database. The platform admin's two-factor was cleared
+afterwards, so the next presenter enrols fresh. Earlier walks: 2026-09-23 and
+2026-10-05.
