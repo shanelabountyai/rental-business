@@ -1,6 +1,6 @@
 import { checkToken, hashToken } from '@rental/core/auth'
 import { icalendarFeed } from '@rental/core/scheduling'
-import { prisma } from '@rental/db'
+import { lookupAuthToken } from '@/lib/auth/store.ts'
 import { loadStaffActor } from '@/lib/auth/actor.ts'
 import { brandFor } from '@/lib/brand.ts'
 import { calendarEventsFor, feedWindow } from '@/lib/calendar/queries.ts'
@@ -39,7 +39,7 @@ function notFound() {
 
 export async function GET(_request: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
-  const stored = await prisma.authToken.findUnique({ where: { tokenHash: hashToken(token) } })
+  const stored = await lookupAuthToken({ tokenHash: hashToken(token) })
   const verdict = checkToken(stored, { purpose: 'CALENDAR_FEED', subjectType: 'StaffUser' })
   if (!verdict.ok) return notFound()
 

@@ -2,6 +2,7 @@ import 'server-only'
 
 import { checkToken, hashToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
+import { lookupAuthToken } from '@/lib/auth/store.ts'
 
 // Reading a SHOWING_ACCESS link (LEASE-08, R-094).
 //
@@ -56,7 +57,7 @@ export type ShowingAccessLink =
   | { ok: false; reason: string }
 
 export async function showingAccessLinkStatus(rawToken: string): Promise<ShowingAccessLink> {
-  const stored = await prisma.authToken.findUnique({ where: { tokenHash: hashToken(rawToken) } })
+  const stored = await lookupAuthToken({ tokenHash: hashToken(rawToken) })
   const verdict = checkToken(stored, { purpose: 'SHOWING_ACCESS', subjectType: 'Showing' })
   if (!verdict.ok) return { ok: false, reason: verdict.reason }
 
