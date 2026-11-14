@@ -45,7 +45,7 @@ export async function GET(
     return new Response('Not found', { status: 404 })
   }
 
-  // `private` and short: a verify link is a bearer credential with a
+  // `private, no-store` (K6): a verify link is a bearer credential with a
   // seven-day life, and a shared cache holding these bytes would outlive it.
-  return documentFileResponse(document, { cacheControl: 'private, max-age=300' })
+  return documentFileResponse(document, { cacheControl: 'private, no-store' })
 }

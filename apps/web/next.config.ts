@@ -29,9 +29,19 @@ const nextConfig: NextConfig = {
   // because /api/calendar and the document-byte routes have no metadata to
   // carry it. The hosted listing (/listings) is public and indexable ON
   // PURPOSE and is deliberately not in this list.
+  //
+  // NO-STORE on the same paths (K6, INV-08). A token page IS the credential's
+  // view: a shared-computer back button or an intermediary cache must not be
+  // able to replay it. Next already sends `private, no-store` for a page it
+  // renders dynamically; this makes it a property of the path rather than of
+  // how each page happens to render. `invite`, `final-export` and
+  // `reset-password` carry tokens too and were missing from the list.
+  // Referrer-Policy stays `same-origin` here as well: these pages are almost
+  // all no-JS forms, and `no-referrer` breaks them (SEC-08, above).
   async headers() {
-    const NOINDEX = [
+    const TOKEN_PATHS = [
       'pay', 'sign', 'vendor', 'verify', 'apply', 'prescreen', 'clarify', 'showings', 'portal',
+      'invite', 'final-export', 'reset-password',
     ].map((segment) => `/${segment}/:path*`)
     return [
       {
@@ -43,9 +53,12 @@ const nextConfig: NextConfig = {
           { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' },
         ],
       },
-      ...[...NOINDEX, '/api/calendar/:path*'].map((source) => ({
+      ...[...TOKEN_PATHS, '/api/calendar/:path*', '/api/final-export/:path*'].map((source) => ({
         source,
-        headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow' }],
+        headers: [
+          { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
+          { key: 'Cache-Control', value: 'private, no-store, max-age=0' },
+        ],
       })),
     ]
   },
