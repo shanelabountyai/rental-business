@@ -8,6 +8,7 @@ import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import type { FormState } from '@/components/auth-form.tsx'
 import { hostOrgId } from '@/lib/auth/org.ts'
+import { withTokenMissLimit } from '@/lib/auth/store.ts'
 
 // `/invite/[token]` (PRD 11 §4.17, R-304a, D-370). The token is the
 // credential, and it is honoured only on its own org's host (D-344): the org
@@ -25,7 +26,7 @@ export async function acceptOrgInvite(_previous: FormState, formData: FormData):
   const orgId = await hostOrgId()
   const token = String(formData.get('token') ?? '')
   const invite = token
-    ? await prisma.orgInvite.findUnique({ where: { tokenHash: hashToken(token) } })
+    ? await withTokenMissLimit(() => prisma.orgInvite.findUnique({ where: { tokenHash: hashToken(token) } }))
     : null
   const refusal = inviteRefusal(invite, orgId)
   if (refusal || !invite) return { error: refusal ?? INVITE_REFUSED }

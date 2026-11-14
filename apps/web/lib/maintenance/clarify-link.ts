@@ -12,6 +12,7 @@ import {
   validateMaintenanceRequest,
 } from '@rental/core/maintenance'
 import { prisma } from '@rental/db'
+import { lookupAuthToken } from '@/lib/auth/store.ts'
 import { authUrl } from '@/lib/auth/delivery.ts'
 import { auditAsTenant } from '@/lib/audit/system.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
@@ -125,11 +126,9 @@ export type ClarifyLinkResult =
  * in `applyClarification` below, on the submit.
  */
 export async function verifyClarifyLink(token: string): Promise<ClarifyLinkResult> {
-  const stored = await prisma.authToken.findFirst({
-    // The RAW token is never stored — only its SHA-256 — so a dump of
-    // AuthToken yields nothing anyone can click.
-    where: { purpose: PURPOSE, tokenHash: hashToken(token) },
-  })
+  // The RAW token is never stored — only its SHA-256 — so a dump of
+  // AuthToken yields nothing anyone can click. K5: misses are rate-limited.
+  const stored = await lookupAuthToken({ purpose: PURPOSE, tokenHash: hashToken(token) })
   // The EXPECTATION is passed, not just the clock: without the purpose check
   // a vendor link's raw token would authenticate here, since every purpose's
   // hashes live in one table.

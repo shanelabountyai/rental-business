@@ -2,6 +2,7 @@ import 'server-only'
 
 import { vendorLinkAccess } from '@rental/core/vendors'
 import { prisma } from '@rental/db'
+import { lookupAuthToken } from '@/lib/auth/store.ts'
 import { hashToken } from '@rental/core/auth'
 import { authUrl } from '@/lib/auth/delivery.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
@@ -54,10 +55,7 @@ export async function reissueOnExpiry(
 ): Promise<ReissueOutcome> {
   // The expired row is still there — expiry is a timestamp, not a deletion —
   // so the hash still tells us which job and which vendor this was for.
-  const stored = await prisma.authToken.findUnique({
-    where: { tokenHash: hashToken(rawToken) },
-    select: { purpose: true, subjectId: true, metadata: true, expiresAt: true },
-  })
+  const stored = await lookupAuthToken({ tokenHash: hashToken(rawToken) })
   if (!stored || stored.purpose !== 'VENDOR_WORK_ORDER') return { reissued: false, reason: 'unknown' }
   // Only genuinely expired tokens. A live one has no business here, and a
   // revoked one (`consumedAt`) was killed deliberately — reissuing that would

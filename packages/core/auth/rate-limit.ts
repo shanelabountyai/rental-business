@@ -51,6 +51,12 @@ export const RATE_LIMITS = {
   /// anonymous stranger. Generous on purpose: one person may upload a photo
   /// ID front and back plus several months of pay stubs in one sitting.
   applicationDocumentUpload: { limit: 20, windowMs: 15 * 60_000 },
+  /// Per IP (K5, INV-09). Token LOOKUPS that find no token at all - a link
+  /// page, a token action, the calendar feed. Only misses count, so a renter
+  /// reloading a real link never spends it; a stranger guessing link tokens
+  /// is cut off after this many wrong guesses. A token is 256 bits, so this
+  /// is defence in depth, not the thing keeping links unguessable.
+  tokenLookupMiss: { limit: 30, windowMs: 15 * 60_000 },
 } as const satisfies Record<string, RateLimitPolicy>
 
 export type RateLimitName = keyof typeof RATE_LIMITS

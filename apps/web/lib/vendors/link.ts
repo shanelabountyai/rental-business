@@ -3,6 +3,7 @@ import 'server-only'
 import { checkToken, hashToken, mintToken } from '@rental/core/auth'
 import { vendorLinkAccess, linkTtlMinutesFor } from '@rental/core/vendors'
 import { prisma } from '@rental/db'
+import { lookupAuthToken } from '@/lib/auth/store.ts'
 
 // The vendor magic link (D-6, D-16, MAINT-03, R-025).
 //
@@ -175,9 +176,7 @@ export async function verifyVendorLink(
   rawToken: string,
   now = new Date(),
 ): Promise<VerifiedVendorLink | { ok: false; reason: VendorLinkRejection }> {
-  const stored = await prisma.authToken.findUnique({
-    where: { tokenHash: hashToken(rawToken) },
-  })
+  const stored = await lookupAuthToken({ tokenHash: hashToken(rawToken) })
 
   const verdict = checkToken(stored, { purpose: PURPOSE, subjectType: 'WorkOrder' }, now)
   if (!verdict.ok) return { ok: false, reason: verdict.reason }

@@ -30,7 +30,7 @@ export async function GET(
   const document = await prisma.document.findUnique({ where: { id: link.documentId } })
   if (!document || document.deletedAt) return new Response('Not found', { status: 404 })
 
-  // `private` and short - a signing link is a bearer credential, same as the
+  // `private, no-store` (K6) - a signing link is a bearer credential, same as the
   // vendor route's own reasoning.
-  return documentFileResponse(document, { cacheControl: 'private, max-age=300' })
+  return documentFileResponse(document, { cacheControl: 'private, no-store' })
 }
