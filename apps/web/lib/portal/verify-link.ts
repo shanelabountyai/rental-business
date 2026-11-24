@@ -2,6 +2,7 @@ import 'server-only'
 
 import { TOKEN_TTL_MINUTES, checkToken, hashToken, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
+import { lookupAuthToken } from '@/lib/auth/store.ts'
 
 // The tenant's one tap, without a login wall (MAINT-07, COMM-02, R-032c).
 //
@@ -132,11 +133,9 @@ export type VerifyLinkResult =
  * GET would mean the POST that follows arrives unauthenticated.
  */
 export async function verifyVerifyLink(token: string): Promise<VerifyLinkResult> {
-  const stored = await prisma.authToken.findFirst({
-    // The RAW token is never stored — only its SHA-256 — so a dump of
-    // AuthToken yields nothing anyone can click.
-    where: { purpose: PURPOSE, tokenHash: hashToken(token) },
-  })
+  // The RAW token is never stored — only its SHA-256 — so a dump of
+  // AuthToken yields nothing anyone can click. K5: misses are rate-limited.
+  const stored = await lookupAuthToken({ purpose: PURPOSE, tokenHash: hashToken(token) })
   // The EXPECTATION is passed, not just the clock: `checkToken` compares the
   // purpose and refuses a token minted for anything else. Without it a vendor
   // link's raw token would authenticate here — the hashes live in one table.

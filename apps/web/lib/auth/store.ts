@@ -5,9 +5,11 @@ import {
   checkRateLimit,
   checkToken,
   hashToken,
+  RATE_LIMITS,
   mintToken,
 } from '@rental/core/auth'
 import { type AuthTokenPurpose, type Prisma, prisma } from '@rental/db'
+import { headers } from 'next/headers'
 
 // The database side of the auth primitives. packages/core decides; this file
 // reads and writes. Keeping the split means the policy has unit tests with no
@@ -76,6 +78,66 @@ export async function consumeRateLimit(
   )
 }
 
+/**
+ * Whether `key` has already used its whole budget in the current window.
+ * Counts nothing - the caller decides what is worth a unit (K5: a token
+ * lookup that missed). Same window arithmetic as `checkRateLimit`.
+ */
+export async function rateLimitSpent(
+  key: string,
+  policy: { limit: number; windowMs: number },
+  now = new Date(),
+): Promise<boolean> {
+  const row = await prisma.rateLimitCounter.findUnique({ where: { key } })
+  if (!row) return false
+  if (now.getTime() - row.windowStartedAt.getTime() >= policy.windowMs) return false
+  return row.count >= policy.limit
+}
+
+// K5 (INV-09): every unauthenticated token lookup goes through here, so a
+// stranger guessing link tokens is limited per IP in the shared (Postgres)
+// store. Only a MISS - no AuthToken row with that hash - is counted; an
+// expired, used or revoked token is a real link, not a guess, and a renter
+// reloading their own link never spends anything.
+//
+// Once an IP is over the budget every lookup from it reads as "no such
+// token", which every caller already handles as not-found. Nothing new is
+// shown to anybody, and a real link from that IP works again when the window
+// ends.
+//
+// Outside a request (a job, a unit test calling a verifier directly) there is
+// no client and nothing is limited. With no `x-forwarded-for` (local dev and
+// the e2e server, which sit behind no proxy) it is also skipped: keying every
+// such request on one shared "unknown" bucket would let one spec's
+// bad-token test lock out the next. Vercel always sets the header.
+
+const TOKEN_MISS_KEY = 'token-miss:'
+
+async function tokenLookupIp(): Promise<string | null> {
+  try {
+    const forwarded = (await headers()).get('x-forwarded-for')
+    return forwarded?.split(',')[0]?.trim() || null
+  } catch {
+    return null
+  }
+}
+
+/// Runs one token lookup under the miss limit. `find` returns the row or null;
+/// a null is a miss and is counted. Generic so the other token tables
+/// (OrgInvite, FinalExport) share the same budget as AuthToken.
+export async function withTokenMissLimit<T>(find: () => Promise<T | null>): Promise<T | null> {
+  const ip = await tokenLookupIp()
+  const key = `${TOKEN_MISS_KEY}${ip}`
+  if (ip && (await rateLimitSpent(key, RATE_LIMITS.tokenLookupMiss))) return null
+  const found = await find()
+  if (!found && ip) await consumeRateLimit(key, RATE_LIMITS.tokenLookupMiss)
+  return found
+}
+
+export async function lookupAuthToken(where: Prisma.AuthTokenWhereInput) {
+  return withTokenMissLimit(() => prisma.authToken.findFirst({ where }))
+}
+
 export interface IssuedToken {
   /// The value to put in a link or a cookie. Exists only in memory and in
   /// whatever is delivering it.
@@ -136,7 +198,7 @@ export async function redeemToken(
   now = new Date(),
 ): Promise<RedeemResult> {
   const tokenHash = hashToken(rawToken)
-  const stored = await prisma.authToken.findUnique({ where: { tokenHash } })
+  const stored = await lookupAuthToken({ tokenHash })
 
   const verdict = checkToken(stored, expected, now)
   if (!verdict.ok) return { ok: false, reason: verdict.reason }

@@ -2,6 +2,7 @@ import 'server-only'
 
 import { checkToken, hashToken } from '@rental/core/auth'
 import { type Prospect, prisma } from '@rental/db'
+import { lookupAuthToken } from '@/lib/auth/store.ts'
 
 // Reading a PROSPECT_PRESCREEN link (LEASE-07, R-058) - the non-consuming
 // half, same split apps/web/lib/portal/verify-link.ts's `verifyVerifyLink()`
@@ -15,7 +16,7 @@ export type PrescreenLinkResult =
 
 export async function prescreenLinkStatus(rawToken: string): Promise<PrescreenLinkResult> {
   const tokenHash = hashToken(rawToken)
-  const stored = await prisma.authToken.findUnique({ where: { tokenHash } })
+  const stored = await lookupAuthToken({ tokenHash })
 
   const verdict = checkToken(stored, { purpose: 'PROSPECT_PRESCREEN', subjectType: 'Prospect' })
   if (!verdict.ok) return { ok: false, reason: verdict.reason }

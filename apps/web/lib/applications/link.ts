@@ -2,6 +2,7 @@ import 'server-only'
 
 import { checkToken, hashToken } from '@rental/core/auth'
 import { type Applicant, type Application, prisma } from '@rental/db'
+import { lookupAuthToken } from '@/lib/auth/store.ts'
 
 // Reading an APPLICATION_LINK (LEASE-03, R-059).
 //
@@ -19,7 +20,7 @@ export type ApplicationLinkResult =
 
 export async function applicationLinkStatus(rawToken: string): Promise<ApplicationLinkResult> {
   const tokenHash = hashToken(rawToken)
-  const stored = await prisma.authToken.findUnique({ where: { tokenHash } })
+  const stored = await lookupAuthToken({ tokenHash })
 
   const verdict = checkToken(stored, { purpose: 'APPLICATION_LINK', subjectType: 'Applicant' })
   if (!verdict.ok) return { ok: false, reason: verdict.reason }

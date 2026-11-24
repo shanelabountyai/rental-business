@@ -2,6 +2,7 @@ import 'server-only'
 
 import { checkToken, hashToken, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
+import { lookupAuthToken } from '@/lib/auth/store.ts'
 
 // Bid links (MAINT-04's bid-collection workflow, R-026).
 //
@@ -104,9 +105,7 @@ export async function verifyBidLink(
   rawToken: string,
   now = new Date(),
 ): Promise<VerifiedBidLink> {
-  const stored = await prisma.authToken.findUnique({
-    where: { tokenHash: hashToken(rawToken) },
-  })
+  const stored = await lookupAuthToken({ tokenHash: hashToken(rawToken) })
 
   const verdict = checkToken(stored, { purpose: PURPOSE, subjectType: 'WorkOrder' }, now)
   if (!verdict.ok) return { ok: false, reason: verdict.reason }

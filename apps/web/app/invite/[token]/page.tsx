@@ -4,6 +4,7 @@ import { prisma } from '@rental/db'
 import { AuthCard, AuthForm, Field } from '@/components/auth-form.tsx'
 import { acceptOrgInvite } from '@/lib/auth/invite-actions.ts'
 import { hostOrgId } from '@/lib/auth/org.ts'
+import { withTokenMissLimit } from '@/lib/auth/store.ts'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Accept your invitation' }
@@ -13,10 +14,13 @@ export const metadata = { title: 'Accept your invitation' }
 export default async function AcceptInvitePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
   const orgId = await hostOrgId()
-  const invite = await prisma.orgInvite.findUnique({
-    where: { tokenHash: hashToken(token) },
-    include: { organization: { select: { name: true } } },
-  })
+  // K5: an unknown token counts against the caller's miss budget.
+  const invite = await withTokenMissLimit(() =>
+    prisma.orgInvite.findUnique({
+      where: { tokenHash: hashToken(token) },
+      include: { organization: { select: { name: true } } },
+    }),
+  )
   if (inviteRefusal(invite, orgId) || !invite) {
     return (
       <AuthCard title="That invitation cannot be used">

@@ -47,7 +47,7 @@ export async function GET(
     (link.workOrder.ticketId != null && document.ticketId === link.workOrder.ticketId)
   if (!belongsToThisJob) return new Response('Not found', { status: 404 })
 
-  // `private` and short: a vendor link is a bearer credential, and a shared
+  // `private, no-store` (K6): a vendor link is a bearer credential, and a shared
   // cache holding these bytes would outlive the token that authorized them.
-  return documentFileResponse(document, { cacheControl: 'private, max-age=300' })
+  return documentFileResponse(document, { cacheControl: 'private, no-store' })
 }

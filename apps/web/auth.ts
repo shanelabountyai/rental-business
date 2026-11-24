@@ -11,7 +11,7 @@ import NextAuth, { CredentialsSignin } from 'next-auth'
 import Credentials from 'next-auth/providers/credentials'
 import { relativeRedirect } from './lib/auth/redirect.ts'
 import { hostOrgId, principalIsStillValid } from './lib/auth/org.ts'
-import { consumeRateLimit, redeemToken } from './lib/auth/store.ts'
+import { consumeRateLimit, lookupAuthToken, redeemToken } from './lib/auth/store.ts'
 
 // Auth.js v5, JWT sessions, no database adapter.
 //
@@ -335,9 +335,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 /// code does not cost the user their challenge.
 async function peekChallengeSubject(rawToken: string): Promise<string | null> {
   const { hashToken, checkToken } = await import('@rental/core/auth')
-  const stored = await prisma.authToken.findUnique({
-    where: { tokenHash: hashToken(rawToken) },
-  })
+  const stored = await lookupAuthToken({ tokenHash: hashToken(rawToken) })
   const verdict = checkToken(stored, {
     purpose: 'STAFF_MFA_CHALLENGE',
     subjectType: 'StaffUser',

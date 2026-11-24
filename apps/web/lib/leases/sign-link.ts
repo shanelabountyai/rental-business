@@ -2,6 +2,7 @@ import 'server-only'
 
 import { checkToken, hashToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
+import { lookupAuthToken } from '@/lib/auth/store.ts'
 import { esignAdapter } from '@/lib/esign/provider.ts'
 
 // Verifying a signer's own LEASE_SIGN link (LEASE-06, R-063).
@@ -71,9 +72,7 @@ export type SignerLinkResult =
   | { ok: false; reason: 'invalid' | 'expired' }
 
 export async function verifySignerLink(token: string, now = new Date()): Promise<SignerLinkResult> {
-  const stored = await prisma.authToken.findFirst({
-    where: { purpose: PURPOSE, tokenHash: hashToken(token) },
-  })
+  const stored = await lookupAuthToken({ purpose: PURPOSE, tokenHash: hashToken(token) })
   const check = checkToken(stored ?? null, { purpose: PURPOSE, subjectType: 'LeaseSigner' }, now)
   if (!check.ok) {
     return { ok: false, reason: check.reason === 'expired' ? 'expired' : 'invalid' }

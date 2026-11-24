@@ -4,19 +4,40 @@ import { validateOutboundMessage } from '@rental/core/comms'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { signOut } from '@/auth.ts'
+import { auth, signOut } from '@/auth.ts'
 import { requireTenantWithScope } from './guard.ts'
 
 // Writes a tenant can make from the portal (R-018).
 
 export async function signOutTenant() {
+  await revokeOwnPortalSessions()
   await signOut({ redirectTo: '/portal/login' })
 }
 
 /// R-165. Same NextAuth signOut, different landing page - it does not matter
 /// which portal a session came from, only where it should go back to.
 export async function signOutGuarantor() {
+  await revokeOwnPortalSessions()
   await signOut({ redirectTo: '/portal/guarantor/login' })
+}
+
+/// K1 (INV-05). A bare `signOut()` only clears THIS browser's cookie; the JWT
+/// itself stays valid until it expires, so a copy of it (a shared computer, a
+/// leaked cookie) kept working after the renter pressed "Sign out". Bumping
+/// the `sessionsValidFrom` watermark is what makes the jwt callback refuse
+/// it, exactly as staff sign-out (`signOutEverywhere`) already does. It also
+/// ends the renter's other devices - the same trade staff sign-out makes.
+///
+/// Keyed on the SESSION's own id and kind, never on anything the form sent,
+/// and scoped to the session's org. No session (already signed out) is a
+/// no-op rather than an error.
+async function revokeOwnPortalSessions(): Promise<void> {
+  const principal = (await auth())?.principal
+  if (!principal?.id) return
+  const where = { id: principal.id, orgId: principal.orgId }
+  const data = { sessionsValidFrom: new Date() }
+  if (principal.kind === 'guarantor') await prisma.guarantor.updateMany({ where, data })
+  else if (principal.kind === 'tenant') await prisma.tenant.updateMany({ where, data })
 }
 
 export interface FormState {
